@@ -1,0 +1,92 @@
+# Changelog
+
+All notable changes to **Prime Gate Antigravity Proxy** will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [1.1.2] - 2026-10-18
+
+### 🚀 Major Architectural Enhancements
+
+#### 1. Full React + TypeScript SPA Frontend Architecture
+- **Complete UI Rewrite:** Rebuilt the entire frontend from vanilla HTML/JS into a modern, modular React 18 + TypeScript + Vite Single Page Application (SPA).
+- **Client-Side Routing & Navigation:** Introduced `NavigationContext` with dedicated views for:
+  - **Dashboard & Telemetry:** Real-time token consumption breakdown, throughput radar, active quota gauge, and OpenAI endpoint credentials.
+  - **Account Manager:** Multi-account authentication, live active account indicator, token status, quota bucket inspectors, and dynamic model catalogs.
+  - **Prompt Sandbox:** Interactive streaming playground with real-time token telemetry and thinking breakdown.
+  - **System & Sentinel:** Database audit ledger, real-time daemon logs, CRC32 verification triggers, and vacuum compaction.
+  - **Documentation:** Built-in integration guides for OpenCode, Cursor, Continue, Cline, and API references.
+- **Modern Design System:** Warm Anthropic-inspired dark glassmorphism aesthetic with polished typography, monospace data readouts, micro-interactions, responsive sidebars, custom modal dialogs, and toast notifications.
+
+#### 2. Responsive Token Consumption Breakdown Chart
+- **Edge-to-Edge Responsive Layout:** Integrated a dynamic `ResizeObserver` lifecycle in `TokenChart.tsx` that binds SVG coordinate space directly to container width, eliminating letterboxing and dead whitespace on ultra-wide and high-DPI displays.
+- **Proportional Bar Distribution:** Evenly spaces time-series bars across the entire card width (`1s`, `1m`, `1h`, `1d`), calculating bar widths and gaps proportionally to data point density.
+- **Subtle Baseline Indicator Tracks:** Added faint slot indicators (`rgba(255, 255, 255, 0.08)`) for time periods with 0 token consumption, giving the timeline a cohesive, structured appearance rather than floating, isolated bars.
+- **Anti-Collision X-Axis Labels:** Implemented dynamic stride interval calculations preventing text overlapping on dense time intervals.
+- **Interactive Tooltip & Crosshair:** Hovering over any time slot displays a dashed vertical crosshair and floating glass tooltip with exact counts for **Prompt**, **Reasoning (Thinking)**, **Completion**, and **Total Tokens**.
+
+#### 3. Real-Time Streaming Tool Call Interception & Token Buffer
+- **Streaming State Machine:** Added an in-memory token buffer to `stream_antigravity_sse()` in `prime_gate/server.py` that intercepts Google Antigravity's text-based function call syntax (e.g., `call:default_api:shell{...}`).
+- **Zero Content Leakage:** Prevents raw tool execution strings from leaking into client chat bubbles as conversational text, ensuring AI agents do not halt prematurely.
+- **Balanced Braces Scanning:** Upgraded argument parsing from naive regex to a balanced curly-brace state machine capable of extracting complex nested JSON payloads without syntax corruption.
+- **Reasoning Stream Routing:** Automatically redirects `Thought: <time>ms` blocks to OpenAI `delta.reasoning_content` chunks, rendering cleanly in collapsible thinking drawers in OpenCode, Cursor, and Continue.
+
+#### 4. Agent Loop & Schema Compatibility (OpenCode, Cursor, Continue)
+- **Intelligent Tool Mapping:** Translates internal Google Antigravity tool names to standard agent tools:
+  - `default_api:shell` / `shell` $\to$ `bash` / `run_command` / `terminal` / `exec`
+  - `default_api:view_file` / `view_file` $\to$ `read_file` / `read` / `readFile`
+  - `default_api:write_to_file` / `write_to_file` $\to$ `write_file` / `write` / `edit`
+  - `list_dir` / `ls` $\to$ `list_files` / `list`
+- **Strict Parameter Normalization & Filtering:** Normalizes parameter aliases (`command` $\leftrightarrow$ `cmd`, `AbsolutePath` $\leftrightarrow$ `path`, `CodeContent` $\leftrightarrow$ `content`) and filters out unadvertised arguments like `,timeout:30000`, preventing strict Zod schema validation errors.
+- **Standard OpenAI SSE Deltas:** Streams well-formed `tool_calls` deltas with proper UUID identifiers, culminating in `finish_reason: "tool_calls"`.
+
+#### 5. Dynamic Binary Database Model Resolution
+- **Zero Hardcoded Models:** Eliminated static model dictionaries from request/response translators. All model specifications, context limits, and capabilities are dynamically queried from the compiled binary database (`data/prime_gate.pgdb`).
+- **Antigravity Live Sync:** Automatically pulls live models directly from Google's `fetchAvailableModels` endpoint upon daemon startup, user login, manual UI refresh, and account switching.
+- **Tier-Aware Routing:** Seamlessly accommodates account tier variances (Google AI Pro Trial vs Paid tiers) and dynamically resolves upstream aliases (e.g. `gemini-3.8-flash` $\to$ `gemini-3.8-flash-high`).
+
+---
+
+## [1.1.1] - 2026-10-17
+
+### 🛠️ Authentication & System Hardening
+
+#### Added
+- **System Health Diagnostics (`/v1/health`):** Comprehensive JSON endpoint providing health metrics, live quota status, model availability, and telemetry summaries.
+- **Model Metadata Tagging:** Added `owned_by: "google-antigravity"` and `provider: "prime gate proxy"` to `/v1/models` outputs for seamless provider recognition in Cursor and OpenCode.
+- **Dedicated Post-Auth Flow:** Added an English OAuth callback page with a direct "Go to Dashboard" button.
+- **Sidebar Quick Account Switcher:** One-click account switcher in both the Web UI sidebar and CLI commands.
+
+#### Fixed
+- **Google OAuth Login Flow:** Resolved OAuth loop and token exchange errors with resilient callback handling, direct popup support, and verbose error extraction.
+- **Global Localization:** Enforced pure English across all UI components, CLI commands, scripts, and documentation for international developer consistency.
+- **Terminal Management Commands:** Added comprehensive CLI flags for account deletion, token refreshing, and quota syncing.
+
+---
+
+## [1.1.0] - 2026-10-17
+
+### ⚡ Performance & Storage Architecture
+
+#### Added
+- **Compiled Binary Database Engine (C SQLite + WAL):** Migrated from plaintext JSON files to a high-concurrency binary database (`prime_gate.pgdb`) using Write-Ahead Logging (WAL) and memory-mapped I/O (mmap 256MB).
+- **Data Corruption Sentinel Daemon:** Background watchdog that calculates and verifies 32-bit CRC32 checksums on every record read, broadcasting real-time corruption alerts via WebSockets.
+- **Multi-Account Failover:** Intelligent round-robin failover between configured Google Antigravity accounts when upstream rate limits (HTTP 429) are encountered.
+- **WebSocket Event Bus:** Real-time bi-directional streaming of server logs, telemetry updates, and database events to connected browser sessions.
+
+---
+
+## [1.0.0] - 2026-10-16
+
+### 🎉 Initial Public Release
+
+- **OpenAI Compatible Gateway:** Complete drop-in compatibility for `/v1/chat/completions` (streaming & non-streaming) and `/v1/models`.
+- **Google CloudCode Sandbox Bridge:** Secure reverse-engineered translation layer connecting OpenAI schema requests to Google's internal CloudCode Antigravity endpoints.
+- **Token Telemetry Collector:** Rolling in-memory and persisted telemetry across four granularities (per-second, per-minute, per-hour, per-day).
+- **Core CLI Suite:** Complete terminal management CLI:
+  - `prime-gate auth login` / `prime-gate auth status`
+  - `prime-gate daemon start` / `prime-gate daemon status` / `prime-gate daemon stop`
+  - `prime-gate quota sync` / `prime-gate quota status`
