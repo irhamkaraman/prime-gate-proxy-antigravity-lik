@@ -16,12 +16,21 @@ def resolve_model_name(raw_model: str) -> str:
         return "claude-sonnet-4-6"
     if "claude-opus" in m_lower:
         return "claude-opus-4-6-thinking"
+    if "gemini-3.8-flash-high" in m_lower:
+        return "gemini-3.8-flash-high"
+    if "gemini-3.8-flash-low" in m_lower:
+        return "gemini-3.8-flash-low"
     if "gemini-3.8-flash" in m_lower or "gemini-3-flash" in m_lower:
         return "gemini-3-flash"
-    if "gemini-2.5-pro" in m_lower:
-        return "gemini-2.5-pro"
-    if "gemini-2.5-flash" in m_lower:
-        return "gemini-2.5-flash"
+    if "gemini-3.1-flash-lite" in m_lower:
+        return "gemini-3.1-flash-lite"
+    if "gemini-3.5-flash-lite" in m_lower:
+        return "gemini-3.5-flash-lite"
+    if "gpt-oss" in m_lower:
+        return "gpt-oss-120b-medium"
+    # Fallback legacy 2.5 models to gemini-3-flash to avoid 503 capacity errors
+    if "gemini-2.5" in m_lower or "gemini-2" in m_lower:
+        return "gemini-3-flash"
     return m
 
 def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:

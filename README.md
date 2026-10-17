@@ -116,6 +116,7 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | `prime-gate --version` | Display version, runtime info, and codename. |
 | `prime-gate --help` | Show complete interactive command list. |
 | `prime-gate quota` | Display real-time quota status table & active model catalog. |
+| `prime-gate check-models` | Auto-load live supported models directly from Google Antigravity servers. |
 | `prime-gate auth list` | Show all stored Google Antigravity accounts. |
 | `prime-gate auth import` | Import accounts from `~/.config/opencode/antigravity-accounts.json`. |
 | `prime-gate auth login` | Open browser for Google OAuth 2.0 PKCE authentication. |
@@ -140,7 +141,8 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
         "claude-sonnet-4-6",
         "claude-opus-4-6-thinking",
         "gemini-3.8-flash",
-        "gemini-2.5-pro"
+        "gemini-3.1-flash-lite",
+        "gpt-oss-120b-medium"
       ]
     }
   }
@@ -160,8 +162,8 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | :--- | :---: | :---: |
 | **Claude Sonnet 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 |
 | **Claude Opus 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 |
-| **Gemini 3.8 Flash (Fast)** | ✅ Available | ✅ Available |
-| **Gemini 2.5 Pro / Flash** | ✅ Available | ✅ Available |
+| **Gemini 3.8 Flash (Fast/Recommended)** | ✅ Available | ✅ Available |
+| **Gemini 3.1 Flash Lite** | ✅ Available | ✅ Available |
 | **GPT-OSS 120B (Medium)** | ✅ Available | ✅ Available |
 | **Claude Sonnet 5.5 (Thinking)** | ❌ Paid Exclusive | ✅ Available |
 | **Gemini 4 Argon (Low)** | ❌ Paid Exclusive | ✅ Available |

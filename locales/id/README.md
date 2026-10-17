@@ -93,6 +93,7 @@ Jalankan service API dan Web UI sekaligus:
 | :--- | :--- |
 | `prime-gate --version` | Menampilkan info versi, runtime, dan codename. |
 | `prime-gate quota` | Menampilkan tabel visual kuota dan model yang aktif. |
+| `prime-gate check-models` | Memuat otomatis daftar model terkini langsung dari server Google Antigravity. |
 | `prime-gate auth list` | Menampilkan seluruh akun Google yang tersimpan. |
 | `prime-gate auth import` | Mengimpor akun dari config OpenCode. |
 | `prime-gate auth login` | Login akun baru via Google OAuth browser PKCE. |
@@ -117,7 +118,8 @@ Jalankan service API dan Web UI sekaligus:
         "claude-sonnet-4-6",
         "claude-opus-4-6-thinking",
         "gemini-3.8-flash",
-        "gemini-2.5-pro"
+        "gemini-3.1-flash-lite",
+        "gpt-oss-120b-medium"
       ]
     }
   }

@@ -59,10 +59,13 @@ async def health_check():
 
 @app.get("/v1/models")
 @app.get("/models")
-async def list_models():
-    """OpenAI standard models list endpoint."""
+async def list_models(refresh: bool = False):
+    """OpenAI standard models list endpoint dynamically resolved from Antigravity."""
     active_acc = account_mgr.get_active_account()
-    models = QuotaMonitor.get_available_models(active_acc)
+    if active_acc:
+        models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh)
+    else:
+        models = QuotaMonitor.get_available_models(None)
     now = int(time.time())
 
     data = [
@@ -80,14 +83,18 @@ async def list_models():
     return {"object": "list", "data": data}
 
 @app.get("/api/status")
-async def api_status():
+async def api_status(refresh: bool = False):
     """Status endpoint for Web UI dashboard."""
     accounts = account_mgr.load_accounts()
     active_acc = account_mgr.get_active_account()
 
     tier_label = QuotaMonitor.get_tier_label(active_acc) if active_acc else "Unknown"
-    quota_rows = QuotaMonitor.parse_quota_details(active_acc) if active_acc else []
-    models = QuotaMonitor.get_available_models(active_acc)
+    if active_acc:
+        quota_rows = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=refresh)
+        models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh)
+    else:
+        quota_rows = []
+        models = QuotaMonitor.get_available_models(None)
 
     return {
         "version": __version__,
@@ -101,14 +108,31 @@ async def api_status():
     }
 
 @app.get("/api/quota")
-async def api_quota():
+async def api_quota(refresh: bool = False):
     active_acc = account_mgr.get_active_account()
     if not active_acc:
         return {"error": "No active account configured"}
+    quota_rows = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=refresh)
     return {
         "account": active_acc.get("email"),
         "tier": QuotaMonitor.get_tier_label(active_acc),
-        "quota": QuotaMonitor.parse_quota_details(active_acc)
+        "quota": quota_rows
+    }
+
+@app.post("/api/models/refresh")
+async def api_models_refresh():
+    """Forces refreshing live models and quota from Google Antigravity account."""
+    active_acc = account_mgr.get_active_account()
+    if not active_acc:
+        return {"success": False, "error": "No active account configured"}
+    models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
+    quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
+    return {
+        "success": True,
+        "account": active_acc.get("email"),
+        "models": models,
+        "models_count": len(models),
+        "quota": quota
     }
 
 @app.post("/api/auth/import")

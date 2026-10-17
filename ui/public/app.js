@@ -195,6 +195,27 @@ async function fetchModels() {
   }
 }
 
+async function syncModelsFromAntigravity() {
+  const badge = document.getElementById("modelCountBadge");
+  const originalText = badge.innerText;
+  try {
+    badge.innerText = "Syncing...";
+    const res = await fetch("/api/models/refresh", { method: "POST" });
+    if (!res.ok) throw new Error("Sync request failed");
+    const data = await res.json();
+    if (data.success) {
+      await fetchStatus();
+      alert(`✓ Synced ${data.models_count} live models directly from Google Antigravity (${data.account})!`);
+    } else {
+      alert("Sync failed: " + (data.error || "Unknown error"));
+    }
+  } catch (err) {
+    alert("Sync error: " + err.message);
+  } finally {
+    await fetchModels();
+  }
+}
+
 async function testPrompt() {
   const promptInput = document.getElementById("promptInput");
   const modelSelect = document.getElementById("modelSelect");

@@ -80,16 +80,23 @@ def ui(
         console.print("\n[yellow]Web UI stopped.[/yellow]")
 
 @app.command()
-def quota():
+def quota(
+    refresh: bool = typer.Option(False, "--refresh", "-r", help="Force refresh live quota directly from Google Antigravity servers.")
+):
     """Display real-time quota status and available model catalog."""
+    import asyncio
     active_acc = account_mgr.get_active_account()
     if not active_acc:
         console.print("[bold red]Belum ada akun terdaftar! Jalankan 'prime-gate auth import' atau 'prime-gate auth login'.[/bold red]")
         return
 
     tier_label = QuotaMonitor.get_tier_label(active_acc)
-    rows = QuotaMonitor.parse_quota_details(active_acc)
-    models = QuotaMonitor.get_available_models(active_acc)
+    try:
+        rows = asyncio.run(QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=refresh))
+        models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh))
+    except Exception:
+        rows = QuotaMonitor.parse_quota_details(active_acc)
+        models = QuotaMonitor.get_available_models(active_acc)
 
     table = Table(title=f"Quota Status - {active_acc.get('email')} ({tier_label})", border_style="cyan")
     table.add_column("Model Family", style="bold white")
@@ -111,7 +118,7 @@ def quota():
 
     console.print(table)
 
-    model_table = Table(title="Model Catalog yang Aktif untuk Paket Ini", border_style="magenta")
+    model_table = Table(title=f"Model Catalog Aktif ({len(models)} Model Terkini)", border_style="magenta")
     model_table.add_column("Model ID", style="bold green")
     model_table.add_column("Display Name", style="white")
     model_table.add_column("Provider", style="dim")
@@ -120,6 +127,36 @@ def quota():
         model_table.add_row(m["id"], m["name"], m.get("owned_by", "google-antigravity"))
 
     console.print(model_table)
+
+@app.command("check-models")
+@app.command("models")
+def check_models(
+    refresh: bool = typer.Option(True, "--refresh", "-r", help="Force refresh models directly from Google Antigravity account.")
+):
+    """Query live supported models directly from Google Antigravity account."""
+    import asyncio
+    active_acc = account_mgr.get_active_account()
+    if not active_acc:
+        console.print("[bold red]Belum ada akun terdaftar! Jalankan 'prime-gate auth login' atau 'prime-gate auth import'.[/bold red]")
+        return
+
+    console.print(f"[bold cyan]Menghubungi Google Antigravity untuk akun {active_acc.get('email')}...[/bold cyan]")
+    try:
+        models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh))
+    except Exception as e:
+        console.print(f"[bold red]Gagal mengambil model live: {e}[/bold red]")
+        models = QuotaMonitor.get_available_models(active_acc)
+
+    table = Table(title=f"Live Models Catalog - Google Antigravity ({len(models)} Models Terkini)", border_style="green")
+    table.add_column("Model ID (OpenAI Endpoint)", style="bold green")
+    table.add_column("Display Name", style="white")
+    table.add_column("Provider", style="dim")
+
+    for m in models:
+        table.add_row(m["id"], m.get("name", m["id"]), m.get("owned_by", "google-antigravity"))
+
+    console.print(table)
+    console.print("[dim][OK] Model ini aktif dan siap dipanggil via base URL: http://127.0.0.1:52111/v1[/dim]")
 
 @auth_app.command("list")
 def auth_list():
