@@ -966,7 +966,7 @@ function renderModels(models) {
       <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg hover:border-[#d97706]/30 transition">
         <span class="text-xs font-mono-code font-semibold text-[#f59e0b] block truncate">${m.id}</span>
         <span class="text-[11px] text-[#a8a29e] block mt-0.5">${m.name || m.id}</span>
-        <span class="text-[9px] text-[#78716c] font-mono-code block mt-1 uppercase">Provider: ${m.owned_by || "google-antigravity"}</span>
+        <span class="text-[9px] text-[#78716c] font-mono-code block mt-1 uppercase">Provider: ${m.provider || m.owned_by || "prime gate proxy"}</span>
       </div>
     `).join("");
   }

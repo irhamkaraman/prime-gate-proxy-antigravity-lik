@@ -196,6 +196,7 @@ async def list_models(refresh: bool = False):
             "object": "model",
             "created": now,
             "owned_by": m.get("owned_by", "google-antigravity"),
+            "provider": m.get("provider", "prime gate proxy"),
             "permission": [],
             "root": m["id"],
             "parent": None
@@ -203,6 +204,31 @@ async def list_models(refresh: bool = False):
         for m in models
     ]
     return {"object": "list", "data": data}
+
+@app.get("/v1/models/{model_id:path}")
+@app.get("/models/{model_id:path}")
+async def get_model(model_id: str):
+    """OpenAI standard retrieve model endpoint."""
+    active_acc = account_mgr.get_active_account()
+    if active_acc:
+        models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc)
+    else:
+        models = QuotaMonitor.get_available_models(None)
+
+    found = next((m for m in models if m["id"] == model_id), None)
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+    now = int(time.time())
+    return {
+        "id": found["id"],
+        "object": "model",
+        "created": now,
+        "owned_by": found.get("owned_by", "google-antigravity"),
+        "provider": found.get("provider", "prime gate proxy"),
+        "permission": [],
+        "root": found["id"],
+        "parent": None
+    }
 
 @app.get("/api/status")
 async def api_status(refresh: bool = False):

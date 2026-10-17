@@ -129,7 +129,8 @@ class QuotaMonitor:
                         clean_models.append({
                             "id": "gemini-3.8-flash",
                             "name": FRIENDLY_NAMES.get("gemini-3.8-flash", "Gemini 3.8 Flash (Recommended)"),
-                            "owned_by": "google-antigravity"
+                            "owned_by": "google-antigravity",
+                            "provider": "prime gate proxy"
                         })
                         seen.add("gemini-3.8-flash")
 
@@ -144,7 +145,8 @@ class QuotaMonitor:
                         clean_models.append({
                             "id": mid,
                             "name": name,
-                            "owned_by": "google-antigravity"
+                            "owned_by": "google-antigravity",
+                            "provider": "prime gate proxy"
                         })
                         seen.add(mid)
 
@@ -324,6 +326,7 @@ class QuotaMonitor:
                 "name": m.get("name", mid),
                 "status": status,
                 "owned_by": m.get("owned_by", "google-antigravity"),
+                "provider": "prime gate proxy",
                 "family": family,
                 "quota_percentage": quota_pct,
                 "quota_reset": reset_time,
