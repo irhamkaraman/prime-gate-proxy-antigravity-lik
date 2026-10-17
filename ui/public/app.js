@@ -68,8 +68,8 @@ async function fetchModels() {
   try {
     const res = await fetch("/v1/models");
     if (!res.ok) return;
-    const json = await res.json();
-    const models = json.data || [];
+    const data = await res.json();
+    const models = data.data || [];
 
     document.getElementById("modelCountBadge").innerText = `${models.length} Models`;
 
@@ -148,7 +148,7 @@ async function testPrompt() {
         if (jsonStr === "[DONE]") continue;
 
         try {
-          const parsed = json.parse(jsonStr);
+          const parsed = JSON.parse(jsonStr);
           const delta = parsed.choices?.[0]?.delta || {};
 
           if (isFirstChunk) {
@@ -162,7 +162,9 @@ async function testPrompt() {
           if (delta.content) {
             outputArea.innerText += delta.content;
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn("SSE chunk parse warning:", e);
+        }
       }
     }
   } catch (err) {
