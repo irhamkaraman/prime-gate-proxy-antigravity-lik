@@ -351,39 +351,106 @@ async function clearAllAccounts() {
 // Google OAuth & OpenCode Import
 // -------------------------------------------------------------
 
+let currentAuthUrl = "";
+
+function extractErrorMessage(data, fallback = "Unable to complete OAuth") {
+  if (!data) return fallback;
+  if (typeof data.error === "string" && data.error.trim()) return data.error;
+  if (data.error && typeof data.error === "object") {
+    if (data.error.message) return data.error.message;
+    try { return JSON.stringify(data.error); } catch (e) {}
+  }
+  if (typeof data.detail === "string" && data.detail.trim()) return data.detail;
+  if (Array.isArray(data.detail) && data.detail.length > 0) {
+    return data.detail.map(d => d.msg || JSON.stringify(d)).join(", ");
+  }
+  if (typeof data.message === "string" && data.message.trim()) return data.message;
+  return fallback;
+}
+
 function openAuthModal(canDismiss = true) {
   const modal = document.getElementById("authModal");
   const closeBtn = document.getElementById("authModalCloseBtn");
+  const fallback = document.getElementById("authFallbackContainer");
+  const notice = document.getElementById("authStatusNotice");
   if (!modal) return;
   modal.style.display = "flex";
   if (closeBtn) closeBtn.style.display = canDismiss ? "block" : "none";
+  if (fallback) fallback.classList.add("hidden");
+  if (notice) notice.innerText = "";
 }
 
 function closeAuthModal() {
   const modal = document.getElementById("authModal");
+  const fallback = document.getElementById("authFallbackContainer");
   if (modal) modal.style.display = "none";
+  if (fallback) fallback.classList.add("hidden");
 }
 
 async function triggerGoogleLogin() {
   const notice = document.getElementById("authStatusNotice");
   const btn = document.getElementById("googleLoginBtn");
-  try {
-    notice.innerText = "Launching browser for Google OAuth sign-in... Please approve.";
-    notice.style.color = "#f59e0b";
-    btn.disabled = true;
+  const fallback = document.getElementById("authFallbackContainer");
+  const directLink = document.getElementById("authDirectLink");
 
+  try {
+    btn.disabled = true;
+    notice.innerText = "⏳ Inisialisasi Google OAuth...";
+    notice.style.color = "#f59e0b";
+
+    // 1. Fetch official authorization URL first
+    let authUrl = "";
+    try {
+      const urlRes = await fetch("/api/auth/url");
+      if (urlRes.ok) {
+        const urlData = await urlRes.json();
+        authUrl = urlData.auth_url || "";
+      }
+    } catch (e) {
+      console.warn("Could not prefetch auth url:", e);
+    }
+
+    if (authUrl) {
+      currentAuthUrl = authUrl;
+      if (directLink) directLink.href = authUrl;
+      if (fallback) fallback.classList.remove("hidden");
+
+      // Open tab directly from user interaction
+      try {
+        const popup = window.open(authUrl, "_blank");
+        if (!popup || popup.closed || typeof popup.closed === "undefined") {
+          notice.innerText = "⚠️ Popup browser diblokir. Klik tombol link manual di bawah:";
+          notice.style.color = "#f59e0b";
+        } else {
+          notice.innerText = "🚀 Tab login Google telah dibuka! Silakan setujui di tab tersebut...";
+          notice.style.color = "#38bdf8";
+        }
+      } catch (err) {
+        notice.innerText = "Silakan klik 'Buka Halaman Login Google' di bawah:";
+        notice.style.color = "#f59e0b";
+      }
+    } else {
+      notice.innerText = "Menunggu callback otentikasi browser...";
+      notice.style.color = "#f59e0b";
+    }
+
+    // 2. Trigger interactive listener and token exchange on backend
     const res = await fetch("/api/auth/login", { method: "POST" });
     const data = await res.json();
+
     if (data.success) {
-      notice.innerText = `✓ Authenticated as ${data.account}! Loading dashboard...`;
+      notice.innerText = `✓ Login Berhasil sebagai ${data.account}! Menyimpan ke database binary...`;
       notice.style.color = "#10b981";
+      appendSentinelLog("Auth", `Google account successfully added: ${data.account}`, "INFO");
       setTimeout(async () => {
         closeAuthModal();
         await fetchAccounts();
         await fetchStatus();
-      }, 1000);
+        await loadModelsList();
+      }, 1200);
     } else {
-      notice.innerText = `Login failed: ${data.error || "Unable to complete OAuth"}`;
+      const errMsg = extractErrorMessage(data, "Gagal menyelesaikan Google OAuth");
+      notice.innerText = `Login failed: ${errMsg}`;
       notice.style.color = "#f43f5e";
     }
   } catch (err) {
@@ -392,6 +459,24 @@ async function triggerGoogleLogin() {
   } finally {
     btn.disabled = false;
   }
+}
+
+function copyAuthLink() {
+  if (!currentAuthUrl) return;
+  const btn = document.getElementById("copyAuthBtn");
+  navigator.clipboard.writeText(currentAuthUrl).then(() => {
+    if (btn) {
+      const prev = btn.innerText;
+      btn.innerText = "✓ Disalin!";
+      btn.style.color = "#10b981";
+      setTimeout(() => {
+        btn.innerText = prev;
+        btn.style.color = "";
+      }, 2000);
+    }
+  }).catch(e => {
+    alert("URL: " + currentAuthUrl);
+  });
 }
 
 async function triggerImportOpenCode() {
@@ -407,13 +492,16 @@ async function triggerImportOpenCode() {
     if (data.success && data.imported > 0) {
       notice.innerText = `✓ Successfully imported ${data.imported} account(s)!`;
       notice.style.color = "#10b981";
+      appendSentinelLog("Accounts", `Imported ${data.imported} accounts from OpenCode`, "INFO");
       setTimeout(async () => {
         closeAuthModal();
         await fetchAccounts();
         await fetchStatus();
+        await loadModelsList();
       }, 1000);
     } else {
-      notice.innerText = "No OpenCode credentials found. Use 'Sign in with Google' instead.";
+      const errMsg = extractErrorMessage(data, "No OpenCode credentials found. Use 'Sign in with Google' instead.");
+      notice.innerText = errMsg;
       notice.style.color = "#f43f5e";
     }
   } catch (err) {
@@ -423,6 +511,7 @@ async function triggerImportOpenCode() {
     btn.disabled = false;
   }
 }
+
 
 // -------------------------------------------------------------
 // Prompt Sandbox & Model Playground
@@ -634,6 +723,12 @@ function handleWSMessage(msg) {
       fetchStatus();
       fetchAccounts();
     }
+  } else if (msg.type === "ACCOUNT_CONNECTED") {
+    appendSentinelLog("Auth", `Google account connected: ${msg.email}`, "INFO");
+    closeAuthModal();
+    fetchStatus();
+    fetchAccounts();
+    loadModelsList();
   } else if (msg.type === "LOG_ENTRY") {
     appendSentinelLog(msg.logger, msg.message, msg.level, msg.is_corrupt_alert);
     if (msg.is_corrupt_alert) {

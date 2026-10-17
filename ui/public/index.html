@@ -31,7 +31,7 @@
       </p>
 
       <div class="flex flex-col gap-3">
-        <button id="googleLoginBtn" class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white text-[#1f2937] hover:bg-[#f3f4f6] font-semibold text-sm rounded-lg shadow-lg transition" onclick="triggerGoogleLogin()">
+        <button id="googleLoginBtn" class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white text-[#1f2937] hover:bg-[#f3f4f6] font-semibold text-sm rounded-lg shadow-lg transition active:scale-[0.98]" onclick="triggerGoogleLogin()">
           <svg width="18" height="18" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -41,12 +41,29 @@
           Sign in with Google
         </button>
 
-        <button id="importAuthBtn" class="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 font-medium text-sm rounded-lg transition" onclick="triggerImportOpenCode()">
+        <!-- Dynamic Manual Fallback Container (shows if popup blocked or while waiting) -->
+        <div id="authFallbackContainer" class="p-3 bg-[#13110e] border border-[#d97706]/30 rounded-lg hidden flex-col gap-2 text-xs">
+          <div class="text-[#f59e0b] font-medium flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-[#f59e0b] animate-ping"></span>
+            Tab login dibuka di browser Anda...
+          </div>
+          <p class="text-[11px] text-[#a8a29e]">Jika tab browser tidak muncul otomatis, silakan buka manual:</p>
+          <div class="flex items-center gap-2">
+            <a id="authDirectLink" href="#" target="_blank" class="flex-1 py-1.5 px-3 bg-[#d97706]/20 hover:bg-[#d97706]/30 text-[#f59e0b] border border-[#d97706]/40 rounded text-center font-mono-code text-[11px] transition">
+              ↗ Buka Halaman Login Google
+            </a>
+            <button id="copyAuthBtn" onclick="copyAuthLink()" class="py-1.5 px-3 bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 rounded font-mono-code text-[11px] transition">
+              📋 Salin URL
+            </button>
+          </div>
+        </div>
+
+        <button id="importAuthBtn" class="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 font-medium text-sm rounded-lg transition active:scale-[0.98]" onclick="triggerImportOpenCode()">
           ⚡ Quick Import from OpenCode Config
         </button>
       </div>
 
-      <div id="authStatusNotice" class="text-xs mt-4 min-h-[20px] font-mono-code"></div>
+      <div id="authStatusNotice" class="text-xs mt-4 min-h-[22px] font-mono-code transition-all"></div>
 
       <div class="mt-6 pt-4 border-t border-[#a8a29e]/10 text-xs text-[#78716c] flex items-center justify-center gap-2">
         <span>Prefer terminal? Run:</span>
@@ -54,6 +71,7 @@
       </div>
     </div>
   </div>
+
 
   <!-- Left Sidebar Navigation (Consistent Anthropic Layout) -->
   <aside class="w-64 bg-[#1b1613] border-r border-[#a8a29e]/15 flex flex-col justify-between shrink-0 h-screen sticky top-0 p-5 z-20">

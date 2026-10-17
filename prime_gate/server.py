@@ -198,9 +198,20 @@ async def api_auth_import():
         "active_account": active_acc.get("email") if active_acc else None
     }
 
+@app.get("/api/auth/url")
+async def api_auth_url(port: int = 53123):
+    """Return the Google OAuth consent URL and callback details for client-driven browser login."""
+    from .auth.oauth import get_auth_url
+    url = get_auth_url(port=port)
+    return {
+        "auth_url": url,
+        "redirect_uri": f"http://127.0.0.1:{port}",
+        "port": port
+    }
+
 @app.post("/api/auth/login")
 async def api_auth_login():
-    """Trigger interactive Google OAuth PKCE login via browser, and auto-sync live models & quota."""
+    """Trigger interactive Google OAuth login via browser and auto-sync live models & quota."""
     import asyncio
     from .auth import start_interactive_login
     try:
@@ -209,6 +220,16 @@ async def api_auth_login():
         accounts = [a for a in accounts if a.get("email") != new_account["email"]]
         accounts.append(new_account)
         account_mgr.save_accounts(accounts)
+
+        # Broadcast live account update via WebSocket event bus
+        try:
+            event_bus.broadcast_sync({
+                "type": "ACCOUNT_CONNECTED",
+                "email": new_account.get("email"),
+                "total_accounts": len(accounts)
+            })
+        except Exception:
+            pass
 
         # Immediately fetch live models and quota from Antigravity and save to binary database
         models = await QuotaMonitor.fetch_live_models_from_antigravity(new_account, force_refresh=True)
@@ -222,7 +243,9 @@ async def api_auth_login():
             "quota_count": len(quota)
         }
     except Exception as e:
+        logger.error(f"OAuth login failed: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
+
 
 @app.get("/api/accounts")
 async def api_accounts_list():
