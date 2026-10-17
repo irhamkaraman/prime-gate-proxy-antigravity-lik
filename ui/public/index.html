@@ -101,6 +101,13 @@
           </svg>
           <span>System & Sentinel</span>
         </button>
+
+        <button class="nav-link" data-tab="docs" onclick="switchTab('docs')">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+          </svg>
+          <span>Documentation</span>
+        </button>
       </nav>
     </div>
 
@@ -459,6 +466,448 @@
           </div>
         </div>
         <pre id="sentinelLogsArea" class="editorial-terminal h-80 overflow-y-auto">Connecting to live WebSocket event bus...</pre>
+      </div>
+    </div>
+
+    <!-- TAB 5: 📚 DOCUMENTATION & INTEGRATION GUIDE -->
+    <div id="tab-docs" class="tab-content flex flex-col gap-6" style="display: none;">
+      <!-- Header -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#a8a29e]/15">
+        <div>
+          <h2 class="font-serif-title text-2xl font-semibold text-white">Documentation & Integration Manual</h2>
+          <p class="text-xs text-[#a8a29e] mt-1">Comprehensive guide for connecting AI coding assistants, configuring models, and managing Prime Gate.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="#doc-quickstart" class="btn-secondary text-xs py-1 px-2.5">⚡ Quick Start</a>
+          <a href="#doc-clients" class="btn-secondary text-xs py-1 px-2.5">🔌 AI Clients</a>
+          <a href="#doc-models" class="btn-secondary text-xs py-1 px-2.5">🧠 Models & Thinking</a>
+          <a href="#doc-accounts" class="btn-secondary text-xs py-1 px-2.5">👤 Accounts & Quota</a>
+          <a href="#doc-database" class="btn-secondary text-xs py-1 px-2.5">🛡️ Binary Database</a>
+          <a href="#doc-cli" class="btn-secondary text-xs py-1 px-2.5">💻 CLI Cheat Sheet</a>
+          <a href="#doc-faq" class="btn-secondary text-xs py-1 px-2.5">❓ FAQ</a>
+        </div>
+      </div>
+
+      <!-- Quick Start Card -->
+      <div id="doc-quickstart" class="anthropic-card">
+        <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">01</div>
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">System Architecture & Quick Start</h3>
+            <p class="text-xs text-[#a8a29e]">How Prime Gate operates and bridges your Google Antigravity account to OpenAI clients.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-white">Core Proxy Gateway (FastAPI)</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono-code bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30">Active</span>
+            </div>
+            <p class="text-xs text-[#a8a29e] mb-3 leading-relaxed">
+              Accepts standard OpenAI REST and Server-Sent Events (SSE) requests. Handles Google OAuth token refresh, recursive schema sanitization, and streaming thinking blocks.
+            </p>
+            <div class="flex items-center justify-between text-xs font-mono-code p-2 bg-black/40 rounded border border-white/5">
+              <span class="text-[#f59e0b]">http://127.0.0.1:52111/v1</span>
+              <span class="text-[11px] text-[#78716c]">Port 52111</span>
+            </div>
+          </div>
+
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-white">Web UI Dashboard (Node.js)</span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-mono-code bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/30">Active</span>
+            </div>
+            <p class="text-xs text-[#a8a29e] mb-3 leading-relaxed">
+              Provides real-time token telemetry (per-sec/min/hour/day), account management, interactive prompt sandbox, and database sentinel diagnostics.
+            </p>
+            <div class="flex items-center justify-between text-xs font-mono-code p-2 bg-black/40 rounded border border-white/5">
+              <span class="text-[#38bdf8]">http://127.0.0.1:52110</span>
+              <span class="text-[11px] text-[#78716c]">Port 52110</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-4 bg-[#241d18] border border-[#a8a29e]/15 rounded-lg text-xs leading-relaxed text-[#d6d3d1]">
+          <strong class="text-white">🚀 Recommended Launch Modes:</strong>
+          <ul class="list-disc list-inside mt-2 space-y-1 text-[#a8a29e]">
+            <li><strong class="text-white">One-Click Launcher (Windows):</strong> Run <code class="text-[#f59e0b] font-mono-code">scripts\start-all.bat</code> to launch both background services simultaneously.</li>
+            <li><strong class="text-white">CLI Background Daemon:</strong> Run <code class="text-[#f59e0b] font-mono-code">prime-gate daemon start</code> to manage background processes headlessly.</li>
+            <li><strong class="text-white">Interactive Terminal:</strong> Run <code class="text-[#f59e0b] font-mono-code">prime-gate start --port 52111</code> and <code class="text-[#f59e0b] font-mono-code">prime-gate ui --port 52110</code> in separate terminals.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- AI Client Integration Card -->
+      <div id="doc-clients" class="anthropic-card">
+        <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">02</div>
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">AI Coding Clients & IDE Setup</h3>
+            <p class="text-xs text-[#a8a29e]">Ready-to-use configuration snippets with one-click copy buttons for your favorite tools.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Cursor -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#f59e0b]"></span> Cursor
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">Settings &gt; Models</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-3">Navigate to Cursor Settings &gt; Models &gt; OpenAI API Key, toggle "Override OpenAI Base URL", and add models:</p>
+              <div class="space-y-1.5 font-mono-code text-xs mb-3">
+                <div class="p-2 bg-black/50 rounded border border-white/5 flex items-center justify-between">
+                  <span class="text-[#78716c]">Base URL:</span>
+                  <span class="text-[#f59e0b]">http://127.0.0.1:52111/v1</span>
+                </div>
+                <div class="p-2 bg-black/50 rounded border border-white/5 flex items-center justify-between">
+                  <span class="text-[#78716c]">API Key:</span>
+                  <span class="text-white">prime-gate-proxy</span>
+                </div>
+                <div class="p-2 bg-black/50 rounded border border-white/5 flex items-center justify-between">
+                  <span class="text-[#78716c]">Model:</span>
+                  <span class="text-emerald-400">claude-sonnet-4-6</span>
+                </div>
+              </div>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('cursorSnippet', this)">
+              <span>Copy Cursor Settings</span>
+              <span id="cursorSnippet" class="hidden">Base URL: http://127.0.0.1:52111/v1
+API Key: prime-gate-proxy
+Model: claude-sonnet-4-6</span>
+            </button>
+          </div>
+
+          <!-- OpenCode -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#38bdf8]"></span> OpenCode
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">~/.config/opencode/opencode.json</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-2">Paste into your OpenCode providers configuration:</p>
+              <pre id="opencodeSnippet" class="editorial-terminal text-[11px] p-2.5 max-h-36 overflow-y-auto mb-3">{
+  "providers": {
+    "antigravity": {
+      "baseUrl": "http://127.0.0.1:52111/v1",
+      "apiKey": "prime-gate-proxy",
+      "models": [
+        "claude-sonnet-4-6",
+        "claude-opus-4-6-thinking",
+        "gemini-3.8-flash",
+        "gemini-3.1-flash-lite",
+        "gpt-oss-120b-medium"
+      ]
+    }
+  }
+}</pre>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('opencodeSnippet', this)">
+              Copy OpenCode JSON
+            </button>
+          </div>
+
+          <!-- Continue.dev -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#10b981]"></span> Continue.dev
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">~/.continue/config.json</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-2">Add to the <code class="text-white">models</code> array in Continue:</p>
+              <pre id="continueSnippet" class="editorial-terminal text-[11px] p-2.5 max-h-36 overflow-y-auto mb-3">{
+  "title": "Claude Sonnet 4.6 (Prime Gate)",
+  "provider": "openai",
+  "model": "claude-sonnet-4-6",
+  "apiBase": "http://127.0.0.1:52111/v1",
+  "apiKey": "prime-gate-proxy"
+}</pre>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('continueSnippet', this)">
+              Copy Continue Config
+            </button>
+          </div>
+
+          <!-- Aider / Cline -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#ec4899]"></span> Aider &amp; Cline
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">CLI / Extension</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-2">Run Aider directly with Prime Gate proxy endpoint:</p>
+              <pre id="aiderSnippet" class="editorial-terminal text-[11px] p-2.5 max-h-36 overflow-y-auto mb-3">aider --openai-api-base http://127.0.0.1:52111/v1 \
+      --openai-api-key prime-gate-proxy \
+      --model openai/claude-sonnet-4-6</pre>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('aiderSnippet', this)">
+              Copy Aider Command
+            </button>
+          </div>
+
+          <!-- Python OpenAI SDK -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#eab308]"></span> Python SDK
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">openai &gt;= 1.0.0</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-2">Standard Python client invocation with thinking stream:</p>
+              <pre id="pythonSnippet" class="editorial-terminal text-[11px] p-2.5 max-h-36 overflow-y-auto mb-3">from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:52111/v1",
+    api_key="prime-gate-proxy"
+)
+
+response = client.chat.completions.create(
+    model="gemini-3.8-flash",
+    messages=[{"role": "user", "content": "Explain binary WAL database."}]
+)
+print(response.choices[0].message.content)</pre>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('pythonSnippet', this)">
+              Copy Python Code
+            </button>
+          </div>
+
+          <!-- cURL / REST API -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#64748b]"></span> cURL / Shell
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">REST Endpoint</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-2">Instant command-line query verification:</p>
+              <pre id="curlSnippet" class="editorial-terminal text-[11px] p-2.5 max-h-36 overflow-y-auto mb-3">curl http://127.0.0.1:52111/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer prime-gate-proxy" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'</pre>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('curlSnippet', this)">
+              Copy cURL Command
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Models & Thinking Mode Card -->
+      <div id="doc-models" class="anthropic-card">
+        <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">03</div>
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Active Model Catalog &amp; Deep Reasoning</h3>
+            <p class="text-xs text-[#a8a29e]">Overview of dynamically resolved models and Server-Sent Events thinking streaming.</p>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto mb-4">
+          <table class="w-full text-left text-xs border border-[#a8a29e]/10 rounded-lg overflow-hidden">
+            <thead class="bg-[#241d18] text-[#a8a29e] border-b border-[#a8a29e]/15">
+              <tr>
+                <th class="p-3 font-semibold text-white">Model ID</th>
+                <th class="p-3 font-semibold text-white">Display Name</th>
+                <th class="p-3 font-semibold text-white">Reasoning / Thinking</th>
+                <th class="p-3 font-semibold text-white">Recommended Use Case</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#a8a29e]/10 font-mono-code">
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 font-bold text-emerald-400">claude-sonnet-4-6</td>
+                <td class="p-3 text-white">Claude Sonnet 4.6 (Thinking)</td>
+                <td class="p-3 text-[#f59e0b]">✓ Deep Thinking (Up to 64k)</td>
+                <td class="p-3 text-[#a8a29e] font-sans">Complex multi-file refactoring &amp; coding architectures.</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 font-bold text-emerald-400">claude-opus-4-6-thinking</td>
+                <td class="p-3 text-white">Claude Opus 4.6 (Thinking)</td>
+                <td class="p-3 text-[#f59e0b]">✓ Extended Reasoning</td>
+                <td class="p-3 text-[#a8a29e] font-sans">Deep analytical reasoning, mathematical proofs &amp; algorithmic logic.</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 font-bold text-emerald-400">gemini-3.8-flash</td>
+                <td class="p-3 text-white">Gemini 3.8 Flash (Recommended)</td>
+                <td class="p-3 text-[#f59e0b]">✓ Dynamic Thinking</td>
+                <td class="p-3 text-[#a8a29e] font-sans">Primary daily driver. Outstanding throughput with low latency.</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 font-bold text-emerald-400">gemini-3.8-flash-high</td>
+                <td class="p-3 text-white">Gemini 3.8 Flash High</td>
+                <td class="p-3 text-[#f59e0b]">✓ Maximum Budget</td>
+                <td class="p-3 text-[#a8a29e] font-sans">Hard debugging sessions requiring extensive chain-of-thought steps.</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 font-bold text-emerald-400">gemini-3.1-flash-lite</td>
+                <td class="p-3 text-white">Gemini 3.1 Flash Lite</td>
+                <td class="p-3 text-[#78716c]">Standard</td>
+                <td class="p-3 text-[#a8a29e] font-sans">Ultra-fast tab autocompletion and lightweight prompt tasks.</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 font-bold text-emerald-400">gpt-oss-120b-medium</td>
+                <td class="p-3 text-white">GPT-OSS 120B Medium</td>
+                <td class="p-3 text-[#78716c]">Standard</td>
+                <td class="p-3 text-[#a8a29e] font-sans">Open-weights model served via Google Cloud infrastructure.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-4 bg-[#241d18] border border-[#a8a29e]/15 rounded-lg text-xs leading-relaxed text-[#d6d3d1]">
+          <strong class="text-white">🧠 How Thinking Mode is Streamed:</strong>
+          <p class="mt-1 text-[#a8a29e]">
+            When using models with thinking enabled, Prime Gate emits thinking chunks through standard OpenAI delta payloads using <code class="text-[#f59e0b] font-mono-code">choices[0].delta.reasoning_content</code>. In the Prompt Sandbox, these reasoning tokens are visually encapsulated within <code class="text-[#f59e0b] font-mono-code">[THINKING] ... [/THINKING]</code> badges before the final output begins.
+          </p>
+          <div class="mt-2 text-rose-300 bg-rose-950/20 p-2.5 rounded border border-rose-900/30">
+            <strong>Note on Gemini 2.5:</strong> The legacy models <code class="font-mono-code">gemini-2.5-pro</code> and <code class="font-mono-code">gemini-2.5-flash</code> have been decommissioned from the default catalog because Google's backend currently rejects them with <em>"503 Service Unavailable: MODEL_CAPACITY_EXHAUSTED"</em>. Please use <code class="text-white font-mono-code">gemini-3.8-flash</code> or <code class="text-white font-mono-code">claude-sonnet-4-6</code> instead.
+          </div>
+        </div>
+      </div>
+
+      <!-- Binary Database & Sentinel Watchdog Card -->
+      <div id="doc-database" class="anthropic-card">
+        <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">04</div>
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Compiled Binary Database &amp; Sentinel Watchdog</h3>
+            <p class="text-xs text-[#a8a29e]">Zero plaintext JSON storage, memory-mapped WAL transactions, and continuous integrity audits.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <span class="text-xs font-semibold text-white block">Zero Plaintext JSON</span>
+            <p class="text-xs text-[#a8a29e] mt-1">Credentials, OAuth tokens, and accounts are binary-masked and stored as compiled C BLOBs. No raw JSON files can be inspected or leaked.</p>
+          </div>
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <span class="text-xs font-semibold text-white block">32-Bit CRC32 Sealing</span>
+            <p class="text-xs text-[#a8a29e] mt-1">Every stored record is cryptographically stamped with a CRC32 checksum. Any external hex tampering is caught instantly upon load.</p>
+          </div>
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <span class="text-xs font-semibold text-white block">Sentinel Watchdog &amp; WS</span>
+            <p class="text-xs text-[#a8a29e] mt-1">An autonomous background thread audits the physical binary file every 5 seconds, piping status and logs via WebSocket (<code class="text-[#38bdf8] font-mono-code">/ws/live</code>).</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLI Cheat Sheet Card -->
+      <div id="doc-cli" class="anthropic-card">
+        <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">05</div>
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">CLI Command Reference Cheat Sheet</h3>
+            <p class="text-xs text-[#a8a29e]">Full reference for terminal commands executed via <code class="font-mono-code">python -m prime_gate.cli</code> or <code class="font-mono-code">prime-gate</code>.</p>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs border border-[#a8a29e]/10 rounded-lg overflow-hidden font-mono-code">
+            <thead class="bg-[#241d18] text-[#a8a29e] border-b border-[#a8a29e]/15">
+              <tr>
+                <th class="p-3 text-white">Command</th>
+                <th class="p-3 text-white">Description</th>
+                <th class="p-3 text-white">Example</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#a8a29e]/10 text-xs">
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate quota</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Display real-time quota status table &amp; active models.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate quota --refresh</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate check-models</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Query live supported models directly from Google Antigravity.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate check-models</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth login</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Trigger browser Google OAuth PKCE and auto-sync binary DB.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth login</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth import</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Import accounts from OpenCode config and auto-sync binary DB.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth import</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth remove &lt;email&gt;</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Remove a specific Google Antigravity account from proxy.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth remove user@gmail.com</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate daemon start|status|stop</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Manage background headless proxy process on Windows.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate daemon start</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate db status|check</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Inspect compiled binary database and verify CRC32 integrity.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate db check</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- FAQ & Troubleshooting Card -->
+      <div id="doc-faq" class="anthropic-card">
+        <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">06</div>
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Frequently Asked Questions &amp; Troubleshooting</h3>
+            <p class="text-xs text-[#a8a29e]">Quick solutions to common operational and networking questions.</p>
+          </div>
+        </div>
+
+        <div class="space-y-3 text-xs">
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <h4 class="font-semibold text-white mb-1">Q: How often does Google Antigravity reset model quotas?</h4>
+            <p class="text-[#a8a29e] leading-relaxed">
+              Google Antigravity quotas operate on a rolling daily window. In the Web UI Dashboard and Quota Radar, each model bucket displays its exact reset timestamp (typically between 2 to 24 hours depending on the model tier).
+            </p>
+          </div>
+
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <h4 class="font-semibold text-white mb-1">Q: What happens if port 52111 or 52110 is already in use?</h4>
+            <p class="text-[#a8a29e] leading-relaxed">
+              You can specify custom ports when starting Prime Gate. For instance:
+              <code class="text-[#f59e0b] font-mono-code">prime-gate start --port 52120</code> and
+              <code class="text-[#38bdf8] font-mono-code">prime-gate ui --port 52121 --api-port 52120</code>.
+            </p>
+          </div>
+
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <h4 class="font-semibold text-white mb-1">Q: Why did I receive a 503 "MODEL_CAPACITY_EXHAUSTED" error?</h4>
+            <p class="text-[#a8a29e] leading-relaxed">
+              This occurs when requesting overloaded upstream models like legacy Gemini 2.5. Switch to <code class="text-white font-mono-code">gemini-3.8-flash</code> or <code class="text-white font-mono-code">claude-sonnet-4-6</code>, which have high dedicated capacity.
+            </p>
+          </div>
+
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <h4 class="font-semibold text-white mb-1">Q: Where is my data saved, and is it safe to commit to Git?</h4>
+            <p class="text-[#a8a29e] leading-relaxed">
+              All credentials, models, and quotas are saved into the compiled binary database <code class="text-white font-mono-code">data/prime_gate.pgdb</code>, which is excluded by <code class="text-white font-mono-code">.gitignore</code>. Your Git repository remains 100% clean with zero plaintext credentials or tokens.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 

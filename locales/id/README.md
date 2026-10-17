@@ -14,7 +14,7 @@
 
 ### 🌐 Pilih Bahasa / Select Language
 
-[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md)
+[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md) • [📖 Panduan Lengkap](../../docs/USER_GUIDE.md)
 
 ---
 
@@ -111,9 +111,27 @@ Jalankan service API dan Web UI sekaligus:
 
 ---
 
-## 🔌 Contoh Konfigurasi Client AI
+## 🔌 Panduan Integrasi Client AI & IDE
 
-### OpenCode (`~/.config/opencode/opencode.json`)
+Prime Gate menyediakan endpoint standar kompatibel OpenAI di **`http://127.0.0.1:52111/v1`**. Gunakan API Key `prime-gate-proxy` (atau string sembarang).
+
+### 1. Cursor IDE
+1. Buka Cursor Settings (**Ctrl+,** atau **Cmd+,**).
+2. Masuk ke menu **Features** &gt; **Models**.
+3. Pada **OpenAI API Key**, masukkan: `prime-gate-proxy`.
+4. Aktifkan saklar **Override OpenAI Base URL** dan isi:
+   ```text
+   http://127.0.0.1:52111/v1
+   ```
+5. Di bagian **Add Model**, tambahkan model yang diinginkan:
+   - `claude-sonnet-4-6` (Thinking aktif)
+   - `gemini-3.8-flash` (Rekomendasi utama harian)
+   - `claude-opus-4-6-thinking`
+
+---
+
+### 2. OpenCode (`~/.config/opencode/opencode.json`)
+Tambahkan provider `antigravity` pada konfigurasi OpenCode Anda:
 ```json
 {
   "providers": {
@@ -124,6 +142,7 @@ Jalankan service API dan Web UI sekaligus:
         "claude-sonnet-4-6",
         "claude-opus-4-6-thinking",
         "gemini-3.8-flash",
+        "gemini-3.8-flash-high",
         "gemini-3.1-flash-lite",
         "gpt-oss-120b-medium"
       ]
@@ -131,6 +150,182 @@ Jalankan service API dan Web UI sekaligus:
   }
 }
 ```
+
+---
+
+### 3. Continue.dev (`~/.continue/config.json`)
+Tambahkan Prime Gate ke daftar `models` di Continue:
+```json
+{
+  "models": [
+    {
+      "title": "Claude Sonnet 4.6 (Prime Gate)",
+      "provider": "openai",
+      "model": "claude-sonnet-4-6",
+      "apiBase": "http://127.0.0.1:52111/v1",
+      "apiKey": "prime-gate-proxy"
+    },
+    {
+      "title": "Gemini 3.8 Flash (Prime Gate)",
+      "provider": "openai",
+      "model": "gemini-3.8-flash",
+      "apiBase": "http://127.0.0.1:52111/v1",
+      "apiKey": "prime-gate-proxy"
+    }
+  ]
+}
+```
+
+---
+
+### 4. Cline / Roo Code (Ekstensi VS Code)
+1. Buka Pengaturan Cline.
+2. Pilih API Provider: **OpenAI Compatible**.
+3. Masukkan **Base URL**: `http://127.0.0.1:52111/v1`.
+4. Masukkan **API Key**: `prime-gate-proxy`.
+5. Masukkan **Model ID**: `claude-sonnet-4-6` atau `gemini-3.8-flash`.
+
+---
+
+### 5. Aider (CLI AI Pair Programmer)
+Jalankan Aider langsung mengarah ke endpoint Prime Gate:
+```bash
+aider --openai-api-base http://127.0.0.1:52111/v1 \
+      --openai-api-key prime-gate-proxy \
+      --model openai/claude-sonnet-4-6
+```
+
+---
+
+### 6. Python OpenAI SDK
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:52111/v1",
+    api_key="prime-gate-proxy"
+)
+
+# Streaming dengan penalaran / thinking
+response = client.chat.completions.create(
+    model="claude-sonnet-4-6",
+    messages=[
+        {"role": "user", "content": "Tuliskan kode LRU cache yang aman untuk multi-threading."}
+    ],
+    stream=True
+)
+
+for chunk in response:
+    delta = chunk.choices[0].delta
+    # Aliran pemikiran (Thinking)
+    if hasattr(delta, "reasoning_content") and delta.reasoning_content:
+        print(f"[THINKING] {delta.reasoning_content}", end="", flush=True)
+    # Aliran teks jawaban
+    if delta.content:
+        print(delta.content, end="", flush=True)
+```
+
+---
+
+### 7. Node.js / TypeScript SDK
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://127.0.0.1:52111/v1",
+  apiKey: "prime-gate-proxy",
+});
+
+async function main() {
+  const completion = await client.chat.completions.create({
+    model: "gemini-3.8-flash",
+    messages: [{ role: "user", content: "Jelaskan arsitektur database binary SQLite WAL." }],
+  });
+
+  console.log(completion.choices[0].message.content);
+}
+
+main();
+```
+
+---
+
+### 8. Uji Coba Cepat via cURL
+```bash
+curl -X POST http://127.0.0.1:52111/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer prime-gate-proxy" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "messages": [{"role": "user", "content": "Halo Prime Gate!"}],
+    "stream": false
+  }'
+```
+
+---
+
+## 🧠 Streaming Penalaran Real-Time (Thinking Mode)
+
+Untuk model dengan kemampuan penalaran mendalam (**Claude Sonnet 4.6**, **Claude Opus 4.6**, dan **Gemini 3.8 Flash**), Prime Gate membedah event internal Google Antigravity dan mengalirkannya via chunk delta standar OpenAI:
+
+```json
+{
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "reasoning_content": "Membedah masalah ke prinsip dasar first-principles..."
+      }
+    }
+  ]
+}
+```
+
+- **Di Web UI Sandbox:** Blok pemikiran langsung dirender dalam badge khusus `[THINKING] ... [/THINKING]` sebelum jawaban utama dimulai.
+- **Di IDE Kompatibel (Cursor/OpenCode):** Pemikiran otomatis muncul di accordion thought boxes.
+
+---
+
+## 🛡️ Database Binary Terkompilasi & Sentinel Watchdog
+
+Berbeda dengan proxy biasa yang menyimpan token dan kredensial di file plaintext `accounts.json`, Prime Gate menggunakan **mesin database binary C terkompilasi** (`data/prime_gate.pgdb`):
+
+- **Nol Plaintext JSON:** Token sensitif dan kuota disimpan sebagai record binary BLOB (`REC_ACCOUNT`, `REC_MODEL`, `REC_QUOTA`).
+- **Penyegelan 32-Bit CRC32:** Setiap blok binary dilindungi checksum. Modifikasi heksadesimal luar akan langsung terdeteksi dalam waktu kurang dari 5 detik oleh Sentinel Watchdog.
+- **Mode SQLite WAL:** Mendukung throughput tinggi dan konkurensi multi-proses tanpa file-locking.
+- **Pipa Event WebSocket (`/ws/live`):** Mutasi database dan log audit dialirkan langsung ke terminal dasbor Web UI.
+
+---
+
+## 📊 Katalog Model & Tier Langganan
+
+| Nama Model | Google AI Pro (Trial Tier) | Google AI Pro (Paid Tier) | Dukungan Thinking |
+| :--- | :---: | :---: | :---: |
+| **Claude Sonnet 4.6 (Thinking)** | ✅ Tersedia | ❌ Digantikan 5.5 | ✓ Hingga 64k token |
+| **Claude Opus 4.6 (Thinking)** | ✅ Tersedia | ❌ Digantikan 5.5 | ✓ Penalaran mendalam |
+| **Gemini 3.8 Flash (Rekomendasi)** | ✅ Tersedia | ✅ Tersedia | ✓ Cepat & responsif |
+| **Gemini 3.8 Flash High / Med / Low** | ✅ Tersedia | ✅ Tersedia | ✓ Budget pemikiran fleksibel |
+| **Gemini 3.1 Flash Lite** | ✅ Tersedia | ✅ Tersedia | Standar |
+| **GPT-OSS 120B (Medium)** | ✅ Tersedia | ✅ Tersedia | Standar |
+| **Claude Sonnet 5.5 (Thinking)** | ❌ Khusus Berbayar | ✅ Tersedia | ✓ Extended thinking |
+| **Gemini 4 Argon (Low)** | ❌ Khusus Berbayar | ✅ Tersedia | Standar |
+
+> ⚠️ **Catatan Gemini 2.5:** Model lama `gemini-2.5-pro` dan `gemini-2.5-flash` telah dihapus dari katalog karena server Google sering mengalami kehabisan kapasitas (`503 Service Unavailable: MODEL_CAPACITY_EXHAUSTED`). Gunakan **`gemini-3.8-flash`** atau **`claude-sonnet-4-6`**.
+
+---
+
+## ❓ Tanya Jawab & Solusi Kendala (FAQ)
+
+### 1. Error "503 Service Unavailable: MODEL_CAPACITY_EXHAUSTED"
+- **Penyebab:** Upstream Google kelebihan beban pada model legacy Gemini 2.5.
+- **Solusi:** Beralih ke `gemini-3.8-flash` atau `claude-sonnet-4-6`.
+
+### 2. Error "Errno 10048: Only one usage of each socket address is normally permitted"
+- **Penyebab:** Port 52111 atau 52110 sedang digunakan proses lain / instance sebelumnya.
+- **Solusi:** Matikan daemon lama dengan `prime-gate daemon stop`, atau jalankan dengan port baru: `prime-gate start --port 52120`.
+
+### 3. Di mana kredensial akun disimpan?
+- **Jawaban:** Tersimpan di file binary `data/prime_gate.pgdb`. File ini sudah otomatis dimasukkan ke `.gitignore` sehingga **tidak akan pernah bocor ke GitHub**.
 
 ---
 

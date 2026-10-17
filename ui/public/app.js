@@ -754,6 +754,26 @@ function copyEndpoint() {
   alert("Endpoint copied to clipboard: " + code);
 }
 
+function copyDocSnippet(elementId, btnElement) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const text = el.innerText || el.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const originalHtml = btnElement.innerHTML;
+    btnElement.innerHTML = `
+      <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+      </svg>
+      <span class="text-emerald-400 font-semibold">Copied!</span>
+    `;
+    setTimeout(() => {
+      btnElement.innerHTML = originalHtml;
+    }, 2000);
+  }).catch(err => {
+    console.error("Failed to copy snippet:", err);
+  });
+}
+
 // -------------------------------------------------------------
 // App Initialization
 // -------------------------------------------------------------

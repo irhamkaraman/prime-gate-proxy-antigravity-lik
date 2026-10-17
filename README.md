@@ -15,7 +15,7 @@
 
 ### 🌐 Select Language / Pilih Bahasa / 语言选择
 
-[🇺🇸 English](README.md) • [🇮🇩 Bahasa Indonesia](locales/id/README.md) • [🇨🇳 简体中文](locales/zh/README.md) • [🇷🇺 Русский](locales/ru/README.md) • [🇯🇵 日本語](locales/ja/README.md) • [🇩🇪 Deutsch](locales/de/README.md) • [🇫🇷 Français](locales/fr/README.md)
+[🇺🇸 English](README.md) • [🇮🇩 Bahasa Indonesia](locales/id/README.md) • [🇨🇳 简体中文](locales/zh/README.md) • [🇷🇺 Русский](locales/ru/README.md) • [🇯🇵 日本語](locales/ja/README.md) • [🇩🇪 Deutsch](locales/de/README.md) • [🇫🇷 Français](locales/fr/README.md) • [📖 Full User Guide](docs/USER_GUIDE.md)
 
 ---
 
@@ -134,9 +134,27 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 
 ---
 
-## 🔌 AI Client Configuration Examples
+## 🔌 AI Client Integration & Setup Guide
 
-### OpenCode (`~/.config/opencode/opencode.json`)
+Prime Gate provides a 100% OpenAI-compliant gateway at **`http://127.0.0.1:52111/v1`**. Use API Key `prime-gate-proxy` (or any non-empty string).
+
+### 1. Cursor IDE
+1. Open Cursor Settings (**Ctrl+,** or **Cmd+,**).
+2. Go to **Features** &gt; **Models**.
+3. Under **OpenAI API Key**, enter: `prime-gate-proxy`.
+4. Toggle on **Override OpenAI Base URL** and enter:
+   ```text
+   http://127.0.0.1:52111/v1
+   ```
+5. In **Add Model**, add your desired models:
+   - `claude-sonnet-4-6` (Thinking enabled)
+   - `gemini-3.8-flash` (Recommended daily driver)
+   - `claude-opus-4-6-thinking`
+
+---
+
+### 2. OpenCode (`~/.config/opencode/opencode.json`)
+Add or merge the `antigravity` provider in your OpenCode configuration:
 ```json
 {
   "providers": {
@@ -147,6 +165,7 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
         "claude-sonnet-4-6",
         "claude-opus-4-6-thinking",
         "gemini-3.8-flash",
+        "gemini-3.8-flash-high",
         "gemini-3.1-flash-lite",
         "gpt-oss-120b-medium"
       ]
@@ -155,24 +174,183 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 }
 ```
 
-### Cursor / Continue.dev / SillyTavern
-- **API Base URL:** `http://127.0.0.1:52111/v1`
-- **API Key:** `prime-gate-proxy` (any non-empty string)
-- **Model Name:** `claude-sonnet-4-6` or `gemini-3.8-flash`
+---
+
+### 3. Continue.dev (`~/.continue/config.json`)
+Add Prime Gate into your `models` list:
+```json
+{
+  "models": [
+    {
+      "title": "Claude Sonnet 4.6 (Prime Gate)",
+      "provider": "openai",
+      "model": "claude-sonnet-4-6",
+      "apiBase": "http://127.0.0.1:52111/v1",
+      "apiKey": "prime-gate-proxy"
+    },
+    {
+      "title": "Gemini 3.8 Flash (Prime Gate)",
+      "provider": "openai",
+      "model": "gemini-3.8-flash",
+      "apiBase": "http://127.0.0.1:52111/v1",
+      "apiKey": "prime-gate-proxy"
+    }
+  ]
+}
+```
 
 ---
 
-## 📊 Subscription Tier Catalog
+### 4. Cline / Roo Code (VS Code Extension)
+1. Open Cline Settings.
+2. Select API Provider: **OpenAI Compatible**.
+3. Set **Base URL**: `http://127.0.0.1:52111/v1`.
+4. Set **API Key**: `prime-gate-proxy`.
+5. Set **Model ID**: `claude-sonnet-4-6` or `gemini-3.8-flash`.
 
-| Model Name | Google AI Pro (Trial Tier) | Google AI Pro (Paid Tier) |
-| :--- | :---: | :---: |
-| **Claude Sonnet 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 |
-| **Claude Opus 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 |
-| **Gemini 3.8 Flash (Fast/Recommended)** | ✅ Available | ✅ Available |
-| **Gemini 3.1 Flash Lite** | ✅ Available | ✅ Available |
-| **GPT-OSS 120B (Medium)** | ✅ Available | ✅ Available |
-| **Claude Sonnet 5.5 (Thinking)** | ❌ Paid Exclusive | ✅ Available |
-| **Gemini 4 Argon (Low)** | ❌ Paid Exclusive | ✅ Available |
+---
+
+### 5. Aider (Terminal AI Pair Programmer)
+Launch Aider pointing to the Prime Gate proxy endpoint:
+```bash
+aider --openai-api-base http://127.0.0.1:52111/v1 \
+      --openai-api-key prime-gate-proxy \
+      --model openai/claude-sonnet-4-6
+```
+
+---
+
+### 6. Python OpenAI SDK
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:52111/v1",
+    api_key="prime-gate-proxy"
+)
+
+# Streaming with reasoning / thinking
+response = client.chat.completions.create(
+    model="claude-sonnet-4-6",
+    messages=[
+        {"role": "user", "content": "Write an optimized LRU cache with threading lock."}
+    ],
+    stream=True
+)
+
+for chunk in response:
+    delta = chunk.choices[0].delta
+    # Thinking stream
+    if hasattr(delta, "reasoning_content") and delta.reasoning_content:
+        print(f"[THINKING] {delta.reasoning_content}", end="", flush=True)
+    # Output content stream
+    if delta.content:
+        print(delta.content, end="", flush=True)
+```
+
+---
+
+### 7. Node.js / TypeScript SDK
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://127.0.0.1:52111/v1",
+  apiKey: "prime-gate-proxy",
+});
+
+async function main() {
+  const completion = await client.chat.completions.create({
+    model: "gemini-3.8-flash",
+    messages: [{ role: "user", content: "Explain SQLite WAL mode in 3 sentences." }],
+  });
+
+  console.log(completion.choices[0].message.content);
+}
+
+main();
+```
+
+---
+
+### 8. cURL / REST API Test
+```bash
+curl -X POST http://127.0.0.1:52111/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer prime-gate-proxy" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "messages": [{"role": "user", "content": "Hello Prime Gate!"}],
+    "stream": false
+  }'
+```
+
+---
+
+## 🧠 Real-Time Reasoning & Thinking Stream
+
+For models with extended thinking capabilities (**Claude Sonnet 4.6**, **Claude Opus 4.6**, and **Gemini 3.8 Flash**), Prime Gate parses Google Antigravity's internal reasoning events and streams them via standard OpenAI delta chunks:
+
+```json
+{
+  "choices": [
+    {
+      "index": 0,
+      "delta": {
+        "reasoning_content": "Deconstructing problem into fundamental constraints..."
+      }
+    }
+  ]
+}
+```
+
+- **In Web UI Sandbox:** Thinking blocks are rendered within glowing `[THINKING] ... [/THINKING]` badges before the final response stream.
+- **In Compatible IDEs (Cursor/OpenCode):** Thinking thoughts appear natively in collapsible thought boxes.
+
+---
+
+## 🛡️ Compiled Binary Database & Sentinel Watchdog
+
+Unlike traditional proxies that store OAuth tokens and credentials in unencrypted `accounts.json` files, Prime Gate uses a **compiled C binary storage engine** (`data/prime_gate.pgdb`):
+
+- **Zero Plaintext JSON:** Sensitive tokens and quotas are sealed in binary BLOB records (`REC_ACCOUNT`, `REC_MODEL`, `REC_QUOTA`).
+- **32-Bit CRC32 Integrity Checksums:** Every binary block is protected against tampering. If a file corruption occurs, the Sentinel Watchdog detects it within 5 seconds.
+- **SQLite WAL Mode:** Supports ultra-low latency, concurrent reads and writes without file-locking bottlenecks.
+- **WebSocket Event Bus (`/ws/live`):** Live database mutations and error logs are broadcast in real-time to the Web UI dashboard terminal.
+
+---
+
+## 📊 Subscription Tier Catalog & Quota
+
+Prime Gate queries Google's internal APIs dynamically to detect your account's exact tier:
+
+| Model Name | Google AI Pro (Trial Tier) | Google AI Pro (Paid Tier) | Thinking Support |
+| :--- | :---: | :---: | :---: |
+| **Claude Sonnet 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 | ✓ Up to 64k tokens |
+| **Claude Opus 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 | ✓ Deep reasoning |
+| **Gemini 3.8 Flash (Recommended)** | ✅ Available | ✅ Available | ✓ Fast thinking |
+| **Gemini 3.8 Flash High / Med / Low** | ✅ Available | ✅ Available | ✓ Configurable budget |
+| **Gemini 3.1 Flash Lite** | ✅ Available | ✅ Available | Standard |
+| **GPT-OSS 120B (Medium)** | ✅ Available | ✅ Available | Standard |
+| **Claude Sonnet 5.5 (Thinking)** | ❌ Paid Exclusive | ✅ Available | ✓ Extended thinking |
+| **Gemini 4 Argon (Low)** | ❌ Paid Exclusive | ✅ Available | Standard |
+
+> ⚠️ **Notice on Gemini 2.5:** `gemini-2.5-pro` and `gemini-2.5-flash` were removed from the active catalog due to Google upstream 503 capacity exhaustion (`MODEL_CAPACITY_EXHAUSTED`). Please use **`gemini-3.8-flash`** or **`claude-sonnet-4-6`**.
+
+---
+
+## ❓ FAQ & Troubleshooting
+
+### 1. "503 Service Unavailable: MODEL_CAPACITY_EXHAUSTED"
+- **Cause:** Requesting older or heavily congested models like Gemini 2.5.
+- **Fix:** Use `gemini-3.8-flash` or `claude-sonnet-4-6`.
+
+### 2. "Errno 10048: Only one usage of each socket address is normally permitted"
+- **Cause:** Port 52111 or 52110 is already being used by an existing background process.
+- **Fix:** Stop existing daemons via `prime-gate daemon stop`, or pass a custom port: `prime-gate start --port 52120`.
+
+### 3. "Where are credentials saved?"
+- **Answer:** In `data/prime_gate.pgdb` (compiled binary database). It is automatically ignored by Git, ensuring **zero credentials or tokens are committed**.
 
 ---
 
