@@ -272,3 +272,25 @@ body {
   position: relative;
   text-align: center;
 }
+
+/* Toast Notifications Container & Items */
+#toastContainer {
+  pointer-events: none;
+}
+
+.toast-item {
+  animation: toastSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes toastSlideUp {
+  from {
+    transform: translateY(20px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+

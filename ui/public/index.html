@@ -73,21 +73,26 @@
   </div>
 
 
-  <!-- Left Sidebar Navigation (Consistent Anthropic Layout) -->
-  <aside class="w-64 bg-[#1b1613] border-r border-[#a8a29e]/15 flex flex-col justify-between shrink-0 h-screen sticky top-0 p-5 z-20">
+  <!-- Mobile Sidebar Backdrop Overlay -->
+  <div id="sidebarBackdrop" class="fixed inset-0 bg-black/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleSidebar(false)"></div>
+
+  <!-- Left Sidebar Navigation (Consistent Anthropic Layout, No PG Logo) -->
+  <aside id="mainSidebar" class="fixed md:sticky top-0 left-0 w-64 bg-[#1b1613] border-r border-[#a8a29e]/15 flex flex-col justify-between shrink-0 h-screen p-5 z-40 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
     <div>
-      <!-- Brand Cluster -->
-      <div class="flex items-center gap-3.5 pb-6 border-b border-[#a8a29e]/15">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d97706] to-[#78350f] border border-[#f59e0b]/30 flex items-center justify-center text-white font-serif-title font-bold text-lg shadow-md">
-          PG
-        </div>
+      <!-- Brand Cluster (Clean Typography, No PG Logo Box) -->
+      <div class="flex items-center justify-between pb-5 border-b border-[#a8a29e]/15">
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="font-serif-title text-base font-semibold text-white tracking-tight">Prime Gate</h1>
-            <span class="px-1.5 py-0.5 text-[10px] bg-[#d97706]/20 text-[#f59e0b] border border-[#d97706]/40 rounded font-mono-code font-semibold">v1.0.0</span>
+            <span class="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#f59e0b] to-[#d97706] shadow-sm shadow-[#f59e0b]/50"></span>
+            <h1 class="font-serif-title text-base font-bold text-white tracking-tight">Prime Gate</h1>
+            <span class="px-1.5 py-0.5 text-[10px] bg-[#d97706]/15 text-[#f59e0b] border border-[#d97706]/30 rounded font-mono-code font-semibold">v1.0.0</span>
           </div>
-          <p class="text-[11px] text-[#a8a29e] leading-tight">Antigravity Gateway</p>
+          <p class="text-[11px] text-[#a8a29e] mt-1 ml-4.5 tracking-wide">Antigravity Gateway</p>
         </div>
+        <!-- Mobile close sidebar button -->
+        <button onclick="toggleSidebar(false)" class="md:hidden text-[#a8a29e] hover:text-white p-1 rounded-lg hover:bg-white/5 transition" title="Close Sidebar">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
 
       <!-- Navigation Links -->
@@ -149,8 +154,30 @@
     </div>
   </aside>
 
-  <!-- Main Content Layout -->
-  <main class="flex-1 min-w-0 p-8 overflow-y-auto max-h-screen">
+  <!-- Main Content Layout (Full Height & Responsive Wrapper) -->
+  <div class="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+    <!-- Responsive Mobile Header -->
+    <header class="md:hidden flex items-center justify-between px-4 py-3 bg-[#1b1613] border-b border-[#a8a29e]/15 sticky top-0 z-20 shrink-0">
+      <div class="flex items-center gap-2">
+        <button onclick="toggleSidebar(true)" class="p-2 text-[#a8a29e] hover:text-white rounded-lg bg-[#241d18] border border-[#a8a29e]/20 transition" title="Toggle Navigation">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="flex items-center gap-1.5 ml-1">
+          <span class="w-2 h-2 rounded-full bg-[#f59e0b]"></span>
+          <span class="font-serif-title font-semibold text-white text-sm">Prime Gate</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="mobileWsStatus" class="flex items-center gap-1 text-[10px] text-[#10b981] font-mono-code">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>Live
+        </span>
+        <button class="py-1 px-2.5 bg-[#d97706] hover:bg-[#b45309] text-white rounded text-xs font-medium transition" onclick="openAuthModal()">+ Account</button>
+      </div>
+    </header>
+
+    <!-- Main Scrollable Content Area -->
+    <main class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+
 
     <!-- Global Database Corruption Warning Banner -->
     <div id="dbCorruptionAlert" class="corruption-alert-banner" style="display: none;">
@@ -968,8 +995,48 @@ print(response.choices[0].message.content)</pre>
       </div>
     </div>
 
-  </main>
+    </main>
+  </div>
+
+  <!-- Reusable Confirmation Modal -->
+  <div id="confirmModal" class="onboarding-overlay" style="display: none;">
+    <div class="onboarding-card max-w-sm text-left">
+      <div id="confirmModalIcon" class="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mb-3">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      </div>
+      <h3 id="confirmModalTitle" class="font-serif-title text-lg font-bold text-white mb-2">Konfirmasi Tindakan</h3>
+      <p id="confirmModalMessage" class="text-xs text-[#a8a29e] leading-relaxed mb-6"></p>
+      <div class="flex items-center justify-end gap-2.5">
+        <button id="confirmModalCancelBtn" class="py-2 px-3.5 rounded-lg bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 text-xs font-medium transition">
+          Batal
+        </button>
+        <button id="confirmModalOkBtn" class="py-2 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow transition">
+          Lanjutkan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reusable Alert Message Modal -->
+  <div id="alertModal" class="onboarding-overlay" style="display: none;">
+    <div class="onboarding-card max-w-md text-left">
+      <div id="alertModalIcon" class="w-10 h-10 rounded-full bg-[#d97706]/20 text-[#f59e0b] flex items-center justify-center mb-3">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <h3 id="alertModalTitle" class="font-serif-title text-lg font-bold text-white mb-2">Informasi</h3>
+      <div id="alertModalMessage" class="text-xs text-[#d6d3d1] leading-relaxed mb-5 font-mono-code whitespace-pre-line bg-[#0f0d0b] p-3 rounded-lg border border-[#a8a29e]/10 max-h-60 overflow-y-auto"></div>
+      <div class="flex items-center justify-end">
+        <button id="alertModalOkBtn" class="py-2 px-5 rounded-lg bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-semibold shadow transition">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
 
   <script src="app.js"></script>
 </body>
 </html>
+
