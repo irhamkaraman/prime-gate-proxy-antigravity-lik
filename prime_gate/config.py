@@ -26,7 +26,7 @@ CLIENT_ID, CLIENT_SECRET = _resolve_default_credentials()
 ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com"
 OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
 
-SYSTEM_INSTRUCTION = "You are Antigravity, an advanced AI coding assistant created by Google."
+SYSTEM_INSTRUCTION = "You are an expert AI software engineer and programming assistant."
 
 # Global OpenCode Accounts & Local Fallback
 GLOBAL_OPENCODE_ACCOUNTS = Path.home() / ".config" / "opencode" / "antigravity-accounts.json"

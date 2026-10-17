@@ -23,7 +23,8 @@ from .quota import QuotaMonitor
 from .translator import (
     transform_openai_to_antigravity,
     format_sse_chunk,
-    format_non_stream_response
+    format_non_stream_response,
+    extract_text_tool_calls
 )
 from .db import db, event_bus, WebSocketLogHandler
 from .db.sentinel import sentinel
@@ -694,7 +695,8 @@ async def stream_antigravity_sse(
     wrapped_body: Dict[str, Any],
     completion_id: str,
     created: int,
-    model: str
+    model: str,
+    declared_tools: Optional[List[Dict[str, Any]]] = None
 ) -> AsyncGenerator[str, None]:
     """Stream SSE chunks from Google Antigravity and yield OpenAI SSE format chunks."""
     start_t = time.time()
@@ -712,7 +714,13 @@ async def stream_antigravity_sse(
                 yield "data: [DONE]\n\n"
                 return
 
+            # Yield initial role chunk required by Vercel AI SDK (@ai-sdk/openai-compatible) and Cursor/Continue
+            yield format_sse_chunk(completion_id, created, model, {"role": "assistant", "content": ""})
+
             has_emitted_tool_call = False
+            tool_index = 0
+            accumulated_content = ""
+
             async for line in resp.aiter_lines():
                 if not line or not line.startswith("data:"):
                     continue
@@ -744,21 +752,15 @@ async def stream_antigravity_sse(
                                 completion_id, created, model,
                                 {"reasoning_content": part["text"]}
                             )
-                        elif part.get("text"):
-                            completion_tokens += max(1, len(part["text"].split()))
-                            yield format_sse_chunk(
-                                completion_id, created, model,
-                                {"content": part["text"]}
-                            )
                         elif part.get("functionCall"):
                             has_emitted_tool_call = True
-                            call_id = "call_" + uuid.uuid4().hex[:8]
                             fn_call = part["functionCall"]
+                            call_id = fn_call.get("id") or ("call_" + uuid.uuid4().hex[:8])
                             yield format_sse_chunk(
                                 completion_id, created, model,
                                 {
                                     "tool_calls": [{
-                                        "index": 0,
+                                        "index": tool_index,
                                         "id": call_id,
                                         "type": "function",
                                         "function": {
@@ -768,8 +770,67 @@ async def stream_antigravity_sse(
                                     }]
                                 }
                             )
+                            tool_index += 1
+                        elif part.get("text"):
+                            txt = part["text"]
+                            if not txt:
+                                continue
+                            accumulated_content += txt
+
+                            # Check if the text contains an Antigravity text tool call e.g. call:default_api:shell{...}
+                            if "call:" in txt:
+                                cleaned, text_tcs = extract_text_tool_calls(txt, declared_tools)
+                                if text_tcs:
+                                    for tc in text_tcs:
+                                        has_emitted_tool_call = True
+                                        tc_id = tc.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                                        yield format_sse_chunk(
+                                            completion_id, created, model,
+                                            {
+                                                "tool_calls": [{
+                                                    "index": tool_index,
+                                                    "id": tc_id,
+                                                    "type": "function",
+                                                    "function": tc["function"]
+                                                }]
+                                            }
+                                        )
+                                        tool_index += 1
+                                    if cleaned:
+                                        completion_tokens += max(1, len(cleaned.split()))
+                                        yield format_sse_chunk(
+                                            completion_id, created, model,
+                                            {"content": cleaned}
+                                        )
+                                    continue
+
+                            completion_tokens += max(1, len(txt.split()))
+                            yield format_sse_chunk(
+                                completion_id, created, model,
+                                {"content": txt}
+                            )
                 except Exception:
                     continue
+
+            # Fallback text tool-call extraction on accumulated content if not caught mid-stream
+            if not has_emitted_tool_call and "call:" in accumulated_content:
+                cleaned, text_tcs = extract_text_tool_calls(accumulated_content, declared_tools)
+                if text_tcs:
+                    for tc in text_tcs:
+                        has_emitted_tool_call = True
+                        tc_id = tc.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                        yield format_sse_chunk(
+                            completion_id, created, model,
+                            {
+                                "tool_calls": [{
+                                    "index": tool_index,
+                                    "id": tc_id,
+                                    "type": "function",
+                                    "function": tc["function"]
+                                }]
+                            }
+                        )
+                        tool_index += 1
 
             # Record telemetry for completed stream
             latency_ms = (time.time() - start_t) * 1000
@@ -874,7 +935,8 @@ async def chat_completions(request: Request):
                 return StreamingResponse(
                     stream_antigravity_sse(
                         upstream_url, headers, wrapped_body,
-                        completion_id, created, model
+                        completion_id, created, model,
+                        declared_tools=body.get("tools")
                     ),
                     media_type="text/event-stream"
                 )
@@ -928,8 +990,9 @@ async def chat_completions(request: Request):
                                             content_text += p["text"]
                                         elif p.get("functionCall"):
                                             fn = p["functionCall"]
+                                            call_id = fn.get("id") or ("call_" + uuid.uuid4().hex[:8])
                                             tool_calls.append({
-                                                "id": "call_" + uuid.uuid4().hex[:8],
+                                                "id": call_id,
                                                 "type": "function",
                                                 "function": {
                                                     "name": fn.get("name"),
@@ -938,6 +1001,17 @@ async def chat_completions(request: Request):
                                             })
                             except Exception:
                                 continue
+
+                        # Intercept and convert text-based Antigravity tool calls if model emitted text
+                        if not tool_calls and "call:" in content_text:
+                            raw_tools = body.get("tools")
+                            cleaned, text_tcs = extract_text_tool_calls(content_text, raw_tools)
+                            if text_tcs:
+                                tool_calls.extend(text_tcs)
+                                content_text = cleaned
+                                finish_reason = "tool_calls"
+                        elif tool_calls:
+                            finish_reason = "tool_calls"
 
                         if not completion_tokens and content_text:
                             completion_tokens = max(1, len(content_text.split()))

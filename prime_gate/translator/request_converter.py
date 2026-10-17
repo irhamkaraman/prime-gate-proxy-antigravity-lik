@@ -106,11 +106,15 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
                             except Exception:
                                 fn_args = {}
 
+                        fn_payload = {
+                            "name": fn_name,
+                            "args": fn_args if isinstance(fn_args, dict) else {}
+                        }
+                        if call_id:
+                            fn_payload["id"] = call_id
+
                         parts.append({
-                            "functionCall": {
-                                "name": fn_name,
-                                "args": fn_args if isinstance(fn_args, dict) else {}
-                            },
+                            "functionCall": fn_payload,
                             "thoughtSignature": "skip_thought_signature_validator"
                         })
             if parts:
@@ -136,14 +140,30 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
                     response_dict = {"output": out_val}
             elif isinstance(out_val, dict):
                 response_dict = out_val
+            elif isinstance(out_val, list):
+                # Extract text if it's OpenAI content parts list
+                text_parts = []
+                for p in out_val:
+                    if isinstance(p, dict) and p.get("type") == "text" and p.get("text"):
+                        text_parts.append(p["text"])
+                    elif isinstance(p, str):
+                        text_parts.append(p)
+                if text_parts:
+                    response_dict = {"output": "\n".join(text_parts)}
+                else:
+                    response_dict = {"output": out_val}
             else:
-                response_dict = {"output": out_val if out_val is not None else ""}
+                response_dict = {"output": str(out_val) if out_val is not None else ""}
+
+            fn_resp_obj: Dict[str, Any] = {
+                "name": fn_name,
+                "response": response_dict
+            }
+            if call_id:
+                fn_resp_obj["id"] = call_id
 
             fn_part = {
-                "functionResponse": {
-                    "name": fn_name,
-                    "response": response_dict
-                }
+                "functionResponse": fn_resp_obj
             }
 
             # If preceding turn was already user containing functionResponse, merge parts for parallel tool calls
@@ -155,12 +175,17 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
                     "parts": [fn_part]
                 })
 
-    # System instruction
-    final_sys_parts = [SYSTEM_INSTRUCTION] + system_texts
-    system_instruction = {
-        "role": "user",
-        "parts": [{"text": "\n\n".join([p for p in final_sys_parts if p])}]
-    }
+    # System instruction: prioritize client's own system prompt over generic fallback
+    if system_texts:
+        system_instruction = {
+            "role": "user",
+            "parts": [{"text": "\n\n".join([p for p in system_texts if p])}]
+        }
+    else:
+        system_instruction = {
+            "role": "user",
+            "parts": [{"text": SYSTEM_INSTRUCTION}]
+        }
 
     # Tools
     tools = []
@@ -238,9 +263,35 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
 
     if tools:
         req_payload["tools"] = tools
-        if is_claude:
-            req_payload["toolConfig"] = {
-                "functionCallingConfig": {"mode": "VALIDATED"}
-            }
+
+        # Map tool_choice to Antigravity functionCallingConfig
+        tool_choice = body.get("tool_choice")
+        mode = "AUTO"
+        allowed_functions = None
+
+        if tool_choice:
+            if isinstance(tool_choice, str):
+                tc_lower = tool_choice.lower()
+                if tc_lower in ("auto", "default"):
+                    mode = "VALIDATED" if is_claude else "AUTO"
+                elif tc_lower in ("required", "any"):
+                    mode = "ANY"
+                elif tc_lower == "none":
+                    mode = "NONE"
+            elif isinstance(tool_choice, dict):
+                fn_name = tool_choice.get("function", {}).get("name")
+                if fn_name:
+                    mode = "ANY"
+                    allowed_functions = [fn_name]
+        else:
+            mode = "VALIDATED" if is_claude else "AUTO"
+
+        fcc: Dict[str, Any] = {"mode": mode}
+        if allowed_functions:
+            fcc["allowedFunctionNames"] = allowed_functions
+
+        req_payload["toolConfig"] = {
+            "functionCallingConfig": fcc
+        }
 
     return model, req_payload
