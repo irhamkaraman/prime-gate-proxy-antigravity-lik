@@ -54,7 +54,7 @@ graph LR
 3. **Zero 400 Bad Request (Recursive Schema Sanitizer):**
    Eliminates Google Antigravity's strict schema errors (`exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`) for 100% stable Tool Calling & Function Execution.
 4. **Intelligent Quota & Tier Detection:**
-   Distinguishes between **`Google AI Pro (Trial / Reliance Jio 18M Promo)`** and **`Google AI Pro (Paid)`**, automatically presenting only valid model catalogs.
+   Distinguishes between **`Google AI Pro (Trial Tier)`** and **`Google AI Pro (Paid Tier)`**, automatically presenting only valid model catalogs.
 5. **Interactive Glassmorphic Web UI:**
    Built-in zero-dependency Node.js frontend dashboard at `http://127.0.0.1:52110` with live quota radar bars, server uptime, and an interactive prompt testing sandbox.
 6. **Rich Terminal CLI Suite:**
@@ -153,7 +153,7 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 
 ## 📊 Subscription Tier Catalog
 
-| Model Name | Google AI Pro (Trial / Jio Promo) | Google AI Pro (Paid) |
+| Model Name | Google AI Pro (Trial Tier) | Google AI Pro (Paid Tier) |
 | :--- | :---: | :---: |
 | **Claude Sonnet 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 |
 | **Claude Opus 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 |

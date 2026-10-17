@@ -37,7 +37,7 @@
 3. **零 400 报错（递归 Schema 清洗）：**
    自动清理 Google Antigravity 不支持的 JSON 约束（如 `exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`），确保函数与工具调用（Tool Calling）100% 稳定运行。
 4. **智能配额与套餐识别：**
-   自动识别 **`Google AI Pro (Trial / Reliance Jio 18个月促销)`** 与 **`Paid 付费版`**，精准呈现可用模型。
+   自动识别 **`Google AI Pro (Trial Tier 体验版)`** 与 **`Paid 付费版`**，精准呈现可用模型。
 5. **毛玻璃风现代化 Web UI：**
    基于 Node.js 构建，零第三方 npm 依赖，在 `http://127.0.0.1:52110` 提供实时配额仪表盘与交互式测试沙箱。
 6. **丰富的终端 CLI 支持：**

@@ -37,7 +37,7 @@ Utilisez vos quotas Google Antigravity – y compris **Claude Sonnet 4.6 (Thinki
 3. **Zéro erreur 400 Bad Request (Nettoyeur de schéma récursif) :**
    Supprime automatiquement les contraintes JSON Schema non supportées (`exclusiveMinimum`, `$schema`, `additionalProperties`) pour une exécution stable des outils.
 4. **Détection intelligente des quotas et abonnements :**
-   Distingue automatiquement **`Google AI Pro (Trial / Promo Jio 18M)`** de la version **`Paid`**.
+   Distingue automatiquement **`Google AI Pro (Trial Tier)`** de la version **`Paid Tier`**.
 5. **Tableau de bord Web Glassmorphic :**
    Interface visuelle en Node.js sans dépendances externes (`http://127.0.0.1:52110`) avec indicateurs de quotas et bac à sable de test.
 6. **Suite CLI complète :**

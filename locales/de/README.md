@@ -37,7 +37,7 @@ Nutzen Sie Ihre Google Antigravity-Kontingente – darunter **Claude Sonnet 4.6 
 3. **Keine 400 Bad Request Fehler (Schema Sanitizer):**
    Bereinigt automatisch nicht unterstützte JSON-Schema-Einschränkungen (`exclusiveMinimum`, `$schema`, `additionalProperties`) für stabile Tool Calls.
 4. **Automatische Kontingent- und Tariferkennung:**
-   Erkennt **`Google AI Pro (Trial / Jio 18M Promo)`** vs **`Paid`** und listet nur verfügbare Modelle auf.
+   Erkennt **`Google AI Pro (Trial Tier)`** vs **`Paid Tier`** und listet nur verfügbare Modelle auf.
 5. **Modernes Web-Dashboard:**
    Reaktionsschnelles Glassmorphic UI auf Node.js-Basis (`http://127.0.0.1:52110`) mit Live-Radar und Test-Sandbox.
 6. **Leistungsstarke CLI:**

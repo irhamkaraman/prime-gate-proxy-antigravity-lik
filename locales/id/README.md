@@ -37,7 +37,7 @@ Dengan Prime Gate, bosss dapat memanfaatkan kuota Google Antigravity—termasuk 
 3. **Bebas Error 400 Bad Request (Recursive Schema Sanitizer):**
    Membersihkan skema JSON yang tidak didukung Google Antigravity (`exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`) agar function/tool calling selalu mulus.
 4. **Deteksi Kuota & Tier Akun Cerdas:**
-   Mendeteksi otomatis status akun **`Google AI Pro (Trial / Reliance Jio 18M Promo)`** vs **`Paid`** dan menyajikan katalog model yang tepat.
+   Mendeteksi otomatis status akun **`Google AI Pro (Trial Tier)`** vs **`Paid Tier`** dan menyajikan katalog model yang tepat.
 5. **Web UI Glassmorphic Modern:**
    Dashboard visual Node.js tanpa dependensi eksternal di `http://127.0.0.1:52110` dengan live meter kuota dan sandbox pengujian prompt.
 6. **Rich CLI Suite:**

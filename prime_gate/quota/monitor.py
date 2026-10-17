@@ -24,8 +24,8 @@ class QuotaMonitor:
     def get_tier_label(cls, account: Dict[str, Any]) -> str:
         tier = cls.detect_tier(account)
         if tier == "google-ai-pro-trial":
-            return "Google AI Pro (Trial / Reliance Jio 18M Promo)"
-        return "Google AI Pro (Paid / Direct Tier)"
+            return "Google AI Pro (Trial Tier)"
+        return "Google AI Pro (Paid Tier)"
 
     @classmethod
     def get_available_models(cls, account: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
