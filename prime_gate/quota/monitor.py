@@ -4,6 +4,7 @@ import httpx
 from typing import Dict, Any, List, Optional, Tuple
 from ..config import MODELS_CATALOG, ANTIGRAVITY_ENDPOINT
 from ..auth.oauth import get_access_token
+from ..db import db, REC_MODEL, REC_QUOTA
 
 logger = logging.getLogger("prime_gate.quota")
 
@@ -135,11 +136,20 @@ class QuotaMonitor:
 
                     if clean_models:
                         cls._models_cache[email] = (clean_models, now)
+                        db.set(f"models:{email}", {"models": clean_models, "timestamp": now}, REC_MODEL)
+                        db.set("models:latest", {"models": clean_models, "timestamp": now}, REC_MODEL)
                         logger.info(f"Successfully loaded {len(clean_models)} live models directly from Google Antigravity for {email}")
                         return clean_models
 
         except Exception as e:
-            logger.warning(f"Failed to fetch live models from Google Antigravity ({e}), using default catalog fallback.")
+            logger.warning(f"Failed to fetch live models from Google Antigravity ({e}), checking binary DB snapshot.")
+
+        # Check binary database fallback before static catalog
+        db_cached = db.get(f"models:{email}") or db.get("models:latest")
+        if db_cached and db_cached.get("models"):
+            models_list = db_cached["models"]
+            cls._models_cache[email] = (models_list, now)
+            return models_list
 
         fallback = cls.get_available_models(account)
         cls._models_cache[email] = (fallback, now)
@@ -196,11 +206,19 @@ class QuotaMonitor:
 
                     if results:
                         cls._quota_cache[email] = (results, now)
+                        db.set(f"quota:{email}", {"quota": results, "timestamp": now}, REC_QUOTA)
                         logger.info(f"Loaded live quota from Google Antigravity: {len(results)} quota buckets")
                         return results
 
         except Exception as e:
-            logger.warning(f"Failed to fetch live quota from Google Antigravity ({e}), falling back to local cache.")
+            logger.warning(f"Failed to fetch live quota from Google Antigravity ({e}), checking binary DB snapshot.")
+
+        # Check binary database fallback before static parse
+        db_quota = db.get(f"quota:{email}")
+        if db_quota and db_quota.get("quota"):
+            quota_list = db_quota["quota"]
+            cls._quota_cache[email] = (quota_list, now)
+            return quota_list
 
         return cls.parse_quota_details(account)
 

@@ -58,7 +58,11 @@ graph LR
 5. **Interactive Glassmorphic Web UI:**
    Built-in zero-dependency Node.js frontend dashboard at `http://127.0.0.1:52110` with live quota radar bars, server uptime, and an interactive prompt testing sandbox.
 6. **Rich Terminal CLI Suite:**
-   Modern terminal interface featuring `--version`, `quota`, `auth list|import|login`, and headless Windows background `daemon` management.
+   Modern terminal interface featuring `--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, and headless Windows background `daemon` management.
+7. **Compiled C Binary Database (Zero Plaintext JSON):**
+   Replaces human-readable JSON storage with a high-performance compiled C binary engine (SQLite WAL + Sealed BLOBs). Sensitive tokens, credentials, models, and quotas are binary-masked with strict 32-bit CRC32 checksum validation.
+8. **Real-Time WebSocket & Database Sentinel Watchdog:**
+   Pipes live server logs and database mutations directly to dashboard over bidirectional WebSocket (`/ws/live`). An autonomous Sentinel Watchdog continuously audits binary block integrity and fires instant critical alerts and telemetry upon any corruption detection.
 
 ---
 

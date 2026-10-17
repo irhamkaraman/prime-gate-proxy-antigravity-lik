@@ -8,7 +8,7 @@ import argparse
 from typing import Dict, Any, List, Optional, AsyncGenerator
 
 import httpx
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -25,9 +25,17 @@ from .translator import (
     format_sse_chunk,
     format_non_stream_response
 )
+from .db import db, event_bus, WebSocketLogHandler
+from .db.sentinel import sentinel
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("prime_gate.server")
+
+# Connect Python logging directly to WebSocket real-time broadcast
+ws_handler = WebSocketLogHandler(event_bus)
+ws_handler.setLevel(logging.INFO)
+ws_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+logging.getLogger().addHandler(ws_handler)
 
 app = FastAPI(
     title="Prime Gate Antigravity Proxy",
@@ -45,6 +53,18 @@ app.add_middleware(
 
 account_mgr = AccountManager()
 START_TIME = time.time()
+
+@app.on_event("startup")
+async def on_startup():
+    import asyncio
+    event_bus.set_loop(asyncio.get_running_loop())
+    await sentinel.start()
+    logger.info("Prime Gate Engine active with Compiled Binary Database (WAL Mode + CRC32 Sentinel)")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await sentinel.stop()
+    db.close()
 
 @app.get("/")
 @app.get("/health")
@@ -210,6 +230,85 @@ async def api_auth_clear():
         "success": success,
         "total_accounts": 0,
         "active_account": None
+    }
+
+# -------------------------------------------------------------
+# Real-Time WebSocket & Database Diagnostics Endpoints
+# -------------------------------------------------------------
+
+@app.websocket("/ws/live")
+@app.websocket("/ws/db")
+async def websocket_live_endpoint(websocket: WebSocket):
+    """
+    Real-time bidirectional WebSocket stream:
+    - Broadcasts live database mutations & health snapshots
+    - Streams server and proxy logs directly to client
+    - Fires INSTANT CRITICAL ALERTS on database corruption detection
+    """
+    await websocket.accept()
+    event_bus.register(websocket)
+    try:
+        # Initial greeting with database status and runtime stats
+        await websocket.send_json({
+            "type": "INIT_STATE",
+            "system": {
+                "version": __version__,
+                "codename": __codename__,
+                "uptime": int(time.time() - START_TIME)
+            },
+            "db": db.get_status()
+        })
+        while True:
+            text = await websocket.receive_text()
+            try:
+                msg = json.loads(text)
+                action = msg.get("action")
+                if action == "check_db":
+                    audit = db.run_integrity_check()
+                    await websocket.send_json({"type": "DB_AUDIT_RESULT", "audit": audit})
+                elif action == "ping":
+                    await websocket.send_json({"type": "pong", "time": time.time()})
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        event_bus.unregister(websocket)
+    except Exception:
+        event_bus.unregister(websocket)
+
+@app.get("/api/db/status")
+async def api_db_status():
+    """Returns database size, record count, and WAL status."""
+    return db.get_status()
+
+@app.post("/api/db/check")
+async def api_db_check():
+    """Triggers deep SQLite B-Tree and record-level CRC32 integrity audit."""
+    return db.run_integrity_check()
+
+@app.post("/api/db/test-corrupt")
+async def api_db_test_corrupt(request: Request):
+    """
+    Simulates database corruption by tampering with binary bytes of a record.
+    Immediately triggers real-time WebSocket alert and critical system log.
+    """
+    try:
+        body = await request.json()
+        target_key = body.get("key", "system:test_block")
+    except Exception:
+        target_key = "system:test_block"
+
+    # Ensure the test key exists before corrupting it
+    if not db.get(target_key):
+        db.set(target_key, {
+            "test_sample": "compiled_binary_integrity_payload",
+            "created": time.time()
+        })
+
+    success = db.simulate_corruption(target_key)
+    return {
+        "success": success,
+        "corrupted_key": target_key,
+        "message": f"Injected simulated binary corruption into '{target_key}'. Check WebSocket stream and terminal logs!"
     }
 
 

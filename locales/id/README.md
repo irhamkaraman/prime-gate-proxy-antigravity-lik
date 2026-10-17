@@ -41,7 +41,11 @@ Dengan Prime Gate, bosss dapat memanfaatkan kuota Google Antigravity—termasuk 
 5. **Web UI Glassmorphic Modern:**
    Dashboard visual Node.js tanpa dependensi eksternal di `http://127.0.0.1:52110` dengan live meter kuota dan sandbox pengujian prompt.
 6. **Rich CLI Suite:**
-   Perintah terminal lengkap via `rich` & `typer` (`--version`, `quota`, `auth list|import|login`, `daemon start|stop|status`).
+   Perintah terminal lengkap via `rich` & `typer` (`--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, `daemon start|stop|status`).
+7. **Database Binary Terkompilasi (Zero Plaintext JSON):**
+   Menggantikan penyimpanan JSON plain-text dengan engine binary terkompilasi C (SQLite WAL + Sealed BLOBs). Kredensial akun, token, model, dan kuota dikompresi serta disamarkan dengan verifikasi integritas 32-bit CRC32 tanpa struktur JSON yang bisa dibaca.
+8. **Real-Time WebSocket & Database Sentinel Watchdog:**
+   Menghubungkan streaming log server dan mutasi data langsung ke dasbor secara real-time via WebSocket (`/ws/live`). Sentinel Watchdog secara kontinu memeriksa integritas data dan langsung membunyikan alert kritis ke terminal dan dasbor jika terdeteksi database corrupt.
 
 ---
 

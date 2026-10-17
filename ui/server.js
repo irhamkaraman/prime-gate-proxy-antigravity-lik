@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import net from "node:net";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +82,30 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": contentType });
     res.end(content);
   });
+});
+
+// Forward WebSocket upgrade requests to the Python core server
+server.on("upgrade", (req, socket, head) => {
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  if (url.pathname.startsWith("/ws/")) {
+    const proxySocket = net.connect(API_PORT, "127.0.0.1", () => {
+      proxySocket.write(
+        `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
+        Object.entries(req.headers)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\r\n") +
+        "\r\n\r\n"
+      );
+      if (head && head.length) proxySocket.write(head);
+      proxySocket.pipe(socket);
+      socket.pipe(proxySocket);
+    });
+
+    proxySocket.on("error", () => socket.destroy());
+    socket.on("error", () => proxySocket.destroy());
+  } else {
+    socket.destroy();
+  }
 });
 
 server.listen(UI_PORT, HOST, () => {

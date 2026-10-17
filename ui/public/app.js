@@ -380,6 +380,216 @@ function copyEndpoint() {
   alert("Endpoint copied to clipboard: " + code);
 }
 
-// Initial fetch and auto-refresh every 8 seconds
+// -------------------------------------------------------------
+// Real-Time WebSocket Telemetry & Database Sentinel Client
+// -------------------------------------------------------------
+
+let liveSocket = null;
+let reconnectTimer = null;
+
+function initWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // Use current host (works through Node proxy or direct FastAPI server)
+  const wsUrl = `${protocol}//${window.location.host}/ws/live`;
+  const badge = document.getElementById("wsIndicatorBadge");
+
+  try {
+    liveSocket = new WebSocket(wsUrl);
+
+    liveSocket.onopen = () => {
+      if (badge) {
+        badge.innerText = "● WebSocket Connected";
+        badge.style.background = "rgba(16, 185, 129, 0.15)";
+        badge.style.color = "#10b981";
+        badge.style.borderColor = "rgba(16, 185, 129, 0.3)";
+      }
+      appendLog("System", "WebSocket telemetry stream active. Connected to Prime Gate core.", "INFO");
+    };
+
+    liveSocket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        handleWSMessage(msg);
+      } catch (e) {
+        console.warn("WS parse error:", e);
+      }
+    };
+
+    liveSocket.onclose = () => {
+      if (badge) {
+        badge.innerText = "○ Disconnected (Reconnecting...)";
+        badge.style.background = "rgba(244, 63, 94, 0.15)";
+        badge.style.color = "#fb7185";
+        badge.style.borderColor = "rgba(244, 63, 94, 0.3)";
+      }
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(initWebSocket, 3000);
+    };
+
+    liveSocket.onerror = () => {
+      if (liveSocket) liveSocket.close();
+    };
+  } catch (err) {
+    console.error("Failed to connect WebSocket:", err);
+  }
+}
+
+function handleWSMessage(msg) {
+  if (msg.type === "INIT_STATE") {
+    if (msg.db) updateDBUI(msg.db);
+  } else if (msg.type === "DB_HEALTH") {
+    updateDBMetrics(msg);
+  } else if (msg.type === "DB_MUTATION") {
+    fetchDBStatus();
+    if (msg.key === "system:accounts") fetchStatus();
+  } else if (msg.type === "LOG_ENTRY") {
+    appendLog(msg.logger, msg.message, msg.level, msg.is_corrupt_alert);
+    if (msg.is_corrupt_alert) {
+      showCorruptionAlert("Corruption Alert in Log Stream", msg.message);
+    }
+  } else if (msg.type === "DB_CORRUPTED") {
+    showCorruptionAlert(msg.reason, `Key: ${msg.key} | ${JSON.stringify(msg.details)}`);
+    appendLog("CRITICAL_WATCHDOG", `🚨 [DATABASE_CORRUPT] Key: ${msg.key} - ${msg.reason}`, "CRITICAL", true);
+  }
+}
+
+function appendLog(logger, message, level = "INFO", isAlert = false) {
+  const logArea = document.getElementById("liveLogsArea");
+  if (!logArea) return;
+  const timeStr = new Date().toLocaleTimeString();
+  const alertPrefix = isAlert ? "🚨 " : "";
+  const line = `[${timeStr}] [${level}] ${alertPrefix}${logger}: ${message}\n`;
+  if (logArea.innerText === "Connecting to live WebSocket event bus...") {
+    logArea.innerText = "";
+  }
+  logArea.innerText += line;
+  const allLines = logArea.innerText.split("\n");
+  if (allLines.length > 300) {
+    logArea.innerText = allLines.slice(-300).join("\n");
+  }
+  logArea.scrollTop = logArea.scrollHeight;
+}
+
+function clearLiveLogs() {
+  const logArea = document.getElementById("liveLogsArea");
+  if (logArea) logArea.innerText = "";
+}
+
+function showCorruptionAlert(title, message) {
+  const banner = document.getElementById("dbCorruptionAlert");
+  const titleEl = document.getElementById("alertTitle");
+  const msgEl = document.getElementById("alertMessage");
+  const healthBadge = document.getElementById("dbHealthBadge");
+  if (!banner) return;
+
+  if (titleEl) titleEl.innerText = `🚨 Critical Database Alert: ${title}`;
+  if (msgEl) msgEl.innerText = message;
+  if (healthBadge) {
+    healthBadge.innerText = "CORRUPTED";
+    healthBadge.style.background = "rgba(244, 63, 94, 0.25)";
+    healthBadge.style.color = "#fb7185";
+    healthBadge.style.borderColor = "rgba(244, 63, 94, 0.5)";
+  }
+  banner.style.display = "flex";
+}
+
+function dismissCorruptionAlert() {
+  const banner = document.getElementById("dbCorruptionAlert");
+  if (banner) banner.style.display = "none";
+}
+
+async function fetchDBStatus() {
+  try {
+    const res = await fetch("/api/db/status");
+    if (res.ok) {
+      const data = await res.json();
+      updateDBUI(data);
+    }
+  } catch (err) {
+    console.warn("Could not fetch DB status:", err);
+  }
+}
+
+function updateDBUI(st) {
+  const engineEl = document.getElementById("dbEngineText");
+  const recordsEl = document.getElementById("dbRecordsText");
+  const sizeEl = document.getElementById("dbSizeText");
+  const healthBadge = document.getElementById("dbHealthBadge");
+
+  if (engineEl) engineEl.innerText = st.engine || "Compiled C (SQLite WAL)";
+  if (recordsEl) recordsEl.innerText = `${st.records_count || 0} Binary Records`;
+  if (sizeEl) sizeEl.innerText = `${Math.round((st.size_bytes || 0) / 1024 * 10) / 10} KB`;
+  if (healthBadge && healthBadge.innerText !== "CORRUPTED") {
+    healthBadge.innerText = "Optimal";
+    healthBadge.style.background = "rgba(16, 185, 129, 0.15)";
+    healthBadge.style.color = "#10b981";
+    healthBadge.style.borderColor = "rgba(16, 185, 129, 0.3)";
+  }
+}
+
+function updateDBMetrics(metrics) {
+  const recordsEl = document.getElementById("dbRecordsText");
+  const sizeEl = document.getElementById("dbSizeText");
+  const healthBadge = document.getElementById("dbHealthBadge");
+
+  if (recordsEl) recordsEl.innerText = `${metrics.record_count || 0} Binary Records`;
+  if (sizeEl) sizeEl.innerText = `${Math.round((metrics.size_bytes || 0) / 1024 * 10) / 10} KB`;
+  if (healthBadge) {
+    if (metrics.integrity_ok) {
+      healthBadge.innerText = "Optimal";
+      healthBadge.style.background = "rgba(16, 185, 129, 0.15)";
+      healthBadge.style.color = "#10b981";
+      healthBadge.style.borderColor = "rgba(16, 185, 129, 0.3)";
+    } else {
+      healthBadge.innerText = "CORRUPTED";
+      healthBadge.style.background = "rgba(244, 63, 94, 0.25)";
+      healthBadge.style.color = "#fb7185";
+      healthBadge.style.borderColor = "rgba(244, 63, 94, 0.5)";
+    }
+  }
+}
+
+async function auditDatabase() {
+  try {
+    appendLog("Sentinel", "Running deep SQLite B-Tree and CRC32 checksum audit...", "INFO");
+    const res = await fetch("/api/db/check", { method: "POST" });
+    const data = await res.json();
+    if (data.healthy) {
+      alert(`✓ Database Audit Passed!\nScanned: ${data.records_scanned} binary records\nStatus: 100% HEALTHY`);
+      appendLog("Sentinel", `Audit passed: ${data.records_scanned} records verified, zero corruptions.`, "INFO");
+      dismissCorruptionAlert();
+      fetchDBStatus();
+    } else {
+      showCorruptionAlert("Corruption Detected in Audit", JSON.stringify(data.corruptions));
+      alert(`🚨 Database Audit Failed!\nFound ${data.corruptions_count} corrupted blocks!`);
+    }
+  } catch (err) {
+    alert("Audit request failed: " + err.message);
+  }
+}
+
+async function testDatabaseCorruption() {
+  const confirmTest = confirm("Simulate bit-level binary tampering in the compiled database to test instant WebSocket alert and logging?");
+  if (!confirmTest) return;
+
+  try {
+    appendLog("Simulator", "Injecting simulated binary corruption into 'system:test_block'...", "WARN");
+    const res = await fetch("/api/db/test-corrupt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "system:test_block" })
+    });
+    const data = await res.json();
+    appendLog("Simulator", data.message, "WARN");
+  } catch (err) {
+    alert("Failed to trigger simulation: " + err.message);
+  }
+}
+
+// Initial fetch and WebSocket bootstrap
 fetchStatus();
+fetchDBStatus();
+initWebSocket();
 setInterval(fetchStatus, 8000);
+setInterval(fetchDBStatus, 15000);
+

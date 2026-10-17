@@ -18,9 +18,13 @@ app = typer.Typer(
 )
 auth_app = typer.Typer(name="auth", help="Manage Google Antigravity accounts and OAuth authentication.")
 daemon_app = typer.Typer(name="daemon", help="Manage background daemon service.")
+db_app = typer.Typer(name="db", help="Manage compiled binary database, integrity checks, and corruption diagnostics.")
 
 app.add_typer(auth_app)
 app.add_typer(daemon_app)
+app.add_typer(db_app)
+
+from .db import db, sentinel, REC_SYSTEM
 
 console = Console()
 account_mgr = AccountManager()
@@ -273,6 +277,84 @@ def daemon_status():
         ))
     else:
         console.print("[bold yellow]Status: STOPPED (Tidak ada daemon aktif)[/bold yellow]")
+
+# -------------------------------------------------------------
+# Compiled Binary Database Management & Sentinel Commands
+# -------------------------------------------------------------
+
+@db_app.command("status")
+def db_status():
+    """Display binary database storage size, record count, and WAL engine metrics."""
+    st = db.get_status()
+    table = Table(title="Prime Gate Compiled Binary Database Engine", show_header=True, header_style="bold magenta")
+    table.add_column("Property", style="cyan")
+    table.add_column("Value", style="green")
+
+    table.add_row("Engine Type", st["engine"])
+    table.add_row("Binary Format", st["format"])
+    table.add_row("File Location", st["db_path"])
+    table.add_row("Storage Size", f"{round(st['size_bytes'] / 1024, 2)} KB ({st['size_bytes']} bytes)")
+    table.add_row("Sealed Records", str(st["records_count"]))
+    table.add_row("Recorded Incidents", str(st["incidents_count"]))
+    table.add_row("Active WS Subscribers", str(st["active_ws_subscribers"]))
+
+    console.print(table)
+
+@db_app.command("check")
+def db_check():
+    """Execute full SQLite B-Tree and record-level CRC32 checksum integrity audit."""
+    console.print("[dim]Scanning compiled binary blocks and checking CRC32 checksums...[/dim]")
+    audit = db.run_integrity_check()
+
+    if audit["healthy"]:
+        console.print(Panel(
+            f"[bold green][OK] Database Integrity 100% HEALTHY[/bold green]\n"
+            f"SQLite B-Tree Status: {audit['sqlite_status']}\n"
+            f"Binary Records Scanned: {audit['records_scanned']}\n"
+            f"Corruptions Found: 0\n"
+            f"Physical Size: {round(audit['size_bytes'] / 1024, 2)} KB",
+            title="Database Audit Passed",
+            border_style="green"
+        ))
+    else:
+        console.print(Panel(
+            f"[bold red][ALERT] DATABASE CORRUPTION DETECTED![/bold red]\n"
+            f"Corrupted Blocks: {audit['corruptions_count']}\n"
+            f"Details: {audit['corruptions']}",
+            title="Integrity Audit Failed",
+            border_style="red"
+        ))
+
+@db_app.command("test-corrupt")
+def db_test_corrupt(
+    key: str = typer.Option("system:demo_block", "--key", "-k", help="Target record key to tamper with.")
+):
+    """Simulate binary data corruption to verify CRC32 watchdog, critical logs, and alert handlers."""
+    import time
+    # Ensure key exists
+    db.set(key, {"sample_data": "prime_gate_crc32_test", "created": time.time()}, record_type=REC_SYSTEM)
+    console.print(f"[yellow]Injecting bit-level binary corruption into record '{key}'...[/yellow]")
+    
+    # Simulate corruption
+    db.simulate_corruption(key)
+    console.print(f"[bold green][OK] Corruption successfully simulated! Check the logs above for [DATABASE_CORRUPT] alerts.[/bold green]")
+
+@db_app.command("daemon")
+def db_daemon_run(
+    interval: int = typer.Option(30, "--interval", "-i", help="Audit interval in seconds.")
+):
+    """Run standalone database sentinel daemon with continuous CRC32 integrity audit."""
+    import asyncio
+    console.print(f"[bold green]Starting Database Sentinel Daemon (Audit interval: {interval}s)...[/bold green]")
+    sentinel.interval = interval
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(sentinel.start())
+        loop.run_forever()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Stopping Database Sentinel Daemon...[/yellow]")
+        loop.run_until_complete(sentinel.stop())
 
 if __name__ == "__main__":
     app()

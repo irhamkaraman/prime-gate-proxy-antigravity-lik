@@ -823,4 +823,72 @@ body {
   border-color: rgba(244, 63, 94, 0.4);
 }
 
+/* Real-Time Database Corruption Alert Banner */
+.corruption-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, rgba(88, 28, 28, 0.9), rgba(45, 15, 15, 0.95));
+  border: 1px solid rgba(244, 63, 94, 0.45);
+  box-shadow: 0 0 24px rgba(244, 63, 94, 0.2);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  animation: pulseAlert 2.5s infinite ease-in-out;
+}
+
+@keyframes pulseAlert {
+  0%, 100% { border-color: rgba(244, 63, 94, 0.4); box-shadow: 0 0 18px rgba(244, 63, 94, 0.15); }
+  50% { border-color: rgba(244, 63, 94, 0.85); box-shadow: 0 0 30px rgba(244, 63, 94, 0.35); }
+}
+
+.alert-badge-tag {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.alert-content {
+  flex: 1;
+}
+
+.alert-content strong {
+  display: block;
+  font-size: 14px;
+  color: #fecdd3;
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.alert-content p {
+  font-size: 12px;
+  color: #fda4af;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.alert-dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #fda4af;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 6px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.alert-dismiss-btn:hover {
+  opacity: 1;
+}
+
+
 

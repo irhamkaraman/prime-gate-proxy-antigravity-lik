@@ -71,6 +71,16 @@
       </div>
     </header>
 
+    <!-- Real-Time Database Corruption Sentinel Alert Banner -->
+    <div id="dbCorruptionAlert" class="corruption-alert-banner" style="display: none;">
+      <div class="alert-badge-tag">[CRITICAL]</div>
+      <div class="alert-content">
+        <strong id="alertTitle">Database Integrity Alert: Block Corrupted</strong>
+        <p id="alertMessage">CRC32 Checksum mismatch detected in compiled binary record.</p>
+      </div>
+      <button class="alert-dismiss-btn" onclick="dismissCorruptionAlert()">&times;</button>
+    </div>
+
     <!-- Main Workspace Grid -->
     <main class="grid-workspace">
       <!-- Left Column: Identity & Quotas -->
@@ -130,6 +140,35 @@
             <button class="copy-trigger" onclick="copyEndpoint()">Copy</button>
           </div>
         </article>
+
+        <!-- Compiled Binary Database & Sentinel Card -->
+        <article class="anthropic-card">
+          <div class="card-caption">
+            <h2>Binary Database & Sentinel</h2>
+            <span class="tier-pill" id="dbHealthBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">Optimal</span>
+          </div>
+          <p class="description-copy">
+            Compiled C engine (SQLite WAL) storing credentials, quotas, and models as sealed binary BLOBs with 32-bit CRC32 checksums. Zero plaintext leakage.
+          </p>
+          <div class="metric-list">
+            <div class="metric-item">
+              <span class="metric-key">Engine Architecture:</span>
+              <span class="metric-val" id="dbEngineText">Compiled C (SQLite WAL)</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-key">Binary Records:</span>
+              <span class="metric-val" id="dbRecordsText">0 Records</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-key">Storage Footprint:</span>
+              <span class="metric-val" id="dbSizeText">0 KB</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 14px;">
+            <button class="action-btn secondary-btn" style="flex: 1; padding: 7px 10px; font-size: 11px;" onclick="auditDatabase()">Audit Integrity</button>
+            <button class="action-btn secondary-btn" style="flex: 1; padding: 7px 10px; font-size: 11px; border-color: rgba(244, 63, 94, 0.35); color: #fb7185;" onclick="testDatabaseCorruption()" title="Simulate bit tampering to verify instant WebSocket corruption alert">Test Corruption</button>
+          </div>
+        </article>
       </section>
 
       <!-- Right Column: Interactive Sandbox & Model Catalog -->
@@ -187,6 +226,25 @@
           </div>
           <div id="modelsGrid" class="catalog-grid">
             <!-- Dynamically populated -->
+          </div>
+        </article>
+
+        <!-- Real-Time WebSocket & Database Logs Console -->
+        <article class="anthropic-card">
+          <div class="card-caption">
+            <div>
+              <h2>Real-Time Live Stream & Telemetry</h2>
+              <span class="sub-caption">Instant corruption alerts & proxy logs via WebSocket</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span id="wsIndicatorBadge" class="counter-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
+                ● WebSocket Connected
+              </span>
+              <button class="action-btn secondary-btn" style="padding: 4px 10px; font-size: 11px;" onclick="clearLiveLogs()">Clear</button>
+            </div>
+          </div>
+          <div class="console-output-wrap">
+            <pre id="liveLogsArea" class="editorial-terminal" style="height: 180px; max-height: 220px; overflow-y: auto; font-size: 11px; line-height: 1.5; color: #a8a29e; font-family: 'JetBrains Mono', monospace;">Connecting to live WebSocket event bus...</pre>
           </div>
         </article>
       </section>

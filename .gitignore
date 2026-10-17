@@ -45,3 +45,11 @@ accounts.json
 accounts*.json
 *.token
 *.key
+
+# Compiled Binary Database
+data/
+*.pgdb
+*.pgbin
+*.db-wal
+*.db-shm
+incidents.log
