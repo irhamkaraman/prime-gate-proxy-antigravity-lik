@@ -2,7 +2,7 @@ import time
 import logging
 import httpx
 from typing import Dict, Any, Tuple
-from ..config import CLIENT_ID, CLIENT_SECRET, OAUTH_TOKEN_URL
+from ..config import CLIENT_ID, CLIENT_SECRET, OAUTH_TOKEN_URL, DEFAULT_UI_PORT
 
 logger = logging.getLogger("prime_gate.oauth")
 
@@ -89,30 +89,163 @@ def start_interactive_login(port: int = 53123) -> Dict[str, Any]:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(b"""
-                <!DOCTYPE html>
-                <html>
-                <head><title>Login Successful - Prime Gate Antigravity</title></head>
-                <body style="font-family: sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding-top: 100px;">
-                    <h1 style="color: #38bdf8; font-size: 28px; margin-bottom: 8px;">Login Successful! \xf0\x9f\x9a\x80</h1>
-                    <p style="font-size: 16px; color: #94a3b8;">Google Antigravity authentication captured successfully by Prime Gate.</p>
-                    <p style="font-size: 14px; color: #64748b;">You may now close this tab and return to the application.</p>
-                </body>
-                </html>
-                """)
+                self.wfile.write(f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Successful - Prime Gate</title>
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #130f0c;
+            color: #f5f5f4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 24px;
+        }}
+        .auth-card {{
+            background: #1b1613;
+            border: 1px solid rgba(168, 162, 158, 0.18);
+            border-radius: 16px;
+            padding: 40px 36px;
+            max-width: 480px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+        }}
+        .icon-circle {{
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: #10b981;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }}
+        h1 {{
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }}
+        p.subtitle {{
+            font-size: 14px;
+            color: #a8a29e;
+            line-height: 1.6;
+            margin-bottom: 28px;
+        }}
+        .btn-group {{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }}
+        .btn-primary {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: #d97706;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 13px 24px;
+            border-radius: 10px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+        }}
+        .btn-primary:hover {{
+            background: #b45309;
+            transform: translateY(-1px);
+        }}
+        .btn-secondary {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(168, 162, 158, 0.2);
+            color: #d6d3d1;
+            font-size: 13px;
+            padding: 11px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }}
+        .btn-secondary:hover {{
+            background: rgba(255, 255, 255, 0.09);
+            color: #ffffff;
+        }}
+        .footer-hint {{
+            font-size: 12px;
+            color: #78716c;
+            margin-top: 24px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }}
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <div class="icon-circle">
+            <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+            </svg>
+        </div>
+        <h1>Authentication Successful</h1>
+        <p class="subtitle">Google Antigravity authentication was captured successfully. Your account is now active and ready.</p>
+        <div class="btn-group">
+            <a href="http://127.0.0.1:{DEFAULT_UI_PORT}" class="btn-primary" id="openDashboardBtn">
+                Go to Dashboard &rarr;
+            </a>
+            <button onclick="window.close()" class="btn-secondary">
+                Close This Window
+            </button>
+        </div>
+        <p class="footer-hint">Prime Gate Gateway &bull; 127.0.0.1:52111</p>
+    </div>
+</body>
+</html>""".encode("utf-8"))
             elif "error" in query:
                 auth_code_holder["error"] = query["error"][0]
                 self.send_response(400)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 err_msg = query['error'][0]
-                self.wfile.write(f"<h1>Login Cancelled</h1><p>Error: {err_msg}</p>".encode("utf-8"))
+                self.wfile.write(f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Authentication Cancelled - Prime Gate</title>
+    <style>
+        body {{ font-family: sans-serif; background: #130f0c; color: #f5f5f4; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; margin: 0; }}
+        .card {{ background: #1b1613; border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 16px; padding: 36px; max-width: 440px; text-align: center; }}
+        h1 {{ color: #fb7185; font-size: 22px; margin-bottom: 12px; }}
+        p {{ color: #a8a29e; font-size: 14px; margin-bottom: 24px; font-family: monospace; }}
+        a {{ display: inline-block; padding: 10px 20px; background: #241d18; border: 1px solid rgba(168, 162, 158, 0.3); color: #fff; text-decoration: none; border-radius: 8px; font-size: 13px; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Authentication Cancelled</h1>
+        <p>Error: {err_msg}</p>
+        <a href="http://127.0.0.1:{DEFAULT_UI_PORT}">Return to Dashboard &rarr;</a>
+    </div>
+</body>
+</html>""".encode("utf-8"))
             else:
                 # Browser connected without code/error (pre-connection or manual visit)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(b"<h1>Prime Gate OAuth Listener Active</h1><p>Waiting for Google authentication response...</p>")
+                self.wfile.write(b"<!DOCTYPE html><html><body style='font-family:sans-serif;background:#130f0c;color:#a8a29e;text-align:center;padding-top:80px;'><h1>Prime Gate OAuth Listener Active</h1><p>Waiting for Google authentication response...</p></body></html>")
 
         def log_message(self, format, *args):
             pass  # Silence default HTTP server console noise

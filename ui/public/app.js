@@ -765,14 +765,14 @@ function copyAuthLink() {
   navigator.clipboard.writeText(currentAuthUrl).then(() => {
     if (btn) {
       const prev = btn.innerText;
-      btn.innerText = "✓ Disalin!";
+      btn.innerText = "✓ Copied!";
       btn.style.color = "#10b981";
       setTimeout(() => {
         btn.innerText = prev;
         btn.style.color = "";
       }, 2000);
     }
-    showToast("Tautan otentikasi Google disalin ke clipboard!", "success");
+    showToast("Google authentication link copied to clipboard!", "success");
   }).catch(e => {
     showAlertModal({
       title: "Google OAuth URL",
