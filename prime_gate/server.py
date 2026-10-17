@@ -198,13 +198,48 @@ async def list_models(refresh: bool = False):
             "created": now,
             "owned_by": m.get("owned_by", "google-antigravity"),
             "provider": m.get("provider", "prime gate proxy"),
-            "permission": [],
+            "upstream_provider": m.get("upstream_provider", "Google Antigravity"),
+            "name": m.get("name", m["id"]),
             "root": m["id"],
-            "parent": None
+            "parent": None,
+            "permission": [],
+            "supports_thinking": m.get("supports_thinking", False),
+            "thinking_budget": m.get("thinking_budget", 0),
+            "thinking_level": m.get("thinking_level", "standard"),
+            "supports_streaming": m.get("supports_streaming", True),
+            "supports_tools": m.get("supports_tools", True),
+            "multimodal": m.get("multimodal", True),
+            "modalities": m.get("modalities", ["text", "image"]),
+            "context_window": m.get("context_window", 1048576),
+            "max_output_tokens": m.get("max_output_tokens", 65536),
+            "capabilities": m.get("capabilities", {
+                "thinking": m.get("supports_thinking", False),
+                "thinking_budget": m.get("thinking_budget", 0),
+                "streaming": True,
+                "tools": True,
+                "multimodal": m.get("multimodal", True),
+                "modalities": m.get("modalities", ["text", "image"]),
+                "context_window": m.get("context_window", 1048576),
+                "max_output_tokens": m.get("max_output_tokens", 65536)
+            })
         }
         for m in models
     ]
     return {"object": "list", "data": data}
+
+@app.get("/api/models")
+async def api_models_list(refresh: bool = False):
+    """Detailed models list endpoint with capabilities for Web UI."""
+    active_acc = account_mgr.get_active_account()
+    if active_acc:
+        models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh)
+    else:
+        models = QuotaMonitor.get_available_models(None)
+    return {
+        "models": models,
+        "total": len(models),
+        "active_account": active_acc.get("email") if active_acc else None
+    }
 
 @app.get("/v1/models/{model_id:path}")
 @app.get("/models/{model_id:path}")
@@ -226,9 +261,30 @@ async def get_model(model_id: str):
         "created": now,
         "owned_by": found.get("owned_by", "google-antigravity"),
         "provider": found.get("provider", "prime gate proxy"),
-        "permission": [],
+        "upstream_provider": found.get("upstream_provider", "Google Antigravity"),
+        "name": found.get("name", found["id"]),
         "root": found["id"],
-        "parent": None
+        "parent": None,
+        "permission": [],
+        "supports_thinking": found.get("supports_thinking", False),
+        "thinking_budget": found.get("thinking_budget", 0),
+        "thinking_level": found.get("thinking_level", "standard"),
+        "supports_streaming": found.get("supports_streaming", True),
+        "supports_tools": found.get("supports_tools", True),
+        "multimodal": found.get("multimodal", True),
+        "modalities": found.get("modalities", ["text", "image"]),
+        "context_window": found.get("context_window", 1048576),
+        "max_output_tokens": found.get("max_output_tokens", 65536),
+        "capabilities": found.get("capabilities", {
+            "thinking": found.get("supports_thinking", False),
+            "thinking_budget": found.get("thinking_budget", 0),
+            "streaming": True,
+            "tools": True,
+            "multimodal": found.get("multimodal", True),
+            "modalities": found.get("modalities", ["text", "image"]),
+            "context_window": found.get("context_window", 1048576),
+            "max_output_tokens": found.get("max_output_tokens", 65536)
+        })
     }
 
 @app.get("/api/status")
@@ -630,6 +686,14 @@ async def stream_antigravity_sse(
                 try:
                     payload = json.loads(raw_json)
                     response_obj = payload.get("response", payload)
+                    usage = response_obj.get("usageMetadata", {})
+                    if usage.get("promptTokenCount"):
+                        prompt_tokens = usage["promptTokenCount"]
+                    if usage.get("candidatesTokenCount"):
+                        completion_tokens = usage["candidatesTokenCount"]
+                    if usage.get("thoughtsTokenCount"):
+                        reasoning_tokens = usage["thoughtsTokenCount"]
+
                     candidates = response_obj.get("candidates", [])
                     if not candidates:
                         continue
@@ -721,16 +785,13 @@ async def chat_completions(request: Request):
                 "requestId": "agent-" + uuid.uuid4().hex
             }
 
-            upstream_url = (
-                f"{ANTIGRAVITY_ENDPOINT}/v1internal:"
-                f"{'streamGenerateContent?alt=sse' if stream else 'generateContent'}"
-            )
+            upstream_url = f"{ANTIGRAVITY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse"
 
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type": "application/json",
-                "User-Agent": "antigravity/1.18.3",
-                "Accept": "text/event-stream" if stream else "application/json"
+                "User-Agent": "Antigravity/2.24.0.0",
+                "Accept": "text/event-stream"
             }
 
             if stream:
@@ -742,52 +803,91 @@ async def chat_completions(request: Request):
                     media_type="text/event-stream"
                 )
             else:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    resp = await client.post(upstream_url, headers=headers, json=wrapped_body)
-                    if resp.status_code == 429:
-                        logger.warning(f"Account {account.get('email')} quota exceeded. Trying next...")
-                        continue
+                timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
+                        if resp.status_code == 429:
+                            logger.warning(f"Account {account.get('email')} quota exceeded (429). Trying next...")
+                            continue
+                        if resp.status_code != 200:
+                            err_text = await resp.aread()
+                            logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
+                            raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
 
-                    if resp.status_code != 200:
-                        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+                        content_text = ""
+                        reasoning_text = ""
+                        tool_calls = []
+                        finish_reason = "stop"
+                        prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
+                        completion_tokens = 0
+                        reasoning_tokens = 0
 
-                    payload = resp.json()
-                    response_obj = payload.get("response", payload)
-                    candidates = response_obj.get("candidates", [])
-                    content_text = ""
-                    tool_calls = []
+                        async for line in resp.aiter_lines():
+                            if not line or not line.startswith("data:"):
+                                continue
+                            raw_json = line[len("data:"):].strip()
+                            if not raw_json or raw_json == "[DONE]":
+                                continue
+                            try:
+                                payload = json.loads(raw_json)
+                                response_obj = payload.get("response", payload)
+                                usage = response_obj.get("usageMetadata", {})
+                                if usage.get("promptTokenCount"):
+                                    prompt_tokens = usage["promptTokenCount"]
+                                if usage.get("candidatesTokenCount"):
+                                    completion_tokens = usage["candidatesTokenCount"]
+                                if usage.get("thoughtsTokenCount"):
+                                    reasoning_tokens = usage["thoughtsTokenCount"]
 
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        for p in parts:
-                            if p.get("text"):
-                                content_text += p["text"]
-                            if p.get("functionCall"):
-                                fn = p["functionCall"]
-                                tool_calls.append({
-                                    "id": "call_" + uuid.uuid4().hex[:8],
-                                    "type": "function",
-                                    "function": {
-                                        "name": fn.get("name"),
-                                        "arguments": json.dumps(fn.get("args", {}))
-                                    }
-                                })
+                                candidates = response_obj.get("candidates", [])
+                                if candidates:
+                                    cand = candidates[0]
+                                    if cand.get("finishReason"):
+                                        finish_reason = cand["finishReason"].lower()
+                                    parts = cand.get("content", {}).get("parts", [])
+                                    for p in parts:
+                                        if p.get("thought") and p.get("text"):
+                                            reasoning_text += p["text"]
+                                        elif p.get("text"):
+                                            content_text += p["text"]
+                                        elif p.get("functionCall"):
+                                            fn = p["functionCall"]
+                                            tool_calls.append({
+                                                "id": "call_" + uuid.uuid4().hex[:8],
+                                                "type": "function",
+                                                "function": {
+                                                    "name": fn.get("name"),
+                                                    "arguments": json.dumps(fn.get("args", {}))
+                                                }
+                                            })
+                            except Exception:
+                                continue
 
-                    latency_ms = (time.time() - created) * 1000
-                    p_toks = max(1, len(json.dumps(req_payload)) // 4)
-                    c_toks = max(1, len(content_text.split()))
-                    telemetry.record_usage(
-                        model=model,
-                        prompt_tokens=p_toks,
-                        completion_tokens=c_toks,
-                        reasoning_tokens=0,
-                        latency_ms=latency_ms
-                    )
+                        if not completion_tokens and content_text:
+                            completion_tokens = max(1, len(content_text.split()))
 
-                    return format_non_stream_response(
-                        completion_id, created, model,
-                        content_text, tool_calls if tool_calls else None
-                    )
+                        latency_ms = (time.time() - created) * 1000
+                        telemetry.record_usage(
+                            model=model,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            reasoning_tokens=reasoning_tokens,
+                            latency_ms=latency_ms
+                        )
+
+                        return format_non_stream_response(
+                            completion_id, created, model,
+                            content_text,
+                            tool_calls if tool_calls else None,
+                            finish_reason=finish_reason,
+                            reasoning_content=reasoning_text if reasoning_text else None,
+                            usage={
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens,
+                                "reasoning_tokens": reasoning_tokens
+                            }
+                        )
 
         except Exception as e:
             last_error = e

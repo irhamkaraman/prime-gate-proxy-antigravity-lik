@@ -18,15 +18,47 @@ export interface QuotaItem {
   reset_time: string;
 }
 
+export interface ModelCapabilities {
+  thinking: boolean;
+  thinking_budget?: number;
+  thinking_level?: string;
+  streaming: boolean;
+  tools: boolean;
+  multimodal: boolean;
+  supports_images: boolean;
+  supports_video: boolean;
+  modalities: string[];
+  context_window: number;
+  max_output_tokens: number;
+  temperature_range?: [number, number];
+  top_p_range?: [number, number];
+}
+
 export interface ModelInfo {
   id: string;
   name: string;
-  object: string;
-  created: number;
+  object?: string;
+  created?: number;
   owned_by: string;
-  root: string;
-  parent: string | null;
-  permission: unknown[];
+  provider?: string;
+  upstream_provider?: string;
+  root?: string;
+  parent?: string | null;
+  permission?: unknown[];
+  supports_thinking?: boolean;
+  thinking_budget?: number;
+  thinking_level?: string;
+  thinking_desc?: string;
+  supports_streaming?: boolean;
+  supports_tools?: boolean;
+  multimodal?: boolean;
+  supports_images?: boolean;
+  supports_video?: boolean;
+  modalities?: string[];
+  context_window?: number;
+  max_output_tokens?: number;
+  recommended?: boolean;
+  capabilities?: ModelCapabilities;
 }
 
 export interface TelemetryMetrics {

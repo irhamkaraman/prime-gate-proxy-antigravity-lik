@@ -18,9 +18,15 @@ def resolve_model_name(raw_model: str) -> str:
         return "claude-opus-4-6-thinking"
     if "gemini-3.8-flash-high" in m_lower:
         return "gemini-3.8-flash-high"
+    if "gemini-3.8-flash-medium" in m_lower:
+        return "gemini-3.8-flash-medium"
     if "gemini-3.8-flash-low" in m_lower:
         return "gemini-3.8-flash-low"
-    if "gemini-3.8-flash" in m_lower or "gemini-3-flash" in m_lower:
+    if "gemini-3.8-flash-tiered" in m_lower:
+        return "gemini-3.8-flash-tiered"
+    if "gemini-3.8-flash" in m_lower:
+        return "gemini-3.8-flash-high"
+    if "gemini-3-flash" in m_lower:
         return "gemini-3-flash"
     if "gemini-3.1-flash-lite" in m_lower:
         return "gemini-3.1-flash-lite"
@@ -178,19 +184,51 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
         generation_config["temperature"] = body["temperature"]
     if "top_p" in body and body["top_p"] is not None:
         generation_config["topP"] = body["top_p"]
-    if "max_tokens" in body and body["max_tokens"] is not None:
-        generation_config["maxOutputTokens"] = body["max_tokens"]
+
+    max_tok = body.get("max_completion_tokens") or body.get("max_tokens")
+    if max_tok is not None:
+        generation_config["maxOutputTokens"] = max_tok
+
+    stop = body.get("stop")
+    if stop:
+        if isinstance(stop, str):
+            generation_config["stopSequences"] = [stop]
+        elif isinstance(stop, list):
+            generation_config["stopSequences"] = [s for s in stop if isinstance(s, str)]
+
+    # OpenAI-compatible reasoning / thinking parameters
+    reasoning_effort = str(body.get("reasoning_effort", "")).lower().strip()
+    thinking_param = body.get("thinking")
+    explicit_budget = None
+    if isinstance(thinking_param, dict):
+        explicit_budget = thinking_param.get("budget_tokens") or thinking_param.get("budget")
 
     if is_claude_thinking:
+        claude_budget = explicit_budget or 8192
+        if reasoning_effort == "low":
+            claude_budget = 2048
+        elif reasoning_effort == "high":
+            claude_budget = 16384
         generation_config["thinkingConfig"] = {
             "include_thoughts": True,
-            "thinking_budget": 8192
+            "thinking_budget": claude_budget
         }
-    elif is_gemini3:
-        generation_config["thinkingConfig"] = {
+    elif is_gemini3 or "flash" in model.lower():
+        gemini_level = "medium"
+        if reasoning_effort in ["low", "medium", "high"]:
+            gemini_level = reasoning_effort
+        elif "flash-high" in model.lower():
+            gemini_level = "high"
+        elif "flash-low" in model.lower():
+            gemini_level = "low"
+
+        thinking_cfg: Dict[str, Any] = {
             "includeThoughts": True,
-            "thinkingLevel": "medium"
+            "thinkingLevel": gemini_level
         }
+        if explicit_budget is not None and isinstance(explicit_budget, int):
+            thinking_cfg["thinkingBudget"] = explicit_budget
+        generation_config["thinkingConfig"] = thinking_cfg
 
     req_payload: Dict[str, Any] = {
         "contents": contents,

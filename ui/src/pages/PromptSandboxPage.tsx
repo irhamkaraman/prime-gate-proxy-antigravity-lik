@@ -22,12 +22,20 @@ export const PromptSandboxPage: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    const preselected = sessionStorage.getItem('selected_sandbox_model');
+    if (preselected) {
+      setSelectedModel(preselected);
+      sessionStorage.removeItem('selected_sandbox_model');
+    }
+
     fetch('/v1/models')
       .then(res => res.json())
       .then(data => {
         if (data && Array.isArray(data.data)) {
           setModels(data.data);
-          if (data.data.length > 0 && !data.data.some((m: ModelInfo) => m.id === selectedModel)) {
+          if (preselected && data.data.some((m: ModelInfo) => m.id === preselected)) {
+            setSelectedModel(preselected);
+          } else if (data.data.length > 0 && !data.data.some((m: ModelInfo) => m.id === (preselected || selectedModel))) {
             setSelectedModel(data.data[0].id);
           }
         }

@@ -30,6 +30,94 @@ FRIENDLY_NAMES = {
     "claude-opus-5-5": "Claude Opus 5.5 (Thinking)"
 }
 
+def build_model_spec(mid: str, raw_m: Optional[Dict[str, Any]] = None, is_recommended: bool = False) -> Dict[str, Any]:
+    """Builds a comprehensive, production-grade model specification dictionary from upstream data."""
+    raw_m = raw_m or {}
+    disp_name = raw_m.get("displayName") or FRIENDLY_NAMES.get(mid) or mid
+
+    # Provider detection
+    model_prov = raw_m.get("modelProvider", "")
+    if "ANTHROPIC" in model_prov or "claude" in mid.lower():
+        upstream_provider = "Anthropic"
+    elif "OPENAI" in model_prov or "gpt" in mid.lower():
+        upstream_provider = "OpenAI"
+    else:
+        upstream_provider = "Google"
+
+    # Thinking & Reasoning capabilities
+    supports_thinking = bool(raw_m.get("supportsThinking", True if ("thinking" in mid.lower() or "flash-high" in mid.lower() or "flash-medium" in mid.lower() or "claude" in mid.lower() or "gpt-oss" in mid.lower()) else False))
+    thinking_budget = raw_m.get("thinkingBudget", -1 if "flash-high" in mid.lower() else (4000 if "flash-medium" in mid.lower() else (1000 if "flash-low" in mid.lower() else 0)))
+
+    if supports_thinking:
+        if thinking_budget == -1:
+            thinking_level = "adaptive"
+            thinking_desc = "Adaptive Thinking (High / Unlimited)"
+        elif thinking_budget >= 4000:
+            thinking_level = "extended"
+            thinking_desc = f"Extended Thinking ({thinking_budget:,} tok budget)"
+        elif thinking_budget > 0:
+            thinking_level = "standard"
+            thinking_desc = f"Standard Thinking ({thinking_budget:,} tok budget)"
+        else:
+            thinking_level = "supported"
+            thinking_desc = "Thinking Supported"
+    else:
+        thinking_level = "none"
+        thinking_desc = "Standard (Thinking Disabled)"
+
+    # Multimodal capabilities
+    supports_images = bool(raw_m.get("supportsImages", False if "gpt-oss" in mid.lower() else True))
+    supports_video = bool(raw_m.get("supportsVideo", True if ("gemini" in mid.lower() and "image" not in mid.lower() and "flash" in mid.lower()) else False))
+
+    modalities = ["text"]
+    if supports_images:
+        modalities.append("image")
+    if supports_video:
+        modalities.extend(["video", "audio"])
+
+    # Context window & output limits
+    max_tokens = raw_m.get("maxTokens", 131072 if "gpt-oss" in mid.lower() else (250000 if "claude" in mid.lower() else 1048576))
+    max_output = raw_m.get("maxOutputTokens", 32768 if "gpt-oss" in mid.lower() else (64000 if "claude" in mid.lower() else 65536))
+
+    capabilities = {
+        "thinking": supports_thinking,
+        "thinking_budget": thinking_budget,
+        "thinking_level": thinking_level,
+        "streaming": True,
+        "tools": True,
+        "multimodal": supports_images or supports_video,
+        "supports_images": supports_images,
+        "supports_video": supports_video,
+        "modalities": modalities,
+        "context_window": max_tokens,
+        "max_output_tokens": max_output,
+        "temperature_range": [0.0, 2.0],
+        "top_p_range": [0.0, 1.0]
+    }
+
+    return {
+        "id": mid,
+        "name": disp_name,
+        "object": "model",
+        "owned_by": "google-antigravity",
+        "provider": "prime gate proxy",
+        "upstream_provider": upstream_provider,
+        "supports_thinking": supports_thinking,
+        "thinking_budget": thinking_budget,
+        "thinking_level": thinking_level,
+        "thinking_desc": thinking_desc,
+        "supports_streaming": True,
+        "supports_tools": True,
+        "multimodal": supports_images or supports_video,
+        "supports_images": supports_images,
+        "supports_video": supports_video,
+        "modalities": modalities,
+        "context_window": max_tokens,
+        "max_output_tokens": max_output,
+        "recommended": is_recommended or bool(raw_m.get("recommended", False)),
+        "capabilities": capabilities
+    }
+
 class QuotaMonitor:
     """Parses quota information, queries live Antigravity models & quota, and resolves subscription tiers."""
 
@@ -65,16 +153,16 @@ class QuotaMonitor:
         if email:
             db_models = db.get(f"models:{email}")
             if db_models and db_models.get("models"):
-                return db_models["models"]
+                return [build_model_spec(m["id"], m) for m in db_models["models"]]
 
         latest_models = db.get("models:latest")
         if latest_models and latest_models.get("models"):
-            return latest_models["models"]
+            return [build_model_spec(m["id"], m) for m in latest_models["models"]]
 
         if not account:
-            return MODELS_CATALOG["google-ai-pro-trial"]
+            return [build_model_spec(m["id"], m) for m in MODELS_CATALOG["google-ai-pro-trial"]]
         tier = cls.detect_tier(account)
-        return MODELS_CATALOG.get(tier, MODELS_CATALOG["google-ai-pro-trial"])
+        return [build_model_spec(m["id"], m) for m in MODELS_CATALOG.get(tier, MODELS_CATALOG["google-ai-pro-trial"])]
 
     @classmethod
     async def fetch_live_models_from_antigravity(
@@ -126,12 +214,10 @@ class QuotaMonitor:
 
                     # Add general gemini-3.8-flash alias first if recommended
                     if "gemini-3.8-flash-high" in candidate_ids or "gemini-3.8-flash-medium" in candidate_ids:
-                        clean_models.append({
-                            "id": "gemini-3.8-flash",
-                            "name": FRIENDLY_NAMES.get("gemini-3.8-flash", "Gemini 3.8 Flash (Recommended)"),
-                            "owned_by": "google-antigravity",
-                            "provider": "prime gate proxy"
-                        })
+                        source_m = models_dict.get("gemini-3.8-flash-high") or models_dict.get("gemini-3.8-flash-medium") or {}
+                        alias_spec = build_model_spec("gemini-3.8-flash", source_m, is_recommended=True)
+                        alias_spec["name"] = "Gemini 3.8 Flash (Recommended)"
+                        clean_models.append(alias_spec)
                         seen.add("gemini-3.8-flash")
 
                     for mid in candidate_ids:
@@ -141,13 +227,9 @@ class QuotaMonitor:
                         if "2.5" in mid or mid.startswith("chat_") or mid.startswith("tab_") or "image" in mid:
                             continue
 
-                        name = FRIENDLY_NAMES.get(mid, mid)
-                        clean_models.append({
-                            "id": mid,
-                            "name": name,
-                            "owned_by": "google-antigravity",
-                            "provider": "prime gate proxy"
-                        })
+                        raw_m = models_dict.get(mid, {})
+                        spec = build_model_spec(mid, raw_m, is_recommended=(mid in recommended_ids))
+                        clean_models.append(spec)
                         seen.add(mid)
 
                     if clean_models:
