@@ -350,6 +350,51 @@ async def api_accounts_list():
         "total": len(accounts)
     }
 
+@app.post("/api/auth/switch")
+async def api_auth_switch(request: Request):
+    """Switch active account by email and auto-refresh live models and quota."""
+    try:
+        body = await request.json()
+        email = body.get("email", "").strip()
+    except Exception:
+        email = ""
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    switched = account_mgr.set_active_account(email)
+    if not switched:
+        raise HTTPException(status_code=404, detail=f"Account '{email}' not found")
+
+    models_count = 0
+    quota_count = 0
+    tier_label = QuotaMonitor.get_tier_label(switched)
+    try:
+        models = await QuotaMonitor.fetch_live_models_from_antigravity(switched, force_refresh=True)
+        quota = await QuotaMonitor.fetch_live_quota_from_antigravity(switched, force_refresh=True)
+        models_count = len(models)
+        quota_count = len(quota)
+    except Exception as e:
+        logger.warning(f"Live sync on switch account {email} deferred: {e}")
+
+    try:
+        event_bus.broadcast_sync({
+            "type": "ACCOUNT_SWITCHED",
+            "email": switched.get("email"),
+            "tier": tier_label,
+            "models_count": models_count,
+            "quota_count": quota_count
+        })
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "active_account": switched.get("email"),
+        "tier": tier_label,
+        "models_count": models_count,
+        "quota_count": quota_count
+    }
+
 @app.post("/api/auth/remove")
 @app.post("/api/auth/delete")
 async def api_auth_remove(request: Request):

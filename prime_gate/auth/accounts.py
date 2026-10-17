@@ -119,6 +119,27 @@ class AccountManager:
         self._active_index = (self._active_index + 1) % len(accounts)
         return accounts[self._active_index]
 
+    def set_active_account(self, email: str) -> Optional[Dict[str, Any]]:
+        """Sets the specified account as active (index 0) and saves the new order into binary DB."""
+        accounts = self.load_accounts()
+        if not accounts:
+            return None
+        norm_email = email.strip().lower()
+        target_idx = None
+        for i, acc in enumerate(accounts):
+            if acc.get("email", "").strip().lower() == norm_email:
+                target_idx = i
+                break
+        if target_idx is None:
+            return None
+
+        # Reorder so chosen account is at index 0 (persisting active status)
+        chosen = accounts.pop(target_idx)
+        accounts.insert(0, chosen)
+        self._active_index = 0
+        self.save_accounts(accounts)
+        return chosen
+
     def remove_account(self, email: str) -> bool:
         """Removes an account by email from the binary database and purges cached models/quota."""
         accounts = self.load_accounts()

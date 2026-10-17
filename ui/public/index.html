@@ -147,9 +147,22 @@
         <span>Gateway API:</span>
         <span class="font-mono-code text-white/90">127.0.0.1:52111</span>
       </div>
-      <div class="p-2 bg-[#241d18] rounded-lg border border-[#a8a29e]/10 mt-1">
-        <span class="text-[10px] text-[#a8a29e] block">Active Identity:</span>
-        <span id="sidebarActiveEmail" class="text-[11px] font-mono-code text-[#f59e0b] truncate block mt-0.5">Connecting...</span>
+      <div class="p-2.5 bg-[#241d18] rounded-xl border border-[#a8a29e]/15 mt-1 flex flex-col gap-1.5 shadow-sm">
+        <div class="flex items-center justify-between text-[10px]">
+          <span class="text-[#a8a29e] font-medium uppercase tracking-wider">Active Account</span>
+          <span id="sidebarActiveTier" class="px-1.5 py-0.5 rounded bg-[#f59e0b]/10 text-[#f59e0b] font-mono-code text-[9px] border border-[#f59e0b]/25">Standard</span>
+        </div>
+        <div class="relative">
+          <select id="sidebarAccountSelect" onchange="handleSidebarAccountSelect(this.value)" class="w-full bg-[#171310] text-white text-xs font-mono-code py-1.5 pl-2.5 pr-7 rounded-lg border border-[#a8a29e]/20 focus:outline-none focus:border-[#f59e0b] transition cursor-pointer appearance-none truncate" title="Switch active Antigravity account">
+            <option value="" disabled selected>Connecting...</option>
+          </select>
+          <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-[#a8a29e]">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </div>
+        <span id="sidebarActiveEmail" class="hidden">Connecting...</span>
       </div>
     </div>
   </aside>
@@ -916,6 +929,11 @@ print(response.choices[0].message.content)</pre>
                 <td class="p-3 text-emerald-400">prime-gate auth import</td>
                 <td class="p-3 text-[#d6d3d1] font-sans">Import accounts from OpenCode config and auto-sync binary DB.</td>
                 <td class="p-3 text-[#a8a29e]">prime-gate auth import</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth switch [EMAIL]</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Switch the active account via positional email, flag, or interactive selector.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth switch user@gmail.com</td>
               </tr>
               <tr class="hover:bg-white/[0.02]">
                 <td class="p-3 text-emerald-400">prime-gate auth remove [EMAIL]</td>

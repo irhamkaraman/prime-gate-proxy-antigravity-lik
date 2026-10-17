@@ -123,6 +123,7 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | `prime-gate check-models` | Auto-load live supported models directly from Google Antigravity servers. |
 | `prime-gate auth list` | Show all stored Google Antigravity accounts. |
 | `prime-gate auth import` | Import accounts from `~/.config/opencode/antigravity-accounts.json`. |
+| `prime-gate auth switch [EMAIL]` | Switch the active Antigravity account (positional, flag `-e`, or interactive). |
 | `prime-gate auth login` | Open browser for Google OAuth 2.0 PKCE authentication. |
 | `prime-gate auth remove [EMAIL]` | Remove account (or pick interactively from a numbered menu). |
 | `prime-gate auth remove -e <email> -f` | Delete account via flag with forced confirmation bypass (`--email`, `--force`). |
@@ -135,6 +136,19 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | `prime-gate db check` | Run 32-bit CRC32 cryptographic audit on binary database. |
 | `prime-gate start` | Run API server in foreground with live request logs. |
 | `prime-gate ui` | Start and open the Node.js Web UI Dashboard. |
+
+### 🔄 Account Switching (Web UI & CLI):
+Prime Gate allows seamless switching between multiple Google Antigravity accounts with immediate model and quota synchronization:
+- **In Web UI Sidebar:** Use the **Active Account** dropdown selector at the bottom of the sidebar to switch active credentials on the fly from any view.
+- **In Web UI Accounts Tab:** Click the amber **"Set Active"** button on any registered account card.
+- **Via CLI:**
+  ```bash
+  python -m prime_gate.cli auth switch user@gmail.com
+  # Or with flag:
+  python -m prime_gate.cli auth switch -e user@gmail.com
+  # Or select interactively from a numbered menu:
+  python -m prime_gate.cli auth switch
+  ```
 
 ### 🗑️ Account Deletion & Management Flags:
 Prime Gate provides flexible flags to remove individual or all accounts from both terminal and Web UI:

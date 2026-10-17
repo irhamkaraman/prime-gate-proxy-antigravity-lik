@@ -303,6 +303,54 @@ def auth_clear(
     else:
         console.print("[bold red]Failed to clear accounts.[/bold red]")
 
+@auth_app.command("switch")
+def auth_switch(
+    email: Optional[str] = typer.Argument(None, help="Email of the account to activate (positional)."),
+    email_flag: Optional[str] = typer.Option(None, "--email", "-e", help="Email of the account to activate via flag.")
+):
+    """Switch the active Google Antigravity account in Prime Gate."""
+    accounts = account_mgr.load_accounts()
+    if not accounts:
+        console.print("[yellow]No accounts configured in Prime Gate.[/yellow]")
+        return
+
+    target_email = email_flag or email
+    if not target_email:
+        console.print("[bold cyan]Select an account to activate:[/bold cyan]")
+        active_acc = account_mgr.get_active_account()
+        active_email = active_acc.get("email") if active_acc else None
+        for idx, acc in enumerate(accounts, 1):
+            is_cur = " [bold green](Current Active)[/bold green]" if acc.get("email") == active_email else ""
+            console.print(f"  [bold white]{idx}.[/bold white] {acc.get('email')} [dim]({acc.get('projectId', 'default')})[/dim]{is_cur}")
+        choice = typer.prompt("Enter the account number to set active (or 'q' to cancel)")
+        if choice.strip().lower() == 'q':
+            console.print("[yellow]Operation cancelled.[/yellow]")
+            return
+        try:
+            sel_idx = int(choice.strip()) - 1
+            if 0 <= sel_idx < len(accounts):
+                target_email = accounts[sel_idx].get("email")
+            else:
+                console.print("[bold red]Invalid number selected.[/bold red]")
+                return
+        except ValueError:
+            console.print("[bold red]Input must be a valid number.[/bold red]")
+            return
+
+    switched = account_mgr.set_active_account(target_email)
+    if switched:
+        console.print(f"[bold green][OK] Switched active account to: {switched.get('email')}[/bold green]")
+        import asyncio
+        console.print("[dim]Syncing live models & quota into binary DB...[/dim]")
+        try:
+            models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(switched, force_refresh=True))
+            quota = asyncio.run(QuotaMonitor.fetch_live_quota_from_antigravity(switched, force_refresh=True))
+            console.print(f"[bold green][OK] Loaded {len(models)} live models and {len(quota)} quota buckets into compiled binary DB.[/bold green]")
+        except Exception as e:
+            console.print(f"[yellow]Live sync deferred: {e}[/yellow]")
+    else:
+        console.print(f"[bold red]Account '{target_email}' not found.[/bold red]")
+
 
 @daemon_app.command("start")
 def daemon_start(

@@ -378,7 +378,18 @@ async function fetchStatus() {
     const tier = data.tier || "Unknown";
 
     // Update sidebar
-    document.getElementById("sidebarActiveEmail").innerText = activeAcc;
+    const sidebarEmail = document.getElementById("sidebarActiveEmail");
+    if (sidebarEmail) sidebarEmail.innerText = activeAcc;
+
+    const sidebarTier = document.getElementById("sidebarActiveTier");
+    if (sidebarTier) {
+      sidebarTier.innerText = tier.includes("Paid") ? "Paid Tier" : (tier.includes("Trial") ? "Trial Tier" : "Pro");
+    }
+
+    const sidebarSelect = document.getElementById("sidebarAccountSelect");
+    if (sidebarSelect && data.active_account) {
+      sidebarSelect.value = data.active_account;
+    }
 
     // Update accounts tab identity
     const accEmail = document.getElementById("accActiveEmail");
@@ -449,6 +460,25 @@ async function fetchAccounts() {
     const data = await res.json();
     const accounts = data.accounts || [];
 
+    // Sync sidebar dropdown selector
+    const sidebarSelect = document.getElementById("sidebarAccountSelect");
+    if (sidebarSelect) {
+      if (accounts.length === 0) {
+        sidebarSelect.innerHTML = `
+          <option value="" disabled selected>No accounts connected</option>
+          <option value="__add__">+ Connect Account...</option>
+        `;
+      } else {
+        let optHtml = "";
+        accounts.forEach(a => {
+          const tierTag = a.tier ? (a.tier.includes("Paid") ? "Paid" : "Trial") : "Pro";
+          optHtml += `<option value="${a.email}" ${a.is_active ? "selected" : ""}>${a.email} (${tierTag})</option>`;
+        });
+        optHtml += `<option value="__add__">+ Connect Account...</option>`;
+        sidebarSelect.innerHTML = optHtml;
+      }
+    }
+
     const deck = document.getElementById("accAccountsDeck");
     if (!deck) return;
 
@@ -471,16 +501,65 @@ async function fetchAccounts() {
             <span class="text-[10px] text-[#78716c] font-mono-code block mt-0.5">${a.tier || "Standard Tier"} • Project: ${a.projectId || "default"}</span>
           </div>
         </div>
-        <button class="btn-secondary text-xs py-1 px-2.5 text-rose-400 border-rose-900/40 hover:bg-rose-950/30 flex items-center gap-1.5" onclick="removeAccount('${a.email}')" title="Delete account ${a.email}">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-          Delete
-        </button>
+        <div class="flex items-center gap-2">
+          ${!a.is_active ? `
+          <button class="btn-secondary text-xs py-1 px-2.5 text-[#f59e0b] border-[#d97706]/30 hover:bg-[#d97706]/10 flex items-center gap-1.5 transition" onclick="switchSidebarAccount('${a.email}')" title="Set ${a.email} as active account">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Set Active
+          </button>` : ''}
+          <button class="btn-secondary text-xs py-1 px-2.5 text-rose-400 border-rose-900/40 hover:bg-rose-950/30 flex items-center gap-1.5 transition" onclick="removeAccount('${a.email}')" title="Delete account ${a.email}">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
       </div>
     `).join("");
   } catch (err) {
     console.warn("Could not fetch accounts:", err);
+  }
+}
+
+function handleSidebarAccountSelect(val) {
+  if (!val) return;
+  if (val === "__add__") {
+    // Revert selection back to active email
+    const activeEl = document.getElementById("sidebarActiveEmail");
+    const select = document.getElementById("sidebarAccountSelect");
+    if (select && activeEl && activeEl.innerText && activeEl.innerText !== "Connecting...") {
+      select.value = activeEl.innerText.trim();
+    }
+    openAuthModal(false);
+    return;
+  }
+  switchSidebarAccount(val);
+}
+
+async function switchSidebarAccount(email) {
+  if (!email) return;
+  try {
+    showToast(`Switching active account to ${email}...`, "info");
+    const res = await fetch("/api/auth/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast(`Switched active account to ${email}`, "success");
+      appendSentinelLog("Accounts", `Switched active account to ${email} (models: ${data.models_count}, quota: ${data.quota_count})`, "INFO");
+      await fetchStatus();
+      await fetchAccounts();
+      await loadModelsList();
+    } else {
+      const err = extractErrorMessage(data, `Failed to switch to account ${email}`);
+      showToast(err, "error");
+      await fetchAccounts();
+    }
+  } catch (err) {
+    showToast(`Failed to switch account: ${err.message}`, "error");
+    await fetchAccounts();
   }
 }
 
@@ -940,6 +1019,11 @@ function handleWSMessage(msg) {
   } else if (msg.type === "ACCOUNT_CONNECTED") {
     appendSentinelLog("Auth", `Google account connected: ${msg.email}`, "INFO");
     closeAuthModal();
+    fetchStatus();
+    fetchAccounts();
+    loadModelsList();
+  } else if (msg.type === "ACCOUNT_SWITCHED") {
+    appendSentinelLog("Auth", `Active account switched to: ${msg.email}`, "INFO");
     fetchStatus();
     fetchAccounts();
     loadModelsList();
