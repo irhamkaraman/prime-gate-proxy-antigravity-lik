@@ -1,0 +1,31 @@
+{
+  "name": "prime-gate-proxy-antigravity-lik",
+  "version": "1.0.0-beta",
+  "description": "Production-grade, OpenAI-compatible proxy gateway for Google Antigravity with rich CLI and Glassmorphic Web UI dashboard",
+  "main": "ui/server.js",
+  "bin": {
+    "prime-gate": "./bin/prime-gate.js"
+  },
+  "scripts": {
+    "start": "node ui/server.js",
+    "ui": "node ui/server.js",
+    "proxy": "python -m prime_gate.cli start",
+    "daemon": "python -m prime_gate.cli daemon start",
+    "quota": "python -m prime_gate.cli quota"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git"
+  },
+  "keywords": [
+    "antigravity",
+    "openai-proxy",
+    "google-antigravity",
+    "claude-4.6",
+    "gemini-3.8",
+    "llm-gateway",
+    "opencode"
+  ],
+  "author": "irhamkaraman",
+  "license": "MIT"
+}

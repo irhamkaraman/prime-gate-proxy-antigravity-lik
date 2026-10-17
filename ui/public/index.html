@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prime Gate Antigravity - Web UI Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="background-glow glow-1"></div>
+  <div class="background-glow glow-2"></div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header glass-card">
+      <div class="brand">
+        <div class="logo-orb">PG</div>
+        <div>
+          <h1>Prime Gate <span class="badge">v1.0.0-beta</span></h1>
+          <p class="subtitle">Antigravity OpenAI-Compatible Proxy Gateway</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-indicator" id="statusIndicator">
+          <span class="status-dot"></span>
+          <span class="status-text" id="statusText">Memeriksa API...</span>
+        </div>
+        <button class="btn btn-secondary" onclick="fetchStatus()">Refresh Status</button>
+      </div>
+    </header>
+
+    <!-- Grid Layout -->
+    <div class="dashboard-grid">
+      <!-- Left Column: Quota & Account -->
+      <div class="column-left">
+        <!-- Account Card -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>Profil Akun & Paket</h2>
+            <span class="pill pill-cyan" id="accountTier">Memuat...</span>
+          </div>
+          <div class="account-details">
+            <div class="detail-row">
+              <span class="label">Akun Aktif:</span>
+              <span class="value" id="accountEmail">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Total Akun:</span>
+              <span class="value" id="accountCount">0</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Server Uptime:</span>
+              <span class="value" id="serverUptime">0 detik</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quota Radar Card -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>Status Kuota Model</h2>
+            <span class="sub-label">Live Google Antigravity Quota</span>
+          </div>
+          <div id="quotaContainer" class="quota-container">
+            <div class="skeleton-loader">Memuat data kuota...</div>
+          </div>
+        </div>
+
+        <!-- Config Integration Card -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>Integrasi Client (OpenCode / Cursor / SillyTavern)</h2>
+          </div>
+          <p class="info-text">Gunakan endpoint ini di client apa pun yang mendukung protokol OpenAI:</p>
+          <div class="code-block">
+            <code>http://127.0.0.1:52111/v1</code>
+            <button class="copy-btn" onclick="copyToClipboard('http://127.0.0.1:52111/v1')">Salin</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Model Catalog & Prompt Sandbox -->
+      <div class="column-right">
+        <!-- Prompt Sandbox -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>Live Prompt Sandbox</h2>
+            <span class="pill pill-green">Interactive Test</span>
+          </div>
+          <div class="sandbox-controls">
+            <div class="select-group">
+              <label for="modelSelect">Pilih Model:</label>
+              <select id="modelSelect" class="custom-select">
+                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
+                <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking)</option>
+                <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <textarea id="promptInput" rows="3" placeholder="Tulis instruksi atau pertanyaan untuk mengetes proxy antigravity..."></textarea>
+            </div>
+            <button id="sendBtn" class="btn btn-primary" onclick="testPrompt()">Kirim Uji Coba (Streaming SSE)</button>
+          </div>
+
+          <div class="output-container">
+            <div class="output-header">
+              <span>Streaming Response Output:</span>
+              <span id="latencyBadge" class="latency-badge"></span>
+            </div>
+            <pre id="outputArea" class="output-box">Respons dari Antigravity akan muncul di sini secara real-time...</pre>
+          </div>
+        </div>
+
+        <!-- Available Models Catalog -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>Katalog Model Tersedia</h2>
+            <span id="modelCountBadge" class="pill pill-purple">0 Model</span>
+          </div>
+          <div id="modelsGrid" class="models-grid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
