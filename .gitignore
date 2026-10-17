@@ -37,7 +37,11 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# Daemon runtime state
+# Daemon runtime state & Local Accounts (Credentials)
 .daemon.pid
 daemon.pid
 daemon.log
+accounts.json
+accounts*.json
+*.token
+*.key
