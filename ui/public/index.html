@@ -192,15 +192,8 @@
     <main class="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
 
 
-    <!-- Global Database Corruption Warning Banner -->
-    <div id="dbCorruptionAlert" class="corruption-alert-banner" style="display: none;">
-      <div class="alert-badge-tag">[CRITICAL ALERT]</div>
-      <div class="alert-content">
-        <strong id="alertTitle" class="text-sm font-semibold text-rose-200">Database Integrity Alert: Block Corrupted</strong>
-        <p id="alertMessage" class="text-xs text-rose-300 font-mono-code mt-0.5">CRC32 Checksum mismatch detected in compiled binary block.</p>
-      </div>
-      <button class="alert-dismiss-btn" onclick="dismissCorruptionAlert()">&times;</button>
-    </div>
+    <!-- Hidden compatibility anchor for legacy corruption alert references (wrapped in toast) -->
+    <div id="dbCorruptionAlert" class="hidden" aria-hidden="true"></div>
 
     <!-- TAB 1: 📊 DASHBOARD & TOKEN TELEMETRY -->
     <div id="tab-dashboard" class="tab-content flex flex-col gap-6">

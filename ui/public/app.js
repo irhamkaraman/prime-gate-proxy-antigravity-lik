@@ -30,7 +30,7 @@ function toggleSidebar(open) {
 /**
  * Modern In-App Toast Notification (replaces native alert)
  * @param {string} message - Message text
- * @param {'success'|'error'|'warning'|'info'} type - Toast aesthetic type
+ * @param {'success'|'error'|'warning'|'info'|'critical'} type - Toast aesthetic type
  * @param {string|null} title - Optional title override
  * @param {number} duration - Auto-dismiss timeout in ms (default 3800ms)
  */
@@ -39,13 +39,23 @@ function showToast(message, type = "info", title = null, duration = 3800) {
   if (!container) return;
 
   const toast = document.createElement("div");
-  const resolvedTitle = title || (type === "success" ? "Success" : type === "error" ? "Failed" : type === "warning" ? "Warning" : "Information");
+  const isCritical = type === "critical";
+  const resolvedTitle = title || (isCritical ? "Critical Alert" : type === "success" ? "Success" : type === "error" ? "Failed" : type === "warning" ? "Warning" : "Information");
 
   let iconSvg = "";
   let themeClasses = "";
   let titleColor = "";
 
-  if (type === "success") {
+  if (isCritical) {
+    themeClasses = "bg-[#2d0910]/95 border-rose-500/60 text-rose-50 shadow-2xl shadow-rose-950/60 ring-1 ring-rose-500/40";
+    titleColor = "text-rose-400";
+    iconSvg = `
+      <div class="relative flex items-center justify-center shrink-0 w-4 h-4 mt-0.5">
+        <span class="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-rose-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+      </div>
+    `;
+  } else if (type === "success") {
     themeClasses = "bg-[#092218]/95 border-[#10b981]/40 text-[#ecfdf5] shadow-[#10b981]/10";
     titleColor = "text-[#10b981]";
     iconSvg = `<svg class="w-4 h-4 text-[#10b981] shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
@@ -67,10 +77,13 @@ function showToast(message, type = "info", title = null, duration = 3800) {
   toast.innerHTML = `
     ${iconSvg}
     <div class="flex-1 min-w-0">
-      <div class="text-xs font-semibold ${titleColor} tracking-wide">${resolvedTitle}</div>
-      <div class="text-[11px] text-[#d6d3d1] mt-0.5 leading-relaxed break-words font-mono-code">${message}</div>
+      <div class="flex items-center gap-1.5 flex-wrap">
+        ${isCritical ? '<span class="text-[9px] font-mono-code font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/25 text-rose-300 border border-rose-500/40">[CRITICAL ALERT]</span>' : ''}
+        <span class="text-xs font-semibold ${titleColor} tracking-wide">${resolvedTitle}</span>
+      </div>
+      <div class="text-[11px] text-[#d6d3d1] mt-1 leading-relaxed break-words font-mono-code">${message}</div>
     </div>
-    <button class="text-[#a8a29e] hover:text-white transition p-0.5 rounded ml-1" onclick="this.parentElement.remove()" title="Close">
+    <button class="text-[#a8a29e] hover:text-white transition p-0.5 rounded ml-1 shrink-0" onclick="this.parentElement.remove()" title="Close">
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   `;
@@ -1061,19 +1074,20 @@ function clearLiveLogs() {
 }
 
 function showCorruptionAlert(title, message) {
-  const banner = document.getElementById("dbCorruptionAlert");
-  const titleEl = document.getElementById("alertTitle");
-  const msgEl = document.getElementById("alertMessage");
   const healthBadge = document.getElementById("sentinelHealthBadge");
-  if (!banner) return;
-
-  if (titleEl) titleEl.innerText = `🚨 Critical Database Alert: ${title}`;
-  if (msgEl) msgEl.innerText = message;
   if (healthBadge) {
     healthBadge.innerText = "CORRUPTED";
     healthBadge.className = "px-3 py-1 rounded-full text-xs font-mono-code font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50";
   }
-  banner.style.display = "flex";
+
+  // Wrap critical alert cleanly using the toast notification system
+  const cleanTitle = title || "Database Integrity Violation";
+  const cleanMessage = message || "CRC32 Checksum mismatch detected in compiled binary block.";
+  showToast(cleanMessage, "critical", cleanTitle, 8000);
+
+  // Maintain compatibility with any legacy banner elements
+  const banner = document.getElementById("dbCorruptionAlert");
+  if (banner) banner.style.display = "none";
 }
 
 function dismissCorruptionAlert() {
