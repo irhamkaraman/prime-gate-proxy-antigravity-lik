@@ -74,6 +74,15 @@ async def on_startup():
                 models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
                 quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
                 logger.info(f"[STARTUP SYNC] Successfully loaded {len(models)} live models and {len(quota)} quota buckets into binary DB for {email}.")
+                try:
+                    event_bus.broadcast_sync({
+                        "type": "MODELS_UPDATED",
+                        "account": email,
+                        "models_count": len(models),
+                        "tier": QuotaMonitor.get_tier_label(active_acc)
+                    })
+                except Exception:
+                    pass
             except Exception as e:
                 logger.warning(f"[STARTUP SYNC] Startup sync deferred (will use binary DB cached models): {e}")
 
@@ -334,6 +343,17 @@ async def api_models_refresh():
         return {"success": False, "error": "No active account configured", "message": "No active account configured"}
     models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
     quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
+
+    try:
+        event_bus.broadcast_sync({
+            "type": "MODELS_UPDATED",
+            "account": active_acc.get("email"),
+            "models_count": len(models),
+            "tier": QuotaMonitor.get_tier_label(active_acc)
+        })
+    except Exception:
+        pass
+
     return {
         "success": True,
         "message": "Live quota & models synced with Google Antigravity!",
@@ -358,6 +378,15 @@ async def api_auth_import():
             models_count = len(models)
             quota_count = len(quota)
             logger.info(f"Auto-synced {models_count} live models and {quota_count} quota buckets into binary DB on import.")
+            try:
+                event_bus.broadcast_sync({
+                    "type": "MODELS_UPDATED",
+                    "account": active_acc.get("email"),
+                    "models_count": models_count,
+                    "tier": QuotaMonitor.get_tier_label(active_acc)
+                })
+            except Exception:
+                pass
         except Exception as e:
             logger.warning(f"Initial sync on import deferred: {e}")
     return {
@@ -402,10 +431,19 @@ async def api_auth_login():
         except Exception:
             pass
 
-        # Immediately fetch live models and quota from Antigravity and save to binary database
         models = await QuotaMonitor.fetch_live_models_from_antigravity(new_account, force_refresh=True)
         quota = await QuotaMonitor.fetch_live_quota_from_antigravity(new_account, force_refresh=True)
         logger.info(f"First login: Successfully saved {len(models)} live models and {len(quota)} quota buckets into binary DB for {new_account.get('email')}.")
+
+        try:
+            event_bus.broadcast_sync({
+                "type": "MODELS_UPDATED",
+                "account": new_account.get("email"),
+                "models_count": len(models),
+                "tier": QuotaMonitor.get_tier_label(new_account)
+            })
+        except Exception:
+            pass
 
         return {
             "success": True,
@@ -486,6 +524,12 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
             "models_count": models_count,
             "quota_count": quota_count,
             "quota": quota
+        })
+        event_bus.broadcast_sync({
+            "type": "MODELS_UPDATED",
+            "account": switched.get("email"),
+            "models_count": models_count,
+            "tier": tier_label
         })
     except Exception:
         pass
@@ -890,13 +934,13 @@ async def chat_completions(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    model, req_payload = transform_openai_to_antigravity(body)
+    # Try active account first, then failover to others
+    active_acc = account_mgr.get_active_account()
+    model, req_payload = transform_openai_to_antigravity(body, account=active_acc)
     stream = bool(body.get("stream", False))
     completion_id = "chatcmpl-" + uuid.uuid4().hex
     created = int(time.time())
 
-    # Try active account first, then failover to others
-    active_acc = account_mgr.get_active_account()
     ordered_accounts = []
     if active_acc:
         ordered_accounts.append(active_acc)

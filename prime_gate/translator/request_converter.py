@@ -1,50 +1,167 @@
 import json
-from typing import Dict, Any, Tuple, List
+import logging
+from typing import Dict, Any, Tuple, List, Optional
 from ..config import SYSTEM_INSTRUCTION
+from ..db import db
 from .schema_cleaner import clean_schema_for_antigravity
 
-def resolve_model_name(raw_model: str) -> str:
-    """Normalize client model names to Antigravity internal identifiers."""
-    if not raw_model:
-        return "claude-sonnet-4-6"
-    m = raw_model.strip()
-    # Strip prefix like google/ or antigravity/
-    if "/" in m:
-        m = m.split("/", 1)[1]
-    m_lower = m.lower()
-    if "claude-3-7-sonnet" in m_lower or "claude-sonnet-4" in m_lower:
-        return "claude-sonnet-4-6"
-    if "claude-opus" in m_lower:
-        return "claude-opus-4-6-thinking"
-    if "gemini-3.8-flash-high" in m_lower:
-        return "gemini-3.8-flash-high"
-    if "gemini-3.8-flash-medium" in m_lower:
-        return "gemini-3.8-flash-medium"
-    if "gemini-3.8-flash-low" in m_lower:
-        return "gemini-3.8-flash-low"
-    if "gemini-3.8-flash-tiered" in m_lower:
-        return "gemini-3.8-flash-tiered"
-    if "gemini-3.8-flash" in m_lower:
-        return "gemini-3.8-flash-high"
-    if "gemini-3-flash" in m_lower:
-        return "gemini-3-flash"
-    if "gemini-3.1-flash-lite" in m_lower:
-        return "gemini-3.1-flash-lite"
-    if "gemini-3.5-flash-lite" in m_lower:
-        return "gemini-3.5-flash-lite"
-    if "gpt-oss" in m_lower:
-        return "gpt-oss-120b-medium"
-    # Fallback legacy 2.5 models to gemini-3-flash to avoid 503 capacity errors
-    if "gemini-2.5" in m_lower or "gemini-2" in m_lower:
-        return "gemini-3-flash"
-    return m
+logger = logging.getLogger("prime_gate.translator.request_converter")
 
-def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+def get_dynamic_models(account_email: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retrieve live model specifications directly from compiled binary database.
+    Prioritizes models registered for account_email, falling back to models:latest,
+    and finally in-memory QuotaMonitor cache.
+    """
+    try:
+        if account_email:
+            record = db.get(f"models:{account_email}")
+            if record and record.get("models"):
+                return record["models"]
+
+        latest = db.get("models:latest")
+        if latest and latest.get("models"):
+            return latest["models"]
+    except Exception as e:
+        logger.warning(f"Error querying binary DB for models: {e}")
+
+    try:
+        from ..quota.monitor import QuotaMonitor
+        return QuotaMonitor.get_available_models(None)
+    except Exception:
+        return []
+
+def resolve_model_info(raw_model: str, account_email: Optional[str] = None) -> Tuple[str, Dict[str, Any]]:
+    """
+    Dynamically resolve client-requested model identifiers against the binary DB model catalog.
+    Eliminates all hardcoded model mappings, ensuring forward compatibility with future models
+    and multi-tier model availability (Trial vs Paid).
+    """
+    if not raw_model:
+        m = ""
+    else:
+        m = raw_model.strip()
+        # Strip client namespace prefix (e.g. "primegate/", "google/", "antigravity/", "anthropic/", "openai/")
+        if "/" in m:
+            m = m.split("/", 1)[1]
+
+    models_catalog = get_dynamic_models(account_email)
+    id_map = {m_spec["id"].lower(): m_spec for m_spec in models_catalog}
+
+    def _return_spec(spec: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        # If model is an alias or has an underlying upstream variant (e.g. gemini-3.8-flash -> gemini-3.8-flash-high)
+        target = spec.get("upstream_model")
+        if not target and not spec["id"].endswith(("-high", "-medium", "-low", "-tiered", "-lite")):
+            # Check if upstream tiered variant exists in catalog
+            for suf in ["-high", "-medium"]:
+                cand = spec["id"] + suf
+                if cand.lower() in id_map:
+                    target = cand
+                    break
+        return target or spec["id"], spec
+
+    # If empty model requested, pick the top recommended or first model from catalog
+    if not m:
+        for spec in models_catalog:
+            if spec.get("recommended"):
+                return _return_spec(spec)
+        if models_catalog:
+            return _return_spec(models_catalog[0])
+        return "claude-sonnet-4-6", {"id": "claude-sonnet-4-6", "upstream_provider": "Anthropic", "supports_thinking": True}
+
+    m_lower = m.lower()
+
+    # 1. Exact canonical ID match (case-insensitive)
+    if m_lower in id_map:
+        return _return_spec(id_map[m_lower])
+
+    # 2. Display Name match (case-insensitive)
+    for spec in models_catalog:
+        name = str(spec.get("name", "")).lower()
+        if name and (m_lower == name or m_lower in name):
+            return _return_spec(spec)
+
+    # 3. Dynamic Family / Generic Alias Resolution based on DB state:
+    is_generic_sonnet = m_lower in ["sonnet", "claude-sonnet", "claude-3-7-sonnet", "claude-3.7-sonnet", "claude-3-5-sonnet", "claude-3.5-sonnet"]
+    is_generic_opus = m_lower in ["opus", "claude-opus", "claude-3-opus", "claude-3.5-opus"]
+    is_generic_flash = m_lower in ["flash", "gemini-flash", "google-flash"]
+    is_generic_oss = m_lower in ["oss", "gpt-oss", "gpt-oss-120b"]
+    is_legacy_gemini = m_lower.startswith("gemini-2.") or m_lower.startswith("gemini-2-") or m_lower in ["gemini-2", "gemini-2.0", "gemini-2.5"]
+
+    if is_generic_opus:
+        for spec in models_catalog:
+            if "opus" in spec["id"].lower():
+                return _return_spec(spec)
+    elif is_generic_sonnet:
+        for spec in models_catalog:
+            if "sonnet" in spec["id"].lower():
+                return _return_spec(spec)
+    elif is_generic_flash:
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower() and spec.get("recommended"):
+                return _return_spec(spec)
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower():
+                return _return_spec(spec)
+    elif m_lower in ["flash-high", "gemini-flash-high"]:
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower() and "-high" in spec["id"].lower():
+                return _return_spec(spec)
+    elif m_lower in ["flash-medium", "gemini-flash-medium"]:
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower() and "-medium" in spec["id"].lower():
+                return _return_spec(spec)
+    elif m_lower in ["flash-low", "gemini-flash-low"]:
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower() and "-low" in spec["id"].lower():
+                return _return_spec(spec)
+    elif is_generic_oss:
+        for spec in models_catalog:
+            if "oss" in spec["id"].lower():
+                return _return_spec(spec)
+    elif is_legacy_gemini:
+        # Safe fallback for obsolete/deprecated legacy models to avoid 400/503 capacity errors
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower() and spec.get("recommended"):
+                return _return_spec(spec)
+        for spec in models_catalog:
+            if "gemini" in spec["id"].lower():
+                return _return_spec(spec)
+
+    # 4. Forward compatibility: Unknown / brand new future model requested
+    prov = "Google"
+    if "claude" in m_lower:
+        prov = "Anthropic"
+    elif "gpt" in m_lower:
+        prov = "OpenAI"
+
+    has_thinking = bool("thinking" in m_lower or "opus" in m_lower or "-high" in m_lower or "flash" in m_lower)
+    synthetic_spec = {
+        "id": m,
+        "name": m,
+        "upstream_provider": prov,
+        "supports_thinking": has_thinking,
+        "thinking_budget": -1 if "-high" in m_lower else 0,
+        "thinking_level": "high" if "-high" in m_lower else "medium"
+    }
+    return m, synthetic_spec
+
+def resolve_model_name(raw_model: str, account_email: Optional[str] = None) -> str:
+    """Normalize client model names to Antigravity internal identifiers (backward compatible)."""
+    model_id, _ = resolve_model_info(raw_model, account_email)
+    return model_id
+
+def transform_openai_to_antigravity(
+    body: Dict[str, Any],
+    account: Optional[Dict[str, Any]] = None
+) -> Tuple[str, Dict[str, Any]]:
     """Transform standard OpenAI Chat Completion request dictionary into Antigravity internal format."""
-    model = resolve_model_name(body.get("model", ""))
-    is_claude = "claude" in model.lower()
-    is_claude_thinking = "opus" in model.lower() and "thinking" in model.lower()
-    is_gemini3 = "gemini-3" in model.lower()
+    account_email = account.get("email") if isinstance(account, dict) else None
+    model, model_spec = resolve_model_info(body.get("model", ""), account_email=account_email)
+
+    upstream_provider = str(model_spec.get("upstream_provider", "")).lower()
+    is_claude = upstream_provider == "anthropic" or "claude" in model.lower()
+    supports_thinking = bool(model_spec.get("supports_thinking", False))
 
     contents = []
     system_texts = []
@@ -228,32 +345,54 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
     if isinstance(thinking_param, dict):
         explicit_budget = thinking_param.get("budget_tokens") or thinking_param.get("budget")
 
-    if is_claude_thinking:
-        claude_budget = explicit_budget or 8192
-        if reasoning_effort == "low":
-            claude_budget = 2048
-        elif reasoning_effort == "high":
-            claude_budget = 16384
-        generation_config["thinkingConfig"] = {
-            "include_thoughts": True,
-            "thinking_budget": claude_budget
-        }
-    elif is_gemini3 or "flash" in model.lower():
-        gemini_level = "medium"
-        if reasoning_effort in ["low", "medium", "high"]:
-            gemini_level = reasoning_effort
-        elif "flash-high" in model.lower():
-            gemini_level = "high"
-        elif "flash-low" in model.lower():
-            gemini_level = "low"
+    # Dynamic reasoning & thinking configuration based on model specs from DB
+    if is_claude:
+        # Claude Extended Thinking should ONLY be enabled when explicitly requested by user/client
+        # or model has 'thinking' in its name (e.g. claude-opus-4-6-thinking)
+        claude_thinking_requested = (
+            explicit_budget is not None
+            or reasoning_effort in ["low", "medium", "high"]
+            or "thinking" in model.lower()
+        )
+        if claude_thinking_requested and supports_thinking:
+            claude_budget = explicit_budget or 8192
+            if reasoning_effort == "low":
+                claude_budget = 2048
+            elif reasoning_effort == "high":
+                claude_budget = 16384
+            elif model_spec.get("thinking_budget") and model_spec["thinking_budget"] > 0:
+                claude_budget = model_spec["thinking_budget"]
 
-        thinking_cfg: Dict[str, Any] = {
-            "includeThoughts": True,
-            "thinkingLevel": gemini_level
-        }
-        if explicit_budget is not None and isinstance(explicit_budget, int):
-            thinking_cfg["thinkingBudget"] = explicit_budget
-        generation_config["thinkingConfig"] = thinking_cfg
+            # Anthropic constraint: max_output_tokens must be greater than thinking_budget
+            current_max = generation_config.get("maxOutputTokens")
+            if current_max is not None and current_max <= claude_budget:
+                generation_config["maxOutputTokens"] = claude_budget + 1024
+
+            generation_config["thinkingConfig"] = {
+                "include_thoughts": True,
+                "thinking_budget": claude_budget
+            }
+    elif supports_thinking or reasoning_effort in ["low", "medium", "high"] or explicit_budget is not None or "thinking" in model.lower():
+            gemini_level = "medium"
+            if reasoning_effort in ["low", "medium", "high"]:
+                gemini_level = reasoning_effort
+            elif model_spec.get("thinking_level") in ["low", "medium", "high"]:
+                gemini_level = model_spec["thinking_level"]
+            elif "-high" in model.lower():
+                gemini_level = "high"
+            elif "-low" in model.lower():
+                gemini_level = "low"
+
+            thinking_cfg: Dict[str, Any] = {
+                "includeThoughts": True,
+                "thinkingLevel": gemini_level
+            }
+            if explicit_budget is not None and isinstance(explicit_budget, int):
+                thinking_cfg["thinkingBudget"] = explicit_budget
+            elif model_spec.get("thinking_budget") and model_spec["thinking_budget"] > 0:
+                thinking_cfg["thinkingBudget"] = model_spec["thinking_budget"]
+
+            generation_config["thinkingConfig"] = thinking_cfg
 
     req_payload: Dict[str, Any] = {
         "contents": contents,

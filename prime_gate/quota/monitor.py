@@ -33,7 +33,7 @@ FRIENDLY_NAMES = {
 def build_model_spec(mid: str, raw_m: Optional[Dict[str, Any]] = None, is_recommended: bool = False) -> Dict[str, Any]:
     """Builds a comprehensive, production-grade model specification dictionary from upstream data."""
     raw_m = raw_m or {}
-    disp_name = raw_m.get("displayName") or FRIENDLY_NAMES.get(mid) or mid
+    disp_name = raw_m.get("displayName") or raw_m.get("name") or FRIENDLY_NAMES.get(mid) or mid.replace("-", " ").title()
 
     # Provider detection
     model_prov = raw_m.get("modelProvider", "")
@@ -45,8 +45,8 @@ def build_model_spec(mid: str, raw_m: Optional[Dict[str, Any]] = None, is_recomm
         upstream_provider = "Google"
 
     # Thinking & Reasoning capabilities
-    supports_thinking = bool(raw_m.get("supportsThinking", True if ("thinking" in mid.lower() or "flash-high" in mid.lower() or "flash-medium" in mid.lower() or "claude" in mid.lower() or "gpt-oss" in mid.lower()) else False))
-    thinking_budget = raw_m.get("thinkingBudget", -1 if "flash-high" in mid.lower() else (4000 if "flash-medium" in mid.lower() else (1000 if "flash-low" in mid.lower() else 0)))
+    supports_thinking = bool(raw_m.get("supportsThinking", raw_m.get("supports_thinking", True if ("thinking" in mid.lower() or "-high" in mid.lower() or "-medium" in mid.lower() or "claude" in mid.lower() or "gpt" in mid.lower() or "flash" in mid.lower()) else False)))
+    thinking_budget = raw_m.get("thinkingBudget", raw_m.get("thinking_budget", -1 if "-high" in mid.lower() else (4000 if "-medium" in mid.lower() else (1000 if "-low" in mid.lower() else 0))))
 
     if supports_thinking:
         if thinking_budget == -1:
@@ -212,13 +212,17 @@ class QuotaMonitor:
                     clean_models: List[Dict[str, Any]] = []
                     seen = set()
 
-                    # Add general gemini-3.8-flash alias first if recommended
-                    if "gemini-3.8-flash-high" in candidate_ids or "gemini-3.8-flash-medium" in candidate_ids:
-                        source_m = models_dict.get("gemini-3.8-flash-high") or models_dict.get("gemini-3.8-flash-medium") or {}
-                        alias_spec = build_model_spec("gemini-3.8-flash", source_m, is_recommended=True)
-                        alias_spec["name"] = "Gemini 3.8 Flash (Recommended)"
-                        clean_models.append(alias_spec)
-                        seen.add("gemini-3.8-flash")
+                    # Dynamically add base aliases for tiered models (e.g. *-high or *-medium) if not explicitly present
+                    for mid in candidate_ids:
+                        for suffix in ["-high", "-medium"]:
+                            if mid.endswith(suffix):
+                                base_id = mid[:-len(suffix)]
+                                if base_id not in candidate_ids and base_id not in seen:
+                                    source_m = models_dict.get(mid, {})
+                                    alias_spec = build_model_spec(base_id, source_m, is_recommended=True)
+                                    alias_spec["name"] = f"{alias_spec.get('name', base_id)} (Recommended)"
+                                    clean_models.append(alias_spec)
+                                    seen.add(base_id)
 
                     for mid in candidate_ids:
                         if mid in seen:
