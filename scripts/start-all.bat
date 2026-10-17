@@ -10,11 +10,11 @@ python -m prime_gate.cli daemon start
 python -m prime_gate.cli quota
 
 echo.
-echo Membuka Web UI di browser...
+echo Opening Web UI in browser...
 start http://127.0.0.1:52110
 
 echo.
-echo Prime Gate aktif di background!
-echo Untuk mematikan, jalankan scripts\stop-all.bat atau prime-gate daemon stop
+echo Prime Gate is running in the background!
+echo To stop the service, run scripts\stop-all.bat or prime-gate daemon stop
 pause
 endlocal

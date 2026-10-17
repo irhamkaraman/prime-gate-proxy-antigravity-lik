@@ -39,7 +39,7 @@ function showToast(message, type = "info", title = null, duration = 3800) {
   if (!container) return;
 
   const toast = document.createElement("div");
-  const resolvedTitle = title || (type === "success" ? "Berhasil" : type === "error" ? "Gagal" : type === "warning" ? "Peringatan" : "Informasi");
+  const resolvedTitle = title || (type === "success" ? "Success" : type === "error" ? "Failed" : type === "warning" ? "Warning" : "Information");
 
   let iconSvg = "";
   let themeClasses = "";
@@ -70,7 +70,7 @@ function showToast(message, type = "info", title = null, duration = 3800) {
       <div class="text-xs font-semibold ${titleColor} tracking-wide">${resolvedTitle}</div>
       <div class="text-[11px] text-[#d6d3d1] mt-0.5 leading-relaxed break-words font-mono-code">${message}</div>
     </div>
-    <button class="text-[#a8a29e] hover:text-white transition p-0.5 rounded ml-1" onclick="this.parentElement.remove()" title="Tutup">
+    <button class="text-[#a8a29e] hover:text-white transition p-0.5 rounded ml-1" onclick="this.parentElement.remove()" title="Close">
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   `;
@@ -91,10 +91,10 @@ function showToast(message, type = "info", title = null, duration = 3800) {
  * @returns {Promise<boolean>}
  */
 function showConfirmModal({
-  title = "Konfirmasi Tindakan",
-  message = "Apakah Anda yakin ingin melanjutkan tindakan ini?",
-  confirmText = "Lanjutkan",
-  cancelText = "Batal",
+  title = "Confirm Action",
+  message = "Are you sure you want to proceed with this action?",
+  confirmText = "Continue",
+  cancelText = "Cancel",
   type = "danger"
 }) {
   return new Promise((resolve) => {
@@ -149,10 +149,10 @@ function showConfirmModal({
  * @returns {Promise<void>}
  */
 function showAlertModal({
-  title = "Informasi",
+  title = "Information",
   message = "",
   type = "info",
-  okText = "Tutup"
+  okText = "Close"
 }) {
   return new Promise((resolve) => {
     const modal = document.getElementById("alertModal");
@@ -488,7 +488,7 @@ async function removeActiveAccount() {
   const activeEl = document.getElementById("accActiveEmail");
   const email = activeEl ? activeEl.innerText.trim() : "";
   if (!email || email === "—" || email === "No account connected") {
-    showToast("Tidak ada akun aktif yang dapat dihapus.", "warning");
+    showToast("No active account available to remove.", "warning");
     return;
   }
   await removeAccount(email);
@@ -496,10 +496,10 @@ async function removeActiveAccount() {
 
 async function removeAccount(email) {
   const confirmed = await showConfirmModal({
-    title: "Hapus Akun Antigravity",
-    message: `Apakah Anda yakin ingin menghapus akun "${email}" dari Prime Gate secara permanen?`,
-    confirmText: "Hapus Akun",
-    cancelText: "Batal",
+    title: "Remove Antigravity Account",
+    message: `Are you sure you want to permanently remove account "${email}" from Prime Gate?`,
+    confirmText: "Remove Account",
+    cancelText: "Cancel",
     type: "danger"
   });
   if (!confirmed) return;
@@ -512,27 +512,27 @@ async function removeAccount(email) {
     });
     const data = await res.json();
     if (data.success) {
-      showToast(`Akun "${email}" berhasil dihapus dari database.`, "success");
-      appendSentinelLog("Accounts", `Akun dihapus dari database binary: ${email}`, "WARN");
+      showToast(`Account "${email}" removed from database successfully.`, "success");
+      appendSentinelLog("Accounts", `Account removed from binary database: ${email}`, "WARN");
       await fetchAccounts();
       await fetchStatus();
       if (data.total_accounts === 0) {
         openAuthModal(false);
       }
     } else {
-      showToast("Gagal menghapus akun: " + (data.error || "Unknown error"), "error");
+      showToast("Failed to remove account: " + (data.error || "Unknown error"), "error");
     }
   } catch (err) {
-    showToast("Gagal menghapus akun: " + err.message, "error");
+    showToast("Failed to remove account: " + err.message, "error");
   }
 }
 
 async function clearAllAccounts() {
   const confirmed = await showConfirmModal({
-    title: "Hapus Semua Akun",
-    message: "Apakah Anda yakin ingin menghapus SEMUA akun Google Antigravity dari Prime Gate? Ini akan mereset proxy ke status onboarding awal.",
-    confirmText: "Hapus Semua",
-    cancelText: "Batal",
+    title: "Remove All Accounts",
+    message: "Are you sure you want to remove ALL Google Antigravity accounts from Prime Gate? This will clear all stored credentials and quotas.",
+    confirmText: "Remove All",
+    cancelText: "Cancel",
     type: "danger"
   });
   if (!confirmed) return;
@@ -541,14 +541,14 @@ async function clearAllAccounts() {
     const res = await fetch("/api/auth/clear", { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast("Semua akun berhasil dibersihkan dari database terkompilasi.", "success");
-      appendSentinelLog("Accounts", "Semua akun dibersihkan dari database binary.", "WARN");
+      showToast("All accounts successfully cleared from compiled database.", "success");
+      appendSentinelLog("Accounts", "All accounts cleared from binary database.", "WARN");
       await fetchAccounts();
       await fetchStatus();
       openAuthModal(false);
     }
   } catch (err) {
-    showToast("Gagal membersihkan akun: " + err.message, "error");
+    showToast("Failed to clear accounts: " + err.message, "error");
   }
 }
 
@@ -625,18 +625,18 @@ async function triggerGoogleLogin() {
       try {
         const popup = window.open(authUrl, "_blank");
         if (!popup || popup.closed || typeof popup.closed === "undefined") {
-          notice.innerText = "⚠️ Popup browser diblokir. Klik tombol link manual di bawah:";
+          notice.innerText = "⚠️ Browser popup blocked. Please click the manual link button below:";
           notice.style.color = "#f59e0b";
         } else {
-          notice.innerText = "🚀 Tab login Google telah dibuka! Silakan setujui di tab tersebut...";
+          notice.innerText = "🚀 Google login tab opened! Please authorize in your browser...";
           notice.style.color = "#38bdf8";
         }
       } catch (err) {
-        notice.innerText = "Silakan klik 'Buka Halaman Login Google' di bawah:";
+        notice.innerText = "Please click 'Open Google Login Page' below:";
         notice.style.color = "#f59e0b";
       }
     } else {
-      notice.innerText = "Menunggu callback otentikasi browser...";
+      notice.innerText = "Waiting for browser authentication callback...";
       notice.style.color = "#f59e0b";
     }
 
@@ -645,7 +645,7 @@ async function triggerGoogleLogin() {
     const data = await res.json();
 
     if (data.success) {
-      notice.innerText = `✓ Login Berhasil sebagai ${data.account}! Menyimpan ke database binary...`;
+      notice.innerText = `✓ Login successful as ${data.account}! Saving to binary database...`;
       notice.style.color = "#10b981";
       appendSentinelLog("Auth", `Google account successfully added: ${data.account}`, "INFO");
       setTimeout(async () => {
@@ -655,7 +655,7 @@ async function triggerGoogleLogin() {
         await loadModelsList();
       }, 1200);
     } else {
-      const errMsg = extractErrorMessage(data, "Gagal menyelesaikan Google OAuth");
+      const errMsg = extractErrorMessage(data, "Failed to complete Google OAuth");
       notice.innerText = `Login failed: ${errMsg}`;
       notice.style.color = "#f43f5e";
     }
@@ -739,18 +739,18 @@ function setSamplePrompt(promptText) {
 
 async function syncModelsFromAntigravity() {
   try {
-    showToast("Menghubungkan ke Google Antigravity untuk sinkronisasi model...", "info");
+    showToast("Connecting to Google Antigravity to sync live models...", "info");
     const res = await fetch("/api/models/refresh", { method: "POST" });
     const data = await res.json();
     if (data.success) {
       renderModels(data.models || []);
       renderQuotaBars(data.quota || []);
-      showToast(`✓ Berhasil memuat ${data.models_count} model aktif langsung dari Antigravity!`, "success");
+      showToast(`✓ Successfully loaded ${data.models_count} live models directly from Antigravity!`, "success");
     } else {
-      showToast("Sinkronisasi model gagal: " + (data.error || "Unknown error"), "error");
+      showToast("Model synchronization failed: " + (data.error || "Unknown error"), "error");
     }
   } catch (err) {
-    showToast("Gagal request sinkronisasi: " + err.message, "error");
+    showToast("Synchronization request failed: " + err.message, "error");
   }
 }
 
@@ -765,7 +765,7 @@ async function testPrompt() {
   const prompt = promptInput ? promptInput.value.trim() : "";
 
   if (!prompt) {
-    showToast("Harap masukkan prompt instruksi atau pilih contoh prompt di atas.", "warning");
+    showToast("Please enter an instruction prompt or select an example above.", "warning");
     return;
   }
 
@@ -1051,32 +1051,32 @@ async function auditDatabase() {
       appendSentinelLog("Sentinel", `Audit passed: ${data.records_scanned} records verified, zero corruptions.`, "INFO");
       dismissCorruptionAlert();
       fetchDBStatus();
-      showToast(`✓ Audit selesai: ${data.records_scanned} blok 100% HEALTHY!`, "success");
+      showToast(`✓ Audit completed: ${data.records_scanned} blocks 100% HEALTHY!`, "success");
       showAlertModal({
-        title: "✓ Hasil Audit Database",
-        message: `Status: 100% HEALTHY\nBlok Terverifikasi: ${data.records_scanned} records\nIntegritas CRC32: Valid & Sinkron\nEngine: Compiled C (SQLite WAL Mode)`,
+        title: "✓ Database Audit Report",
+        message: `Status: 100% HEALTHY\nVerified Records: ${data.records_scanned} blocks\nCRC32 Checksums: Valid & Synchronized\nEngine: Compiled C (SQLite WAL Mode)`,
         type: "success"
       });
     } else {
       showCorruptionAlert("Corruption Detected in Audit", JSON.stringify(data.corruptions));
-      showToast(`🚨 Audit gagal: ${data.corruptions_count} blok terdeteksi korup!`, "error");
+      showToast(`🚨 Audit failed: ${data.corruptions_count} block(s) detected as corrupted!`, "error");
       showAlertModal({
-        title: "🚨 Database Audit Gagal!",
-        message: `Ditemukan ${data.corruptions_count} blok korup pada database!\n\nDetail:\n${JSON.stringify(data.corruptions, null, 2)}`,
+        title: "🚨 Database Audit Failed!",
+        message: `Found ${data.corruptions_count} corrupted block(s) in database!\n\nDetails:\n${JSON.stringify(data.corruptions, null, 2)}`,
         type: "error"
       });
     }
   } catch (err) {
-    showToast("Gagal melakukan audit: " + err.message, "error");
+    showToast("Failed to execute database audit: " + err.message, "error");
   }
 }
 
 async function testDatabaseCorruption() {
   const confirmed = await showConfirmModal({
-    title: "Simulasi Kerusakan Bit Database",
-    message: "Injeksi bit korup ke blok database terkompilasi untuk menguji sistem deteksi sentinel dan broadcast alert real-time?",
-    confirmText: "Injeksi Simulasi",
-    cancelText: "Batal",
+    title: "Simulate Binary Database Corruption",
+    message: "Inject simulated bit corruption into a compiled database block to test the Sentinel Watchdog detection and real-time alerts?",
+    confirmText: "Inject Simulation",
+    cancelText: "Cancel",
     type: "warning"
   });
   if (!confirmed) return;
@@ -1090,9 +1090,9 @@ async function testDatabaseCorruption() {
     });
     const data = await res.json();
     appendSentinelLog("Simulator", data.message, "WARN");
-    showToast("Simulasi bit korup berhasil diinjeksikan!", "warning");
+    showToast("Simulated bit corruption injected successfully!", "warning");
   } catch (err) {
-    showToast("Gagal memicu simulasi: " + err.message, "error");
+    showToast("Failed to trigger simulation: " + err.message, "error");
   }
 }
 
@@ -1100,7 +1100,7 @@ function copyEndpoint() {
   const codeEl = document.getElementById("dashEndpointCode");
   const code = codeEl ? codeEl.innerText.trim() : "http://127.0.0.1:52111/v1";
   navigator.clipboard.writeText(code).then(() => {
-    showToast("Endpoint gateway berhasil disalin ke clipboard: " + code, "success");
+    showToast("Gateway endpoint copied to clipboard: " + code, "success");
   });
 }
 

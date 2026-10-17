@@ -117,7 +117,7 @@ def stop_daemon() -> Dict[str, Any]:
                 PID_FILE.unlink()
             except Exception:
                 pass
-        return {"success": True, "message": "Tidak ada daemon aktif yang berjalan."}
+        return {"success": True, "message": "No active daemon process running."}
 
     pids_to_kill = [status.get("pid"), status.get("ui_pid")]
     killed = []

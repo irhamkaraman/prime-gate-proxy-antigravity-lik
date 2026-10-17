@@ -92,7 +92,7 @@ def quota(
     import asyncio
     active_acc = account_mgr.get_active_account()
     if not active_acc:
-        console.print("[bold red]Belum ada akun terdaftar! Jalankan 'prime-gate auth import' atau 'prime-gate auth login'.[/bold red]")
+        console.print("[bold red]No accounts configured! Run 'prime-gate auth import' or 'prime-gate auth login'.[/bold red]")
         return
 
     tier_label = QuotaMonitor.get_tier_label(active_acc)
@@ -105,7 +105,7 @@ def quota(
 
     table = Table(title=f"Quota Status - {active_acc.get('email')} ({tier_label})", border_style="cyan")
     table.add_column("Model Family", style="bold white")
-    table.add_column("Sisa Quota", justify="right")
+    table.add_column("Remaining Quota", justify="right")
     table.add_column("Progress Bar", justify="left")
     table.add_column("Reset Time", style="dim")
 
@@ -123,7 +123,7 @@ def quota(
 
     console.print(table)
 
-    model_table = Table(title=f"Model Catalog Aktif ({len(models)} Model Terkini)", border_style="magenta")
+    model_table = Table(title=f"Active Model Catalog ({len(models)} Models)", border_style="magenta")
     model_table.add_column("Model ID", style="bold green")
     model_table.add_column("Display Name", style="white")
     model_table.add_column("Provider", style="dim")
@@ -142,17 +142,17 @@ def check_models(
     import asyncio
     active_acc = account_mgr.get_active_account()
     if not active_acc:
-        console.print("[bold red]Belum ada akun terdaftar! Jalankan 'prime-gate auth login' atau 'prime-gate auth import'.[/bold red]")
+        console.print("[bold red]No accounts configured! Run 'prime-gate auth login' or 'prime-gate auth import'.[/bold red]")
         return
 
-    console.print(f"[bold cyan]Menghubungi Google Antigravity untuk akun {active_acc.get('email')}...[/bold cyan]")
+    console.print(f"[bold cyan]Connecting to Google Antigravity for account {active_acc.get('email')}...[/bold cyan]")
     try:
         models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh))
     except Exception as e:
-        console.print(f"[bold red]Gagal mengambil model live: {e}[/bold red]")
+        console.print(f"[bold red]Failed to fetch live models: {e}[/bold red]")
         models = QuotaMonitor.get_available_models(active_acc)
 
-    table = Table(title=f"Live Models Catalog - Google Antigravity ({len(models)} Models Terkini)", border_style="green")
+    table = Table(title=f"Live Models Catalog - Google Antigravity ({len(models)} Models)", border_style="green")
     table.add_column("Model ID (OpenAI Endpoint)", style="bold green")
     table.add_column("Display Name", style="white")
     table.add_column("Provider", style="dim")
@@ -161,21 +161,21 @@ def check_models(
         table.add_row(m["id"], m.get("name", m["id"]), m.get("owned_by", "google-antigravity"))
 
     console.print(table)
-    console.print("[dim][OK] Model ini aktif dan siap dipanggil via base URL: http://127.0.0.1:52111/v1[/dim]")
+    console.print("[dim][OK] Models are active and ready to use via base URL: http://127.0.0.1:52111/v1[/dim]")
 
 @auth_app.command("list")
 def auth_list():
     """List all configured Google Antigravity accounts."""
     accounts = account_mgr.load_accounts()
     if not accounts:
-        console.print("[yellow]Tidak ada akun yang tersimpan.[/yellow]")
+        console.print("[yellow]No accounts configured.[/yellow]")
         return
 
-    table = Table(title=f"Akun Antigravity Terdaftar ({len(accounts)} akun)", border_style="green")
+    table = Table(title=f"Registered Antigravity Accounts ({len(accounts)} accounts)", border_style="green")
     table.add_column("No", justify="right")
     table.add_column("Email", style="bold white")
     table.add_column("Project ID", style="dim")
-    table.add_column("Tier Terdeteksi", style="cyan")
+    table.add_column("Detected Tier", style="cyan")
 
     for idx, acc in enumerate(accounts, 1):
         tier = QuotaMonitor.get_tier_label(acc)
@@ -188,7 +188,7 @@ def auth_import():
     """Import existing accounts from OpenCode config into local config and auto-sync binary DB."""
     count = account_mgr.import_from_opencode()
     if count > 0:
-        console.print(f"[bold green]Berhasil mengimpor {count} akun dari OpenCode![/bold green]")
+        console.print(f"[bold green]Successfully imported {count} account(s) from OpenCode![/bold green]")
         active_acc = account_mgr.get_active_account()
         if active_acc:
             import asyncio
@@ -200,7 +200,7 @@ def auth_import():
             except Exception as e:
                 console.print(f"[yellow]Initial sync deferred: {e}[/yellow]")
     else:
-        console.print("[yellow]Tidak menemukan akun OpenCode atau impor gagal.[/yellow]")
+        console.print("[yellow]No OpenCode accounts found or import failed.[/yellow]")
 
 @auth_app.command("login")
 def auth_login(port: int = 53123):
@@ -212,18 +212,18 @@ def auth_login(port: int = 53123):
         accounts = [a for a in accounts if a.get("email") != new_account["email"]]
         accounts.append(new_account)
         account_mgr.save_accounts(accounts)
-        console.print(f"[bold green]Login berhasil untuk akun: {new_account['email']}[/bold green]")
+        console.print(f"[bold green]Login successful for account: {new_account['email']}[/bold green]")
 
         import asyncio
-        console.print(f"[dim]Sinkronisasi live models & quota ke database binary untuk {new_account.get('email')}...[/dim]")
+        console.print(f"[dim]Syncing live models & quota into binary database for {new_account.get('email')}...[/dim]")
         try:
             models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(new_account, force_refresh=True))
             quota = asyncio.run(QuotaMonitor.fetch_live_quota_from_antigravity(new_account, force_refresh=True))
-            console.print(f"[bold green][OK] Berhasil menyimpan {len(models)} model aktif & kuota ke database terkompilasi.[/bold green]")
+            console.print(f"[bold green][OK] Successfully saved {len(models)} active models & quota into compiled database.[/bold green]")
         except Exception as e:
-            console.print(f"[yellow]Sinkronisasi database live ditunda: {e}[/yellow]")
+            console.print(f"[yellow]Live database sync deferred: {e}[/yellow]")
     except Exception as e:
-        console.print(f"[bold red]Login gagal: {e}[/bold red]")
+        console.print(f"[bold red]Login failed: {e}[/bold red]")
 
 @auth_app.command("remove")
 @auth_app.command("delete")
@@ -238,53 +238,53 @@ def auth_remove(
 
     if delete_all:
         if not force:
-            confirm = typer.confirm("Yakin ingin menghapus SEMUA akun Antigravity dari Prime Gate?")
+            confirm = typer.confirm("Are you sure you want to remove ALL Antigravity accounts from Prime Gate?")
             if not confirm:
-                console.print("[yellow]Operasi dibatalkan.[/yellow]")
+                console.print("[yellow]Operation cancelled.[/yellow]")
                 return
         if account_mgr.clear_accounts():
-            console.print("[bold green][OK] Semua akun Antigravity berhasil dihapus dari Prime Gate.[/bold green]")
-            console.print("[dim]Prime Gate sekarang kembali ke status onboarding awal.[/dim]")
+            console.print("[bold green][OK] All Antigravity accounts successfully removed from Prime Gate.[/bold green]")
+            console.print("[dim]Prime Gate is now reset to initial onboarding state.[/dim]")
         else:
-            console.print("[bold red]Gagal membersihkan akun.[/bold red]")
+            console.print("[bold red]Failed to clear accounts.[/bold red]")
         return
 
     accounts = account_mgr.load_accounts()
     if not accounts:
-        console.print("[yellow]Tidak ada akun yang tersimpan di Prime Gate.[/yellow]")
+        console.print("[yellow]No accounts configured in Prime Gate.[/yellow]")
         return
 
     if not target_email:
-        console.print("[bold cyan]Pilih akun yang ingin dihapus:[/bold cyan]")
+        console.print("[bold cyan]Select the account to remove:[/bold cyan]")
         for idx, acc in enumerate(accounts, 1):
             console.print(f"  [bold white]{idx}.[/bold white] {acc.get('email')} [dim]({acc.get('projectId', 'default')})[/dim]")
-        choice = typer.prompt("Masukkan nomor akun yang ingin dihapus (atau 'q' untuk batal)")
+        choice = typer.prompt("Enter the account number to remove (or 'q' to cancel)")
         if choice.strip().lower() == 'q':
-            console.print("[yellow]Operasi dibatalkan.[/yellow]")
+            console.print("[yellow]Operation cancelled.[/yellow]")
             return
         try:
             sel_idx = int(choice.strip()) - 1
             if 0 <= sel_idx < len(accounts):
                 target_email = accounts[sel_idx].get("email")
             else:
-                console.print("[bold red]Pilihan nomor tidak valid.[/bold red]")
+                console.print("[bold red]Invalid number selected.[/bold red]")
                 return
         except ValueError:
-            console.print("[bold red]Input harus berupa angka.[/bold red]")
+            console.print("[bold red]Input must be a valid number.[/bold red]")
             return
 
     if not force:
-        confirm = typer.confirm(f"Yakin ingin menghapus akun '{target_email}' dari Prime Gate?")
+        confirm = typer.confirm(f"Are you sure you want to remove account '{target_email}' from Prime Gate?")
         if not confirm:
-            console.print("[yellow]Operasi dibatalkan.[/yellow]")
+            console.print("[yellow]Operation cancelled.[/yellow]")
             return
 
     if account_mgr.remove_account(target_email):
-        console.print(f"[bold green][OK] Berhasil menghapus akun {target_email} dari Prime Gate.[/bold green]")
+        console.print(f"[bold green][OK] Successfully removed account {target_email} from Prime Gate.[/bold green]")
         remaining = account_mgr.load_accounts()
-        console.print(f"[dim]Sisa akun terdaftar: {len(remaining)} akun.[/dim]")
+        console.print(f"[dim]Remaining registered accounts: {len(remaining)}.[/dim]")
     else:
-        console.print(f"[bold yellow]Akun {target_email} tidak ditemukan di Prime Gate.[/bold yellow]")
+        console.print(f"[bold yellow]Account {target_email} not found in Prime Gate.[/bold yellow]")
 
 @auth_app.command("clear")
 def auth_clear(
@@ -292,16 +292,16 @@ def auth_clear(
 ):
     """Remove ALL configured Google Antigravity accounts from Prime Gate."""
     if not yes:
-        confirm = typer.confirm("Yakin ingin menghapus semua akun Antigravity dari Prime Gate?")
+        confirm = typer.confirm("Are you sure you want to remove all Antigravity accounts from Prime Gate?")
         if not confirm:
-            console.print("[yellow]Operasi dibatalkan.[/yellow]")
+            console.print("[yellow]Operation cancelled.[/yellow]")
             return
 
     if account_mgr.clear_accounts():
-        console.print("[bold green][OK] Semua akun Antigravity berhasil dihapus dari Prime Gate.[/bold green]")
-        console.print("[dim]Prime Gate sekarang kembali ke status onboarding awal.[/dim]")
+        console.print("[bold green][OK] All Antigravity accounts successfully removed from Prime Gate.[/bold green]")
+        console.print("[dim]Prime Gate is now reset to initial onboarding state.[/dim]")
     else:
-        console.print("[bold red]Gagal membersihkan akun.[/bold red]")
+        console.print("[bold red]Failed to clear accounts.[/bold red]")
 
 
 @daemon_app.command("start")
@@ -314,7 +314,7 @@ def daemon_start(
     if res.get("success"):
         st = res["state"]
         console.print(Panel(
-            f"[bold green]Daemon Berhasil Dijalankan di Background![/bold green]\n"
+            f"[bold green]Daemon Successfully Started in Background![/bold green]\n"
             f"API Port: [bold cyan]http://127.0.0.1:{st['api_port']}/v1[/bold cyan] (PID: {st['pid']})\n"
             f"Web UI Port: [bold cyan]http://127.0.0.1:{st['ui_port']}[/bold cyan] (PID: {st['ui_pid']})",
             title="Daemon Started",
@@ -328,9 +328,9 @@ def daemon_stop():
     """Stop the running background daemon processes."""
     res = stop_daemon()
     if res.get("success"):
-        console.print("[bold green]Semua background daemon proxy berhasil dihentikan.[/bold green]")
+        console.print("[bold green]All background proxy daemons successfully stopped.[/bold green]")
     else:
-        console.print(f"[bold red]Gagal menghentikan daemon: {res}[/bold red]")
+        console.print(f"[bold red]Failed to stop daemon: {res}[/bold red]")
 
 @daemon_app.command("status")
 def daemon_status():
@@ -346,7 +346,7 @@ def daemon_status():
             border_style="green"
         ))
     else:
-        console.print("[bold yellow]Status: STOPPED (Tidak ada daemon aktif)[/bold yellow]")
+        console.print("[bold yellow]Status: STOPPED (No active daemon)[/bold yellow]")
 
 # -------------------------------------------------------------
 # Compiled Binary Database Management & Sentinel Commands

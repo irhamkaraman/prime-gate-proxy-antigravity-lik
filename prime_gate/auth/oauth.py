@@ -92,11 +92,11 @@ def start_interactive_login(port: int = 53123) -> Dict[str, Any]:
                 self.wfile.write(b"""
                 <!DOCTYPE html>
                 <html>
-                <head><title>Login Sukses - Prime Gate Antigravity</title></head>
+                <head><title>Login Successful - Prime Gate Antigravity</title></head>
                 <body style="font-family: sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding-top: 100px;">
-                    <h1 style="color: #38bdf8; font-size: 28px; margin-bottom: 8px;">Login Berhasil, Bosss! \xf0\x9f\x9a\x80</h1>
-                    <p style="font-size: 16px; color: #94a3b8;">Otentikasi Google Antigravity sukses ditangkap oleh Prime Gate.</p>
-                    <p style="font-size: 14px; color: #64748b;">Anda bisa menutup tab ini dan kembali ke aplikasi.</p>
+                    <h1 style="color: #38bdf8; font-size: 28px; margin-bottom: 8px;">Login Successful! \xf0\x9f\x9a\x80</h1>
+                    <p style="font-size: 16px; color: #94a3b8;">Google Antigravity authentication captured successfully by Prime Gate.</p>
+                    <p style="font-size: 14px; color: #64748b;">You may now close this tab and return to the application.</p>
                 </body>
                 </html>
                 """)
@@ -106,13 +106,13 @@ def start_interactive_login(port: int = 53123) -> Dict[str, Any]:
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
                 err_msg = query['error'][0]
-                self.wfile.write(f"<h1>Login Dibatalkan</h1><p>Error: {err_msg}</p>".encode("utf-8"))
+                self.wfile.write(f"<h1>Login Cancelled</h1><p>Error: {err_msg}</p>".encode("utf-8"))
             else:
                 # Browser connected without code/error (pre-connection or manual visit)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.end_headers()
-                self.wfile.write(b"<h1>Prime Gate OAuth Listener Active</h1><p>Menunggu respon otentikasi Google...</p>")
+                self.wfile.write(b"<h1>Prime Gate OAuth Listener Active</h1><p>Waiting for Google authentication response...</p>")
 
         def log_message(self, format, *args):
             pass  # Silence default HTTP server console noise
@@ -126,8 +126,8 @@ def start_interactive_login(port: int = 53123) -> Dict[str, Any]:
     redirect_uri = f"http://127.0.0.1:{port}"
     auth_url = get_auth_url(port=port)
 
-    print(f"\n[Auth] Membuka browser untuk login Google Antigravity...")
-    print(f"[Auth] Jika browser tidak terbuka otomatis, salin URL ini ke browser:\n{auth_url}\n")
+    print(f"\n[Auth] Opening browser for Google Antigravity authentication...")
+    print(f"[Auth] If the browser does not open automatically, copy this URL to your browser:\n{auth_url}\n")
     try:
         webbrowser.open(auth_url)
     except Exception as e:

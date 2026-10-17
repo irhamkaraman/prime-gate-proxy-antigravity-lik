@@ -45,15 +45,15 @@
         <div id="authFallbackContainer" class="p-3 bg-[#13110e] border border-[#d97706]/30 rounded-lg hidden flex-col gap-2 text-xs">
           <div class="text-[#f59e0b] font-medium flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-[#f59e0b] animate-ping"></span>
-            Tab login dibuka di browser Anda...
+            Opening Google login tab in your browser...
           </div>
-          <p class="text-[11px] text-[#a8a29e]">Jika tab browser tidak muncul otomatis, silakan buka manual:</p>
+          <p class="text-[11px] text-[#a8a29e]">If browser tab does not open automatically, open it manually:</p>
           <div class="flex items-center gap-2">
             <a id="authDirectLink" href="#" target="_blank" class="flex-1 py-1.5 px-3 bg-[#d97706]/20 hover:bg-[#d97706]/30 text-[#f59e0b] border border-[#d97706]/40 rounded text-center font-mono-code text-[11px] transition">
-              ↗ Buka Halaman Login Google
+              ↗ Open Google Login Page
             </a>
             <button id="copyAuthBtn" onclick="copyAuthLink()" class="py-1.5 px-3 bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 rounded font-mono-code text-[11px] transition">
-              📋 Salin URL
+              📋 Copy URL
             </button>
           </div>
         </div>
@@ -264,11 +264,11 @@
         </div>
       </div>
 
-      <!-- Main Grafik Batang / Bar Chart Section -->
+      <!-- Main Bar Chart Section -->
       <div class="anthropic-card">
         <div class="flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-[#a8a29e]/10">
           <div>
-            <h3 class="font-serif-title text-lg font-semibold text-white">Token Output Breakdown (Grafik Batang)</h3>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Token Output Breakdown</h3>
             <span class="text-xs text-[#a8a29e]">Interactive token volume segmented into Prompt, Completion, and Reasoning (Thinking)</span>
           </div>
           <div class="flex items-center gap-4 text-xs font-mono-code">
@@ -1021,14 +1021,14 @@ print(response.choices[0].message.content)</pre>
       <div id="confirmModalIcon" class="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mb-3">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
       </div>
-      <h3 id="confirmModalTitle" class="font-serif-title text-lg font-bold text-white mb-2">Konfirmasi Tindakan</h3>
+      <h3 id="confirmModalTitle" class="font-serif-title text-lg font-bold text-white mb-2">Confirm Action</h3>
       <p id="confirmModalMessage" class="text-xs text-[#a8a29e] leading-relaxed mb-6"></p>
       <div class="flex items-center justify-end gap-2.5">
         <button id="confirmModalCancelBtn" class="py-2 px-3.5 rounded-lg bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 text-xs font-medium transition">
-          Batal
+          Cancel
         </button>
         <button id="confirmModalOkBtn" class="py-2 px-4 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow transition">
-          Lanjutkan
+          Continue
         </button>
       </div>
     </div>
@@ -1040,11 +1040,11 @@ print(response.choices[0].message.content)</pre>
       <div id="alertModalIcon" class="w-10 h-10 rounded-full bg-[#d97706]/20 text-[#f59e0b] flex items-center justify-center mb-3">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       </div>
-      <h3 id="alertModalTitle" class="font-serif-title text-lg font-bold text-white mb-2">Informasi</h3>
+      <h3 id="alertModalTitle" class="font-serif-title text-lg font-bold text-white mb-2">Information</h3>
       <div id="alertModalMessage" class="text-xs text-[#d6d3d1] leading-relaxed mb-5 font-mono-code whitespace-pre-line bg-[#0f0d0b] p-3 rounded-lg border border-[#a8a29e]/10 max-h-60 overflow-y-auto"></div>
       <div class="flex items-center justify-end">
         <button id="alertModalOkBtn" class="py-2 px-5 rounded-lg bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-semibold shadow transition">
-          Tutup
+          Close
         </button>
       </div>
     </div>
