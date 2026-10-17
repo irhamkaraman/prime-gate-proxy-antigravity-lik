@@ -41,7 +41,11 @@ def resolve_accounts_file() -> Path:
         return GLOBAL_OPENCODE_ACCOUNTS
     return LOCAL_ACCOUNTS_FILE
 
-# Model Definitions by Tier
+# Model Definitions by Tier (Bootstrap & Offline Fallback Catalog)
+# Prime Gate dynamically resolves and auto-syncs live models directly from the user's
+# Google Antigravity account upon first login, daemon startup, or manual refresh,
+# persisting them into the compiled binary database (data/prime_gate.pgdb).
+# The catalog below serves as a zero-network bootstrap fallback.
 MODELS_CATALOG = {
     "google-ai-pro-trial": [
         {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Thinking)", "owned_by": "google-antigravity"},

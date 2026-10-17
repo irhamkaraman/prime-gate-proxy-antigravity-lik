@@ -62,6 +62,22 @@ async def on_startup():
     await sentinel.start()
     logger.info("Prime Gate Engine active with Compiled Binary Database (WAL Mode + CRC32 Sentinel)")
 
+    # Auto-load models & verify quota on daemon startup if user is logged in
+    active_acc = account_mgr.get_active_account()
+    if active_acc:
+        email = active_acc.get("email")
+        logger.info(f"Active account detected ({email}). Auto-syncing live Antigravity models and quota on daemon start...")
+
+        async def _startup_sync():
+            try:
+                models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
+                quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
+                logger.info(f"[STARTUP SYNC] Successfully loaded {len(models)} live models and {len(quota)} quota buckets into binary DB for {email}.")
+            except Exception as e:
+                logger.warning(f"[STARTUP SYNC] Startup sync deferred (will use binary DB cached models): {e}")
+
+        asyncio.create_task(_startup_sync())
+
 @app.on_event("shutdown")
 async def on_shutdown():
     await sentinel.stop()
@@ -158,20 +174,33 @@ async def api_models_refresh():
 
 @app.post("/api/auth/import")
 async def api_auth_import():
-    """Import accounts from local OpenCode configuration."""
+    """Import accounts from local OpenCode configuration and auto-sync live models & quota."""
     count = account_mgr.import_from_opencode()
     accounts = account_mgr.load_accounts()
     active_acc = account_mgr.get_active_account()
+    models_count = 0
+    quota_count = 0
+    if active_acc:
+        try:
+            models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
+            quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
+            models_count = len(models)
+            quota_count = len(quota)
+            logger.info(f"Auto-synced {models_count} live models and {quota_count} quota buckets into binary DB on import.")
+        except Exception as e:
+            logger.warning(f"Initial sync on import deferred: {e}")
     return {
         "success": count > 0,
         "imported": count,
+        "models_count": models_count,
+        "quota_count": quota_count,
         "total_accounts": len(accounts),
         "active_account": active_acc.get("email") if active_acc else None
     }
 
 @app.post("/api/auth/login")
 async def api_auth_login():
-    """Trigger interactive Google OAuth PKCE login via browser."""
+    """Trigger interactive Google OAuth PKCE login via browser, and auto-sync live models & quota."""
     import asyncio
     from .auth import start_interactive_login
     try:
@@ -180,7 +209,18 @@ async def api_auth_login():
         accounts = [a for a in accounts if a.get("email") != new_account["email"]]
         accounts.append(new_account)
         account_mgr.save_accounts(accounts)
-        return {"success": True, "account": new_account.get("email")}
+
+        # Immediately fetch live models and quota from Antigravity and save to binary database
+        models = await QuotaMonitor.fetch_live_models_from_antigravity(new_account, force_refresh=True)
+        quota = await QuotaMonitor.fetch_live_quota_from_antigravity(new_account, force_refresh=True)
+        logger.info(f"First login: Successfully saved {len(models)} live models and {len(quota)} quota buckets into binary DB for {new_account.get('email')}.")
+
+        return {
+            "success": True,
+            "account": new_account.get("email"),
+            "models_count": len(models),
+            "quota_count": len(quota)
+        }
     except Exception as e:
         return {"success": False, "error": str(e)}
 

@@ -184,16 +184,26 @@ def auth_list():
 
 @auth_app.command("import")
 def auth_import():
-    """Import existing accounts from OpenCode config into local config."""
+    """Import existing accounts from OpenCode config into local config and auto-sync binary DB."""
     count = account_mgr.import_from_opencode()
     if count > 0:
         console.print(f"[bold green]Berhasil mengimpor {count} akun dari OpenCode![/bold green]")
+        active_acc = account_mgr.get_active_account()
+        if active_acc:
+            import asyncio
+            console.print(f"[dim]Auto-syncing live models & quota into binary DB for {active_acc.get('email')}...[/dim]")
+            try:
+                models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True))
+                quota = asyncio.run(QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True))
+                console.print(f"[bold green][OK] Loaded {len(models)} live models and {len(quota)} quota buckets into compiled binary DB.[/bold green]")
+            except Exception as e:
+                console.print(f"[yellow]Initial sync deferred: {e}[/yellow]")
     else:
         console.print("[yellow]Tidak menemukan akun OpenCode atau impor gagal.[/yellow]")
 
 @auth_app.command("login")
 def auth_login(port: int = 53123):
-    """Authenticate a new Google account via browser."""
+    """Authenticate a new Google account via browser and auto-sync models/quota to binary DB."""
     try:
         new_account = start_interactive_login(port=port)
         accounts = account_mgr.load_accounts()
@@ -202,6 +212,15 @@ def auth_login(port: int = 53123):
         accounts.append(new_account)
         account_mgr.save_accounts(accounts)
         console.print(f"[bold green]Login berhasil untuk akun: {new_account['email']}[/bold green]")
+
+        import asyncio
+        console.print(f"[dim]Sinkronisasi live models & quota ke database binary untuk {new_account.get('email')}...[/dim]")
+        try:
+            models = asyncio.run(QuotaMonitor.fetch_live_models_from_antigravity(new_account, force_refresh=True))
+            quota = asyncio.run(QuotaMonitor.fetch_live_quota_from_antigravity(new_account, force_refresh=True))
+            console.print(f"[bold green][OK] Berhasil menyimpan {len(models)} model aktif & kuota ke database terkompilasi.[/bold green]")
+        except Exception as e:
+            console.print(f"[yellow]Sinkronisasi database live ditunda: {e}[/yellow]")
     except Exception as e:
         console.print(f"[bold red]Login gagal: {e}[/bold red]")
 

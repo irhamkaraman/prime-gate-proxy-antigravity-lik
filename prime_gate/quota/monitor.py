@@ -56,7 +56,21 @@ class QuotaMonitor:
 
     @classmethod
     def get_available_models(cls, account: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """Synchronous fallback returning default configured catalog."""
+        """
+        Dynamically returns models catalog.
+        Prioritizes live models stored in binary database from the user's Google Antigravity account,
+        falling back to static defaults only if no account is configured.
+        """
+        email = account.get("email") if account else None
+        if email:
+            db_models = db.get(f"models:{email}")
+            if db_models and db_models.get("models"):
+                return db_models["models"]
+
+        latest_models = db.get("models:latest")
+        if latest_models and latest_models.get("models"):
+            return latest_models["models"]
+
         if not account:
             return MODELS_CATALOG["google-ai-pro-trial"]
         tier = cls.detect_tier(account)
