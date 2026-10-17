@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { TokenVolumePoint } from '../types';
 
 interface TokenChartProps {
@@ -12,10 +12,39 @@ export const TokenChart: React.FC<TokenChartProps> = ({
   timeRange,
   onTimeRangeChange,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState<number>(1100);
   const [hoveredPoint, setHoveredPoint] = useState<TokenVolumePoint | null>(null);
+  const [hoveredX, setHoveredX] = useState<number | null>(null);
+
+  // Measure dynamic container width with ResizeObserver to ensure 100% edge-to-edge distribution
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        if (rect.width > 200) {
+          setContainerWidth(Math.round(rect.width));
+        }
+      }
+    };
+
+    updateWidth();
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 200) {
+          setContainerWidth(Math.round(entry.contentRect.width));
+        }
+      }
+    });
+
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
 
   // Fallback demo points if live data is empty
-  const chartPoints = data.length > 0 ? data : [
+  const chartPoints = data && data.length > 0 ? data : [
     { timestamp: '1', timeLabel: '03:10', prompt: 0, reasoning: 0, completion: 0, total: 0 },
     { timestamp: '2', timeLabel: '03:15', prompt: 0, reasoning: 0, completion: 0, total: 0 },
     { timestamp: '3', timeLabel: '03:20', prompt: 0, reasoning: 0, completion: 0, total: 0 },
@@ -25,11 +54,19 @@ export const TokenChart: React.FC<TokenChartProps> = ({
   ];
 
   const maxTotal = Math.max(...chartPoints.map(p => p.total), 100);
-  const chartHeight = 220;
-  const chartWidth = 900;
-  const paddingBottom = 30;
-  const paddingTop = 20;
-  const usableHeight = chartHeight - paddingBottom - paddingTop;
+  const chartHeight = 240;
+  const paddingTop = 22;
+  const paddingBottom = 34;
+  const marginLeft = 68;
+  const marginRight = 24;
+
+  const usableWidth = Math.max(100, containerWidth - marginLeft - marginRight);
+  const usableHeight = chartHeight - paddingTop - paddingBottom;
+
+  // Stride calculation to prevent X-axis label collision
+  const approxLabelWidth = 70;
+  const maxLabels = Math.max(3, Math.floor(usableWidth / approxLabelWidth));
+  const stride = Math.max(1, Math.ceil(chartPoints.length / maxLabels));
 
   return (
     <div className="glass-card" style={{ padding: '24px 28px', marginTop: 20 }}>
@@ -103,31 +140,38 @@ export const TokenChart: React.FC<TokenChartProps> = ({
         </div>
       </div>
 
-      {/* SVG Chart */}
-      <div style={{ position: 'relative', width: '100%', overflowX: 'auto' }}>
+      {/* SVG Chart Container */}
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          width: '100%',
+          overflow: 'hidden',
+        }}
+      >
         <svg
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          style={{ width: '100%', height: chartHeight, overflow: 'visible' }}
+          viewBox={`0 0 ${containerWidth} ${chartHeight}`}
+          style={{ width: '100%', height: chartHeight, display: 'block', overflow: 'visible' }}
         >
-          {/* Grid lines */}
+          {/* Grid lines and Y-axis labels */}
           {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
             const y = paddingTop + usableHeight * (1 - pct);
             const val = Math.round(maxTotal * pct);
             return (
               <g key={idx}>
                 <line
-                  x1={45}
+                  x1={marginLeft}
                   y1={y}
-                  x2={chartWidth}
+                  x2={containerWidth - marginRight}
                   y2={y}
-                  stroke="rgba(255, 255, 255, 0.05)"
+                  stroke="rgba(255, 255, 255, 0.06)"
                   strokeDasharray="4 4"
                 />
                 <text
-                  x={35}
-                  y={y + 4}
+                  x={marginLeft - 12}
+                  y={y + 3.5}
                   fill="#78716c"
-                  fontSize="10"
+                  fontSize="11"
                   textAnchor="end"
                   fontFamily="var(--font-mono)"
                 >
@@ -137,11 +181,25 @@ export const TokenChart: React.FC<TokenChartProps> = ({
             );
           })}
 
-          {/* Bars */}
+          {/* Vertical guide line on hover */}
+          {hoveredX !== null && (
+            <line
+              x1={hoveredX}
+              y1={paddingTop}
+              x2={hoveredX}
+              y2={paddingTop + usableHeight}
+              stroke="rgba(245, 158, 11, 0.35)"
+              strokeDasharray="3 3"
+              strokeWidth={1.5}
+            />
+          )}
+
+          {/* Evenly distributed bars across full container width */}
           {chartPoints.map((p, idx) => {
-            const barWidth = Math.max(12, Math.min(32, (chartWidth - 60) / (chartPoints.length * 2)));
-            const step = (chartWidth - 60) / chartPoints.length;
-            const x = 55 + idx * step + (step - barWidth) / 2;
+            const step = usableWidth / chartPoints.length;
+            const barWidth = Math.max(6, Math.min(26, step * 0.68));
+            const x = marginLeft + idx * step + (step - barWidth) / 2;
+            const centerX = x + barWidth / 2;
 
             const promptHeight = (p.prompt / maxTotal) * usableHeight;
             const reasoningHeight = (p.reasoning / maxTotal) * usableHeight;
@@ -151,20 +209,44 @@ export const TokenChart: React.FC<TokenChartProps> = ({
             const yReasoning = yPrompt - reasoningHeight;
             const yCompletion = yReasoning - completionHeight;
 
+            // X-axis label anti-collision rule
+            const isLast = idx === chartPoints.length - 1;
+            const isFirst = idx === 0;
+            const shouldShowLabel = isFirst || idx % stride === 0 || (isLast && (chartPoints.length - 1) % stride >= Math.floor(stride * 0.4));
+
+            const isHovered = hoveredPoint === p;
+
             return (
               <g
                 key={idx}
-                onMouseEnter={() => setHoveredPoint(p)}
-                onMouseLeave={() => setHoveredPoint(null)}
+                onMouseEnter={() => {
+                  setHoveredPoint(p);
+                  setHoveredX(centerX);
+                }}
+                onMouseLeave={() => {
+                  setHoveredPoint(null);
+                  setHoveredX(null);
+                }}
                 style={{ cursor: 'pointer' }}
               >
-                {/* Invisible hover capture column */}
+                {/* Full-height invisible hover capture area */}
                 <rect
-                  x={x - 6}
+                  x={marginLeft + idx * step}
                   y={paddingTop}
-                  width={barWidth + 12}
-                  height={usableHeight}
+                  width={step}
+                  height={usableHeight + 20}
                   fill="transparent"
+                />
+
+                {/* Subtle baseline track for empty/zero slots */}
+                <rect
+                  x={x}
+                  y={paddingTop + usableHeight - 3}
+                  width={barWidth}
+                  height={3}
+                  rx={1.5}
+                  fill={isHovered ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.08)'}
+                  style={{ transition: 'fill 0.15s ease' }}
                 />
 
                 {/* Prompt segment */}
@@ -176,6 +258,7 @@ export const TokenChart: React.FC<TokenChartProps> = ({
                     height={promptHeight}
                     fill="#ea580c"
                     rx={completionHeight === 0 && reasoningHeight === 0 ? 3 : 0}
+                    opacity={isHovered ? 1 : 0.9}
                   />
                 )}
 
@@ -188,6 +271,7 @@ export const TokenChart: React.FC<TokenChartProps> = ({
                     height={reasoningHeight}
                     fill="#d97706"
                     rx={completionHeight === 0 ? 3 : 0}
+                    opacity={isHovered ? 1 : 0.9}
                   />
                 )}
 
@@ -200,58 +284,80 @@ export const TokenChart: React.FC<TokenChartProps> = ({
                     height={completionHeight}
                     fill="#f59e0b"
                     rx={3}
+                    opacity={isHovered ? 1 : 0.9}
                   />
                 )}
 
-                {/* X-axis label */}
-                <text
-                  x={x + barWidth / 2}
-                  y={chartHeight - 8}
-                  fill="#78716c"
-                  fontSize="10"
-                  textAnchor="middle"
-                  fontFamily="var(--font-mono)"
-                >
-                  {p.timeLabel}
-                </text>
+                {/* Top highlight cap on hover */}
+                {isHovered && p.total > 0 && (
+                  <rect
+                    x={x - 1}
+                    y={Math.min(yPrompt, yReasoning, yCompletion) - 2}
+                    width={barWidth + 2}
+                    height={2}
+                    fill="#fef08a"
+                    rx={1}
+                  />
+                )}
+
+                {/* Clean, Non-overlapping X-axis timestamp label */}
+                {shouldShowLabel && (
+                  <text
+                    x={centerX}
+                    y={chartHeight - 8}
+                    fill={isHovered ? '#f59e0b' : '#78716c'}
+                    fontSize="11"
+                    fontWeight={isHovered ? '600' : '400'}
+                    textAnchor="middle"
+                    fontFamily="var(--font-mono)"
+                  >
+                    {p.timeLabel}
+                  </text>
+                )}
               </g>
             );
           })}
         </svg>
 
-        {/* Hover Tooltip */}
-        {hoveredPoint && hoveredPoint.total > 0 && (
+        {/* Floating Context-Aware Tooltip */}
+        {hoveredPoint && hoveredPoint.total > 0 && hoveredX !== null && (
           <div
             style={{
               position: 'absolute',
-              top: 10,
-              right: 20,
+              top: 12,
+              left: Math.min(containerWidth - 230, Math.max(marginLeft, hoveredX - 100)),
               background: '#1c1713',
-              border: '1px solid rgba(245, 158, 11, 0.35)',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
               borderRadius: 8,
               padding: '10px 14px',
               fontSize: 12,
               pointerEvents: 'none',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.6)',
               display: 'flex',
               flexDirection: 'column',
               gap: 4,
+              zIndex: 30,
+              backdropFilter: 'blur(8px)',
             }}
           >
-            <div style={{ fontWeight: 700, color: '#fafaf9' }}>
-              Time: {hoveredPoint.timeLabel}
+            <div style={{ fontWeight: 700, color: '#fafaf9', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 4 }}>
+              Timestamp: {hoveredPoint.timeLabel}
             </div>
-            <div style={{ color: '#ea580c' }}>
-              Prompt: {hoveredPoint.prompt.toLocaleString()} tokens
+            <div style={{ color: '#ea580c', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span>Prompt:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{hoveredPoint.prompt.toLocaleString()}</span>
             </div>
-            <div style={{ color: '#d97706' }}>
-              Reasoning: {hoveredPoint.reasoning.toLocaleString()} tokens
+            <div style={{ color: '#d97706', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span>Reasoning:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{hoveredPoint.reasoning.toLocaleString()}</span>
             </div>
-            <div style={{ color: '#f59e0b' }}>
-              Completion: {hoveredPoint.completion.toLocaleString()} tokens
+            <div style={{ color: '#f59e0b', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span>Completion:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{hoveredPoint.completion.toLocaleString()}</span>
             </div>
-            <div style={{ color: '#ffffff', fontWeight: 600, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 4 }}>
-              Total: {hoveredPoint.total.toLocaleString()} tokens
+            <div style={{ color: '#ffffff', fontWeight: 700, borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 4, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <span>Total Volume:</span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: '#f59e0b' }}>{hoveredPoint.total.toLocaleString()} tokens</span>
             </div>
           </div>
         )}
