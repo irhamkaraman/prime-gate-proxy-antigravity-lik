@@ -261,6 +261,27 @@ class BinaryDatabaseEngine:
         # Broadcast immediately to all connected WebSocket clients
         event_bus.notify_corruption(key=key, reason=reason, details=details)
 
+    def get_incidents(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Returns recent incident reports recorded by Database Sentinel (newest first)."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT id, severity, event_type, target_key, message, details, created_at FROM pg_incidents ORDER BY id DESC LIMIT ?",
+            (limit,)
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": r["id"],
+                "severity": r["severity"],
+                "event_type": r["event_type"],
+                "target_key": r["target_key"],
+                "message": r["message"],
+                "created_at": r["created_at"],
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created_at"]))
+            }
+            for r in rows
+        ]
+
     def get_status(self) -> Dict[str, Any]:
         """Returns database operational status and size metrics."""
         size_bytes = self.db_path.stat().st_size if self.db_path.exists() else 0
@@ -275,7 +296,8 @@ class BinaryDatabaseEngine:
             "size_bytes": size_bytes,
             "records_count": count_records,
             "incidents_count": count_incidents,
-            "active_ws_subscribers": event_bus.subscriber_count
+            "active_ws_subscribers": event_bus.subscriber_count,
+            "recent_incidents": self.get_incidents(limit=5)
         }
 
     def close(self):

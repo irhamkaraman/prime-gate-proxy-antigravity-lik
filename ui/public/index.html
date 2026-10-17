@@ -759,6 +759,23 @@ print(response.choices[0].message.content)</pre>
               Copy cURL Command
             </button>
           </div>
+
+          <!-- Model Health & API Logs -->
+          <div class="p-4 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-sm font-semibold text-white flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-[#10b981]"></span> Health &amp; Logs API
+                </span>
+                <span class="text-[11px] text-[#a8a29e]">GET /v1/health</span>
+              </div>
+              <p class="text-xs text-[#a8a29e] mb-2">Health check of all models, quota buckets, and recent API event logs:</p>
+              <pre id="healthSnippet" class="editorial-terminal text-[11px] p-2.5 max-h-36 overflow-y-auto mb-3">curl http://127.0.0.1:52111/v1/health?limit=50</pre>
+            </div>
+            <button class="btn-secondary w-full text-xs py-1.5" onclick="copyDocSnippet('healthSnippet', this)">
+              Copy Health Check Command
+            </button>
+          </div>
         </div>
       </div>
 

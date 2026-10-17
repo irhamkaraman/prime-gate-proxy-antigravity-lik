@@ -308,6 +308,21 @@ curl -X POST http://127.0.0.1:52111/v1/chat/completions \
 
 ---
 
+### 9. Health & Observability API (`/v1/health`)
+Query gateway status, operational health for all models, quota buckets, and recent structured logs:
+```bash
+# Basic health check
+curl http://127.0.0.1:52111/v1/health
+
+# Health check with last 20 logs filtered by ERROR level
+curl "http://127.0.0.1:52111/v1/health?limit=20&level=ERROR"
+
+# Health check with force live refresh from upstream Antigravity
+curl "http://127.0.0.1:52111/v1/health?refresh=true"
+```
+
+---
+
 ## 🧠 Real-Time Reasoning & Thinking Stream
 
 For models with extended thinking capabilities (**Claude Sonnet 4.6**, **Claude Opus 4.6**, and **Gemini 3.8 Flash**), Prime Gate parses Google Antigravity's internal reasoning events and streams them via standard OpenAI delta chunks:

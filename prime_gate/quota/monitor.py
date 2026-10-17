@@ -234,8 +234,6 @@ class QuotaMonitor:
             cls._quota_cache[email] = (quota_list, now)
             return quota_list
 
-        return cls.parse_quota_details(account)
-
     @staticmethod
     def parse_quota_details(account: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Fallback quota extraction from account metadata."""
@@ -262,3 +260,87 @@ class QuotaMonitor:
             })
 
         return results
+
+    @classmethod
+    async def get_models_health(
+        cls, account: Optional[Dict[str, Any]], force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Computes comprehensive health status for all available models.
+        Correlates live models, quota buckets, capacity limits, and capabilities.
+        """
+        if account:
+            models = await cls.fetch_live_models_from_antigravity(account, force_refresh=force_refresh)
+            quota_buckets = await cls.fetch_live_quota_from_antigravity(account, force_refresh=force_refresh)
+        else:
+            models = cls.get_available_models(None)
+            quota_buckets = []
+
+        # Map bucket family -> bucket data
+        bucket_map = {b.get("family", "").lower(): b for b in quota_buckets}
+
+        model_health_items: List[Dict[str, Any]] = []
+        healthy_count = 0
+        degraded_count = 0
+
+        for m in models:
+            mid = m.get("id", "")
+            mid_lower = mid.lower()
+
+            # Determine quota bucket family association
+            family = "general"
+            if "claude" in mid_lower:
+                family = "claude"
+            elif "flash" in mid_lower or "gemini" in mid_lower:
+                family = "gemini-flash"
+            elif "gpt" in mid_lower:
+                family = "3p"
+
+            # Match with quota buckets
+            bucket = bucket_map.get(family)
+            if not bucket:
+                for b in quota_buckets:
+                    if family in b.get("family", "").lower() or family in b.get("label", "").lower():
+                        bucket = b
+                        break
+
+            quota_pct = bucket.get("percentage", 100.0) if bucket else 100.0
+            reset_time = bucket.get("reset_time", "Active") if bucket else "Active"
+
+            if quota_pct <= 0:
+                status = "exhausted"
+                degraded_count += 1
+            elif quota_pct < 15.0:
+                status = "degraded"
+                degraded_count += 1
+            else:
+                status = "healthy"
+                healthy_count += 1
+
+            supports_thinking = any(k in mid_lower for k in ["thinking", "sonnet", "opus", "flash-high"])
+
+            model_health_items.append({
+                "id": mid,
+                "name": m.get("name", mid),
+                "status": status,
+                "owned_by": m.get("owned_by", "google-antigravity"),
+                "family": family,
+                "quota_percentage": quota_pct,
+                "quota_reset": reset_time,
+                "supports_thinking": supports_thinking,
+                "supports_tools": True,
+                "supports_streaming": True
+            })
+
+        overall_status = "healthy" if degraded_count == 0 else ("degraded" if healthy_count > 0 else "exhausted")
+        if not account:
+            overall_status = "unauthenticated"
+
+        return {
+            "status": overall_status,
+            "total_models": len(model_health_items),
+            "healthy_models": healthy_count,
+            "degraded_models": degraded_count,
+            "models": model_health_items
+        }
+

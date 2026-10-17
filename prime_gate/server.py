@@ -84,14 +84,99 @@ async def on_shutdown():
     db.close()
 
 @app.get("/")
-@app.get("/health")
-async def health_check():
+async def root_index():
     return {
         "status": "healthy",
         "service": "prime-gate-proxy-antigravity-lik",
         "version": __version__,
         "codename": __codename__,
-        "uptime_seconds": int(time.time() - START_TIME)
+        "uptime_seconds": int(time.time() - START_TIME),
+        "links": {
+            "health": "/v1/health",
+            "models": "/v1/models",
+            "chat_completions": "/v1/chat/completions",
+            "status": "/api/status"
+        }
+    }
+
+@app.get("/v1/health")
+@app.get("/health")
+async def v1_health_check(
+    limit: int = 50,
+    level: Optional[str] = None,
+    refresh: bool = False
+):
+    """
+    Comprehensive gateway health & telemetry endpoint:
+    - Live health and operational status of all supported models
+    - Real-time quota allocations and bucket reset timelines
+    - Compiled binary database state and integrity verification
+    - In-memory token telemetry KPIs and throughput
+    - Structured chronological log history of gateway and upstream API events
+    """
+    now = time.time()
+    active_acc = account_mgr.get_active_account()
+    accounts = account_mgr.load_accounts()
+
+    # 1. Evaluate Model Health across all models
+    models_health = await QuotaMonitor.get_models_health(active_acc, force_refresh=refresh)
+
+    # 2. Quota telemetry
+    if active_acc:
+        quota_summary = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=refresh)
+        tier_label = QuotaMonitor.get_tier_label(active_acc)
+    else:
+        quota_summary = []
+        tier_label = "Unauthenticated"
+
+    # 3. Database status & integrity
+    db_status = db.get_status()
+
+    # 4. Telemetry metrics snapshot
+    metrics = telemetry.get_metrics(time_range="minute")
+    telemetry_summary = metrics.get("summary", {})
+
+    # 5. Recent Logs from memory ring buffer
+    safe_limit = max(1, min(limit, 500))
+    recent_logs = event_bus.get_recent_logs(limit=safe_limit, level=level)
+
+    # Determine overall gateway operational health
+    is_healthy = (
+        models_health.get("status") in ["healthy", "degraded"]
+        and db_status.get("size_bytes", 0) > 0
+    )
+    overall_status = "healthy" if is_healthy else "degraded"
+
+    return {
+        "status": overall_status,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+        "epoch": round(now, 3),
+        "uptime_seconds": int(now - START_TIME),
+        "gateway": {
+            "service": "prime-gate-proxy-antigravity-lik",
+            "version": __version__,
+            "codename": __codename__,
+            "port": DEFAULT_API_PORT,
+            "active_account": active_acc.get("email") if active_acc else None,
+            "tier": tier_label,
+            "total_accounts": len(accounts)
+        },
+        "models_health": models_health,
+        "quota_summary": quota_summary,
+        "database": db_status,
+        "telemetry": {
+            "total_requests": telemetry_summary.get("total_requests_all_time", 0),
+            "total_tokens": telemetry_summary.get("total_tokens_all_time", 0),
+            "current_tokens_per_sec": telemetry_summary.get("current_tokens_per_sec", 0.0),
+            "tokens_today": telemetry_summary.get("tokens_today", 0),
+            "avg_latency_ms": telemetry_summary.get("avg_latency_ms", 0.0)
+        },
+        "logs": {
+            "total_buffered": event_bus.total_logs_buffered,
+            "returned": len(recent_logs),
+            "filter_level": level.upper() if level else "ALL",
+            "items": recent_logs
+        }
     }
 
 @app.get("/v1/models")

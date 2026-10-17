@@ -285,6 +285,21 @@ curl -X POST http://127.0.0.1:52111/v1/chat/completions \
 
 ---
 
+### 9. Endpoint Kesehatan Model & Observabilitas Log API (`/v1/health`)
+Pantau status operasional semua model AI, kuota upstream, dan riwayat log API sistem secara real-time:
+```bash
+# Cek kesehatan dasar gateway & seluruh model
+curl http://127.0.0.1:52111/v1/health
+
+# Cek kesehatan dan tampilkan 20 log terakhir dengan filter level ERROR
+curl "http://127.0.0.1:52111/v1/health?limit=20&level=ERROR"
+
+# Paksa refresh kuota dan model langsung ke upstream Google Antigravity
+curl "http://127.0.0.1:52111/v1/health?refresh=true"
+```
+
+---
+
 ## 🧠 Streaming Penalaran Real-Time (Thinking Mode)
 
 Untuk model dengan kemampuan penalaran mendalam (**Claude Sonnet 4.6**, **Claude Opus 4.6**, dan **Gemini 3.8 Flash**), Prime Gate membedah event internal Google Antigravity dan mengalirkannya via chunk delta standar OpenAI:

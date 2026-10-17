@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import time
-from typing import Set, Dict, Any, Optional
+import collections
+import threading
+from typing import Set, Dict, Any, Optional, List
 
 try:
     from fastapi import WebSocket
@@ -15,14 +17,44 @@ class DBEventBus:
     Central real-time event dispatcher for Prime Gate Database and Proxy runtime.
     Maintains active WebSocket subscriber pools and dispatches streaming telemetry,
     database mutation events, log lines, and critical corruption alerts.
+    Also retains a thread-safe ring buffer of recent structured logs for REST API inspection.
     """
 
     def __init__(self):
         self._subscribers: Set[WebSocket] = set()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._log_history: collections.deque = collections.deque(maxlen=500)
+        self._lock = threading.Lock()
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         self._loop = loop
+
+    def add_log(self, entry: Dict[str, Any]):
+        """Append a structured log entry into the circular buffer in a thread-safe manner."""
+        with self._lock:
+            self._log_history.append(entry)
+
+    def get_recent_logs(self, limit: int = 50, level: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Returns recent structured log entries (newest first).
+        Optional level filter: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+        """
+        with self._lock:
+            items = list(self._log_history)
+
+        if level:
+            lvl = level.upper().strip()
+            level_hierarchy = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "WARN": 30, "ERROR": 40, "CRITICAL": 50}
+            min_val = level_hierarchy.get(lvl, 20)
+            items = [item for item in items if level_hierarchy.get(item.get("level", "INFO").upper(), 20) >= min_val]
+
+        items.reverse()  # Newest first
+        return items[:limit]
+
+    @property
+    def total_logs_buffered(self) -> int:
+        with self._lock:
+            return len(self._log_history)
 
     def register(self, ws: WebSocket):
         self._subscribers.add(ws)
@@ -121,13 +153,32 @@ class WebSocketLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         try:
             msg = self.format(record)
+            created_epoch = record.created
+            is_corrupt = "CORRUPT" in msg.upper() or "CORRUPTED" in msg.upper()
+            is_error = record.levelno >= logging.ERROR
+
+            log_entry = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_epoch)),
+                "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(created_epoch)),
+                "epoch": round(created_epoch, 3),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": msg,
+                "is_error": is_error,
+                "is_corrupt_alert": is_corrupt
+            }
+
+            # Buffer locally for REST API health inspection
+            self.bus.add_log(log_entry)
+
+            # Broadcast live to WebSocket clients
             payload = {
                 "type": "LOG_ENTRY",
                 "level": record.levelname,
                 "logger": record.name,
                 "message": msg,
-                "created": record.created,
-                "is_corrupt_alert": "CORRUPT" in msg.upper() or "CORRUPTED" in msg.upper()
+                "created": created_epoch,
+                "is_corrupt_alert": is_corrupt
             }
             self.bus.dispatch_sync(payload)
         except Exception:
