@@ -38,8 +38,8 @@ Dengan Prime Gate, bosss dapat memanfaatkan kuota Google Antigravity—termasuk 
    Membersihkan skema JSON yang tidak didukung Google Antigravity (`exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`) agar function/tool calling selalu mulus.
 4. **Deteksi Kuota & Tier Akun Cerdas:**
    Mendeteksi otomatis status akun **`Google AI Pro (Trial Tier)`** vs **`Paid Tier`** dan menyajikan katalog model yang tepat.
-5. **Web UI Glassmorphic Modern:**
-   Dashboard visual Node.js tanpa dependensi eksternal di `http://127.0.0.1:52110` dengan live meter kuota dan sandbox pengujian prompt.
+5. **Dasbor Tailwind CSS v4 Modern dengan Sidebar & Grafik Batang Token:**
+   Web UI offline tanpa dependensi eksternal dilengkapi navigasi sidebar rapi, telemetri pemakaian token per detik, menit, jam, hingga harian dengan grafik batang bertumpuk (Chart.js), manajemen akun & meter kuota, playground prompt sandbox, serta diagnostik integritas database binary.
 6. **Rich CLI Suite:**
    Perintah terminal lengkap via `rich` & `typer` (`--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, `daemon start|stop|status`).
 7. **Database Binary Terkompilasi (Zero Plaintext JSON):**

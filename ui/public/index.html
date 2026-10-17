@@ -4,27 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prime Gate Antigravity - System Dashboard</title>
+  
+  <!-- Local Vendor Assets: Tailwind CSS v4 & Chart.js (100% Offline & Fast) -->
+  <script src="vendor/tailwindcss-v4.js"></script>
+  <script src="vendor/chart.umd.min.js"></script>
+  
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
-<body>
-  <div class="ambient-glow glow-top"></div>
-  <div class="ambient-glow glow-bottom"></div>
+<body class="bg-[#14110f] text-[#f5f5f4] min-h-screen flex antialiased selection:bg-[#d97706]/30 selection:text-white">
+
+  <!-- Ambient Glow Effects -->
+  <div class="ambient-glow glow-left"></div>
+  <div class="ambient-glow glow-right"></div>
 
   <!-- Onboarding / Google Auth Overlay -->
   <div id="authModal" class="onboarding-overlay" style="display: none;">
     <div class="onboarding-card">
-      <button class="modal-close-btn" id="authModalCloseBtn" onclick="closeAuthModal()" title="Close">&times;</button>
-      <div class="onboarding-badge">Setup Required</div>
-      <h2 class="onboarding-title">Connect Google Antigravity</h2>
-      <p class="onboarding-lead">
-        To unlock high-performance <strong>Claude Sonnet 4.6 (Thinking)</strong>, <strong>Claude Opus 4.6 (Thinking)</strong>, and <strong>Gemini 3.8 Flash</strong> quotas across OpenCode, Cursor, and Continue, please connect your Google account.
+      <button class="absolute top-4 right-4 text-[#a8a29e] hover:text-white text-2xl transition" id="authModalCloseBtn" onclick="closeAuthModal()" title="Close">&times;</button>
+      <div class="inline-block px-3 py-1 bg-[#d97706]/20 text-[#f59e0b] border border-[#d97706]/40 rounded-full text-xs font-semibold uppercase tracking-wider mb-4">Setup Required</div>
+      <h2 class="font-serif-title text-2xl font-medium text-white mb-3">Connect Google Antigravity</h2>
+      <p class="text-sm text-[#a8a29e] leading-relaxed mb-6">
+        To unlock high-performance <strong>Claude Sonnet 4.6 (Thinking)</strong>, <strong>Claude Opus 4.6 (Thinking)</strong>, and <strong>Gemini 3.8 Flash</strong> quotas across OpenCode, Cursor, and Continue, please connect your account.
       </p>
 
-      <div class="auth-action-stack">
-        <button id="googleLoginBtn" class="auth-action-btn google-auth-btn" onclick="triggerGoogleLogin()">
+      <div class="flex flex-col gap-3">
+        <button id="googleLoginBtn" class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white text-[#1f2937] hover:bg-[#f3f4f6] font-semibold text-sm rounded-lg shadow-lg transition" onclick="triggerGoogleLogin()">
           <svg width="18" height="18" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -34,222 +41,428 @@
           Sign in with Google
         </button>
 
-        <button id="importAuthBtn" class="auth-action-btn import-auth-btn" onclick="triggerImportOpenCode()">
+        <button id="importAuthBtn" class="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#241d18] hover:bg-[#2d251f] text-[#d6d3d1] border border-[#a8a29e]/20 font-medium text-sm rounded-lg transition" onclick="triggerImportOpenCode()">
           ⚡ Quick Import from OpenCode Config
         </button>
       </div>
 
-      <div id="authStatusNotice" class="auth-status-notice"></div>
+      <div id="authStatusNotice" class="text-xs mt-4 min-h-[20px] font-mono-code"></div>
 
-      <div class="onboarding-terminal-tip">
+      <div class="mt-6 pt-4 border-t border-[#a8a29e]/10 text-xs text-[#78716c] flex items-center justify-center gap-2">
         <span>Prefer terminal? Run:</span>
-        <code>prime-gate auth login</code>
+        <code class="px-2 py-1 bg-black/40 rounded text-[#f59e0b] font-mono-code">prime-gate auth login</code>
       </div>
     </div>
   </div>
 
-  <div class="layout-container">
-    <!-- Header -->
-    <header class="editorial-header">
-      <div class="brand-cluster">
-        <div class="brand-monogram">PG</div>
+  <!-- Left Sidebar Navigation (Consistent Anthropic Layout) -->
+  <aside class="w-64 bg-[#1b1613] border-r border-[#a8a29e]/15 flex flex-col justify-between shrink-0 h-screen sticky top-0 p-5 z-20">
+    <div>
+      <!-- Brand Cluster -->
+      <div class="flex items-center gap-3.5 pb-6 border-b border-[#a8a29e]/15">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#d97706] to-[#78350f] border border-[#f59e0b]/30 flex items-center justify-center text-white font-serif-title font-bold text-lg shadow-md">
+          PG
+        </div>
         <div>
-          <div class="title-row">
-            <h1>Prime Gate</h1>
-            <span class="version-tag">v1.0.0-beta</span>
+          <div class="flex items-center gap-2">
+            <h1 class="font-serif-title text-base font-semibold text-white tracking-tight">Prime Gate</h1>
+            <span class="px-1.5 py-0.5 text-[10px] bg-[#d97706]/20 text-[#f59e0b] border border-[#d97706]/40 rounded font-mono-code font-semibold">v1.0.0</span>
           </div>
-          <p class="tagline">OpenAI-Compatible Gateway for Google Antigravity</p>
+          <p class="text-[11px] text-[#a8a29e] leading-tight">Antigravity Gateway</p>
         </div>
       </div>
-      <div class="header-controls">
-        <div class="status-pill" id="statusIndicator">
-          <span class="status-orb"></span>
-          <span class="status-label" id="statusText">Checking system...</span>
-        </div>
-        <button class="action-btn secondary-btn" onclick="openAuthModal()">+ Add Account</button>
-        <button class="action-btn secondary-btn" onclick="fetchStatus()">Refresh</button>
-      </div>
-    </header>
 
-    <!-- Real-Time Database Corruption Sentinel Alert Banner -->
+      <!-- Navigation Links -->
+      <nav class="mt-6 flex flex-col gap-1.5">
+        <button class="nav-link active" data-tab="dashboard" onclick="switchTab('dashboard')">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+          <span>Dashboard & Telemetry</span>
+        </button>
+
+        <button class="nav-link" data-tab="accounts" onclick="switchTab('accounts')">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <span>Account Manager</span>
+        </button>
+
+        <button class="nav-link" data-tab="sandbox" onclick="switchTab('sandbox')">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+          </svg>
+          <span>Prompt Sandbox</span>
+        </button>
+
+        <button class="nav-link" data-tab="sentinel" onclick="switchTab('sentinel')">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <span>System & Sentinel</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Sidebar Footer / System Telemetry -->
+    <div class="pt-4 border-t border-[#a8a29e]/15 flex flex-col gap-2.5">
+      <div class="flex items-center justify-between text-[11px] text-[#a8a29e]">
+        <span>WebSocket Stream:</span>
+        <span id="sidebarWsStatus" class="flex items-center gap-1.5 text-[#10b981] font-mono-code">
+          <span class="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
+          Live
+        </span>
+      </div>
+      <div class="flex items-center justify-between text-[11px] text-[#a8a29e]">
+        <span>Gateway API:</span>
+        <span class="font-mono-code text-white/90">127.0.0.1:52111</span>
+      </div>
+      <div class="p-2 bg-[#241d18] rounded-lg border border-[#a8a29e]/10 mt-1">
+        <span class="text-[10px] text-[#a8a29e] block">Active Identity:</span>
+        <span id="sidebarActiveEmail" class="text-[11px] font-mono-code text-[#f59e0b] truncate block mt-0.5">Connecting...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content Layout -->
+  <main class="flex-1 min-w-0 p-8 overflow-y-auto max-h-screen">
+
+    <!-- Global Database Corruption Warning Banner -->
     <div id="dbCorruptionAlert" class="corruption-alert-banner" style="display: none;">
-      <div class="alert-badge-tag">[CRITICAL]</div>
+      <div class="alert-badge-tag">[CRITICAL ALERT]</div>
       <div class="alert-content">
-        <strong id="alertTitle">Database Integrity Alert: Block Corrupted</strong>
-        <p id="alertMessage">CRC32 Checksum mismatch detected in compiled binary record.</p>
+        <strong id="alertTitle" class="text-sm font-semibold text-rose-200">Database Integrity Alert: Block Corrupted</strong>
+        <p id="alertMessage" class="text-xs text-rose-300 font-mono-code mt-0.5">CRC32 Checksum mismatch detected in compiled binary block.</p>
       </div>
       <button class="alert-dismiss-btn" onclick="dismissCorruptionAlert()">&times;</button>
     </div>
 
-    <!-- Main Workspace Grid -->
-    <main class="grid-workspace">
-      <!-- Left Column: Identity & Quotas -->
-      <section class="pane-column">
-        <!-- Account Profile Card -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <h2>Account & License</h2>
-            <span class="tier-pill" id="accountTier">Resolving...</span>
+    <!-- TAB 1: 📊 DASHBOARD & TOKEN TELEMETRY -->
+    <div id="tab-dashboard" class="tab-content flex flex-col gap-6">
+      <!-- Top Action Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#a8a29e]/15">
+        <div>
+          <h2 class="font-serif-title text-2xl font-semibold text-white">Token Telemetry & Traffic Radar</h2>
+          <p class="text-xs text-[#a8a29e] mt-1">Real-time throughput and granular token consumption across seconds, minutes, hours, and days.</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <div class="flex items-center bg-[#1b1613] border border-[#a8a29e]/20 rounded-lg p-1">
+            <button class="time-pill" onclick="changeTimeRange('second')" id="pill-second">1s</button>
+            <button class="time-pill active" onclick="changeTimeRange('minute')" id="pill-minute">1m</button>
+            <button class="time-pill" onclick="changeTimeRange('hour')" id="pill-hour">1h</button>
+            <button class="time-pill" onclick="changeTimeRange('day')" id="pill-day">1d</button>
           </div>
-          <div class="metric-list">
-            <div class="metric-item">
-              <span class="metric-key">Active Identity:</span>
-              <span class="metric-val" id="accountEmail">—</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-key">Configured Accounts:</span>
-              <span class="metric-val" id="accountCount">0 Accounts</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-key">Engine Uptime:</span>
-              <span class="metric-val" id="serverUptime">0s</span>
-            </div>
-          </div>
-          <div id="accountsListWrap" class="accounts-list-wrap">
-            <div class="accounts-list-header">
-              <span>Connected Accounts</span>
-              <button class="clear-all-btn" onclick="clearAllAccounts()" title="Disconnect all accounts">Clear All</button>
-            </div>
-            <div id="accountsDeck" class="accounts-deck">
-              <!-- Dynamically populated accounts with Disconnect button -->
-            </div>
-          </div>
-        </article>
+          <button class="btn-secondary" onclick="fetchTokenMetrics()">↻ Refresh</button>
+          <button class="btn-terracotta" onclick="openAuthModal()">+ Add Account</button>
+        </div>
+      </div>
 
-        <!-- Quota Radar Card -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <h2>Antigravity Quota Radar</h2>
-            <span class="sub-caption">Real-time Upstream Telemetry</span>
+      <!-- 4 Top KPI Metric Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Live Throughput -->
+        <div class="anthropic-card">
+          <div class="flex items-center justify-between text-xs text-[#a8a29e] mb-2 font-medium">
+            <span>Throughput Speed</span>
+            <span class="w-2 h-2 rounded-full bg-[#10b981] animate-pulse"></span>
           </div>
-          <div id="quotaContainer" class="quota-stack">
-            <div class="empty-state">Loading quota metrics...</div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="kpiTps" class="font-serif-title text-3xl font-bold text-white tracking-tight">0.0</span>
+            <span class="text-xs text-[#a8a29e] font-mono-code">tokens / sec</span>
           </div>
-        </article>
+          <span class="text-[11px] text-[#78716c] mt-2 block font-mono-code">Active rolling output rate</span>
+        </div>
+
+        <!-- Tokens Today -->
+        <div class="anthropic-card">
+          <div class="flex items-center justify-between text-xs text-[#a8a29e] mb-2 font-medium">
+            <span>Tokens Consumed Today</span>
+            <span class="text-[11px] font-mono-code text-[#f59e0b]">24h Rolling</span>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="kpiTokensToday" class="font-serif-title text-3xl font-bold text-white tracking-tight">0</span>
+            <span class="text-xs text-[#a8a29e] font-mono-code">tokens</span>
+          </div>
+          <span id="kpiTokensTodayBreakdown" class="text-[11px] text-[#78716c] mt-2 block font-mono-code">P: 0 | C: 0 | R: 0</span>
+        </div>
+
+        <!-- Average TTFT Latency -->
+        <div class="anthropic-card">
+          <div class="flex items-center justify-between text-xs text-[#a8a29e] mb-2 font-medium">
+            <span>Average Latency (TTFT)</span>
+            <span class="text-[11px] font-mono-code text-[#10b981]">Optimal</span>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="kpiLatency" class="font-serif-title text-3xl font-bold text-white tracking-tight">0</span>
+            <span class="text-xs text-[#a8a29e] font-mono-code">ms</span>
+          </div>
+          <span class="text-[11px] text-[#78716c] mt-2 block font-mono-code">Time to first streaming token</span>
+        </div>
+
+        <!-- Total Cumulative Requests -->
+        <div class="anthropic-card">
+          <div class="flex items-center justify-between text-xs text-[#a8a29e] mb-2 font-medium">
+            <span>Cumulative Handled</span>
+            <span class="text-[11px] font-mono-code text-[#d6d3d1]">All-time</span>
+          </div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="kpiTotalRequests" class="font-serif-title text-3xl font-bold text-white tracking-tight">0</span>
+            <span class="text-xs text-[#a8a29e] font-mono-code">requests</span>
+          </div>
+          <span id="kpiTotalTokensAllTime" class="text-[11px] text-[#78716c] mt-2 block font-mono-code">Total: 0 tokens</span>
+        </div>
+      </div>
+
+      <!-- Main Grafik Batang / Bar Chart Section -->
+      <div class="anthropic-card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-5 pb-4 border-b border-[#a8a29e]/10">
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Token Output Breakdown (Grafik Batang)</h3>
+            <span class="text-xs text-[#a8a29e]">Interactive token volume segmented into Prompt, Completion, and Reasoning (Thinking)</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-mono-code">
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-[#b45309]"></span>
+              <span class="text-[#a8a29e]">Prompt</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-[#d97706]"></span>
+              <span class="text-[#a8a29e]">Reasoning</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-[#f59e0b]"></span>
+              <span class="text-[#a8a29e]">Completion</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="relative w-full h-72">
+          <canvas id="tokenBarChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Lower 2-Column Insights -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Upstream Family Quotas Overview -->
+        <div class="anthropic-card">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-serif-title text-base font-semibold text-white">Live Quota Meter</h3>
+            <button class="btn-secondary text-[11px] py-1 px-2.5" onclick="fetchStatus()">↻ Sync</button>
+          </div>
+          <div id="dashQuotaContainer" class="flex flex-col gap-3">
+            <div class="text-xs text-[#78716c] font-mono-code">Loading quota telemetry...</div>
+          </div>
+        </div>
 
         <!-- Client Integration Endpoint -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <h2>Client Integration</h2>
+        <div class="anthropic-card">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-serif-title text-base font-semibold text-white">OpenAI Client Gateway</h3>
+            <span class="text-[11px] font-mono-code text-[#10b981] px-2 py-0.5 bg-[#10b981]/15 border border-[#10b981]/30 rounded">Ready</span>
           </div>
-          <p class="description-copy">
-            Drop-in OpenAI base URL for <strong>OpenCode</strong>, <strong>Cursor</strong>, <strong>Continue</strong>, and <strong>SillyTavern</strong>:
+          <p class="text-xs text-[#a8a29e] mb-4">
+            Drop-in OpenAI base URL compatible with <strong>OpenCode</strong>, <strong>Cursor</strong>, <strong>Continue</strong>, and <strong>SillyTavern</strong>:
           </p>
-          <div class="endpoint-terminal">
-            <code id="endpointCode">http://127.0.0.1:52111/v1</code>
-            <button class="copy-trigger" onclick="copyEndpoint()">Copy</button>
+          <div class="flex items-center justify-between bg-[#0f0d0b] border border-[#a8a29e]/15 rounded-lg p-3">
+            <code id="dashEndpointCode" class="font-mono-code text-xs text-[#f59e0b]">http://127.0.0.1:52111/v1</code>
+            <button class="btn-secondary text-xs py-1 px-3" onclick="copyEndpoint()">Copy</button>
           </div>
-        </article>
+          <div class="mt-4 flex items-center justify-between text-xs text-[#a8a29e] font-mono-code">
+            <span>Auth API Key: <code class="text-white">prime-gate-proxy</code></span>
+            <span>Protocols: <code class="text-white">REST & SSE</code></span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-        <!-- Compiled Binary Database & Sentinel Card -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <h2>Binary Database & Sentinel</h2>
-            <span class="tier-pill" id="dbHealthBadge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">Optimal</span>
-          </div>
-          <p class="description-copy">
-            Compiled C engine (SQLite WAL) storing credentials, quotas, and models as sealed binary BLOBs with 32-bit CRC32 checksums. Zero plaintext leakage.
-          </p>
-          <div class="metric-list">
-            <div class="metric-item">
-              <span class="metric-key">Engine Architecture:</span>
-              <span class="metric-val" id="dbEngineText">Compiled C (SQLite WAL)</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-key">Binary Records:</span>
-              <span class="metric-val" id="dbRecordsText">0 Records</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-key">Storage Footprint:</span>
-              <span class="metric-val" id="dbSizeText">0 KB</span>
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px; margin-top: 14px;">
-            <button class="action-btn secondary-btn" style="flex: 1; padding: 7px 10px; font-size: 11px;" onclick="auditDatabase()">Audit Integrity</button>
-            <button class="action-btn secondary-btn" style="flex: 1; padding: 7px 10px; font-size: 11px; border-color: rgba(244, 63, 94, 0.35); color: #fb7185;" onclick="testDatabaseCorruption()" title="Simulate bit tampering to verify instant WebSocket corruption alert">Test Corruption</button>
-          </div>
-        </article>
-      </section>
+    <!-- TAB 2: 👥 ACCOUNT MANAGEMENT & QUOTAS -->
+    <div id="tab-accounts" class="tab-content flex flex-col gap-6" style="display: none;">
+      <!-- Top Action Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#a8a29e]/15">
+        <div>
+          <h2 class="font-serif-title text-2xl font-semibold text-white">Account & License Management</h2>
+          <p class="text-xs text-[#a8a29e] mt-1">Manage connected Google Antigravity accounts, token refreshes, and quota allocations.</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <button class="btn-terracotta" onclick="openAuthModal()">+ Connect Google Account</button>
+          <button class="btn-secondary" onclick="triggerImportOpenCode()">⚡ Quick Import</button>
+          <button class="btn-secondary text-rose-400 border-rose-900/40 hover:bg-rose-950/30" onclick="clearAllAccounts()">Clear All</button>
+        </div>
+      </div>
 
-      <!-- Right Column: Interactive Sandbox & Model Catalog -->
-      <section class="pane-column">
-        <!-- Interactive Prompt Playground -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <h2>Prompt Sandbox</h2>
-            <span class="badge-terracotta">SSE Streaming</span>
+      <!-- Active Identity Card -->
+      <div class="anthropic-card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-[#a8a29e]/10">
+          <div>
+            <span class="text-xs text-[#a8a29e] font-medium block">Active Identity</span>
+            <span id="accActiveEmail" class="font-serif-title text-xl font-bold text-white mt-0.5 block">—</span>
           </div>
-          
-          <div class="sandbox-deck">
-            <div class="form-field">
-              <label for="modelSelect">Select Model</label>
-              <select id="modelSelect" class="editorial-select">
-                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
-                <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking)</option>
-                <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended)</option>
-                <option value="gemini-3.8-flash-high">Gemini 3.8 Flash High</option>
-                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                <option value="gpt-oss-120b-medium">GPT-OSS 120B Medium</option>
-              </select>
-            </div>
+          <div class="flex items-center gap-3">
+            <span id="accTierBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-[#d97706]/20 text-[#f59e0b] border border-[#d97706]/40 font-mono-code">
+              Resolving...
+            </span>
+            <span id="accCountBadge" class="px-3 py-1 rounded-full text-xs font-medium bg-white/5 text-[#d6d3d1] border border-white/10 font-mono-code">
+              0 Accounts
+            </span>
+          </div>
+        </div>
 
-            <div class="form-field">
-              <label for="promptInput">Test Instruction</label>
-              <textarea id="promptInput" rows="3" placeholder="Enter a coding prompt or question to test the Antigravity gateway..."></textarea>
-            </div>
+        <!-- Connected Accounts Deck -->
+        <h4 class="text-xs font-semibold text-[#a8a29e] uppercase tracking-wider mb-3">Configured Accounts</h4>
+        <div id="accAccountsDeck" class="flex flex-col gap-2.5">
+          <div class="text-xs text-[#78716c] font-mono-code py-4 text-center">No accounts configured yet. Click "+ Connect Google Account" above.</div>
+        </div>
+      </div>
 
-            <button id="sendBtn" class="action-btn primary-btn" onclick="testPrompt()">
+      <!-- Comprehensive Antigravity Quota Radar -->
+      <div class="anthropic-card">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Antigravity Quota Radar</h3>
+            <span class="text-xs text-[#a8a29e]">Live quota telemetry queried directly from Google CloudCode upstream</span>
+          </div>
+          <button class="btn-secondary text-xs" onclick="fetchStatus()">↻ Refresh Telemetry</button>
+        </div>
+        <div id="accQuotaStack" class="flex flex-col gap-4">
+          <div class="text-xs text-[#78716c] font-mono-code py-4 text-center">Loading quota metrics...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: 🧪 PROMPT SANDBOX -->
+    <div id="tab-sandbox" class="tab-content flex flex-col gap-6" style="display: none;">
+      <!-- Top Action Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#a8a29e]/15">
+        <div>
+          <h2 class="font-serif-title text-2xl font-semibold text-white">Interactive Prompt Sandbox</h2>
+          <p class="text-xs text-[#a8a29e] mt-1">Test upstream Antigravity connections, model availability, and real-time streaming reasoning.</p>
+        </div>
+        <span class="px-3 py-1 rounded-full text-xs font-mono-code font-semibold bg-[#d97706]/20 text-[#f59e0b] border border-[#d97706]/40">
+          SSE Streaming Active
+        </span>
+      </div>
+
+      <!-- Sandbox Form & Console -->
+      <div class="anthropic-card">
+        <div class="flex flex-col gap-4">
+          <div>
+            <label for="sandboxModelSelect" class="block text-xs font-semibold text-[#a8a29e] uppercase tracking-wider mb-2">Select Model</label>
+            <select id="sandboxModelSelect" class="w-full bg-[#0f0d0b] border border-[#a8a29e]/20 text-white rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#d97706] font-mono-code">
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
+              <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking)</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended)</option>
+              <option value="gemini-3.8-flash-high">Gemini 3.8 Flash High</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="gpt-oss-120b-medium">GPT-OSS 120B Medium</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="sandboxPromptInput" class="block text-xs font-semibold text-[#a8a29e] uppercase tracking-wider mb-2">Test Instruction</label>
+            <textarea id="sandboxPromptInput" rows="3" class="w-full bg-[#0f0d0b] border border-[#a8a29e]/20 text-white rounded-lg p-3 text-sm focus:outline-none focus:border-[#d97706] placeholder-[#57534e]" placeholder="Enter a prompt or question to test streaming responses and thinking tokens..."></textarea>
+          </div>
+
+          <!-- Quick Samples -->
+          <div class="flex items-center gap-2 text-xs text-[#a8a29e]">
+            <span>Try sample:</span>
+            <button class="px-2 py-0.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-white" onclick="setSamplePrompt('Write a lightning-fast LRU Cache in Python with type annotations and doctests.')">Python LRU Cache</button>
+            <button class="px-2 py-0.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-white" onclick="setSamplePrompt('Explain the architectural trade-offs between WAL mode and Rollback Journal in SQLite.')">SQLite WAL Architecture</button>
+            <button class="px-2 py-0.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-white" onclick="setSamplePrompt('Write a clean concurrent worker pool in Go with context cancellation.')">Go Worker Pool</button>
+          </div>
+
+          <div>
+            <button id="sandboxSendBtn" class="btn-terracotta w-full py-3" onclick="testPrompt()">
               Send Test Request
             </button>
           </div>
 
-          <div class="console-output-wrap">
-            <div class="console-meta">
-              <span>Streaming Response Stream</span>
-              <span id="latencyBadge" class="latency-indicator"></span>
+          <!-- Streaming Output Window -->
+          <div class="mt-2">
+            <div class="flex items-center justify-between text-xs text-[#a8a29e] mb-2 font-mono-code">
+              <span>Streaming Response Terminal</span>
+              <span id="sandboxLatencyBadge" class="text-[#10b981]"></span>
             </div>
-            <pre id="outputArea" class="editorial-terminal">Antigravity response stream will appear here in real time...</pre>
+            <pre id="sandboxOutputArea" class="editorial-terminal min-h-[160px] max-h-[360px] overflow-y-auto">Antigravity response stream will appear here in real time...</pre>
           </div>
-        </article>
+        </div>
+      </div>
 
-        <!-- Active Models Catalog -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <div>
-              <h2>Active Model Catalog</h2>
-              <span class="sub-caption">Auto-synced with Google Antigravity account</span>
-            </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <span id="modelCountBadge" class="counter-badge">0 Models</span>
-              <button class="action-btn secondary-btn" style="padding: 4px 10px; font-size: 11px;" onclick="syncModelsFromAntigravity()" title="Fetch live models directly from your Google account">↻ Sync</button>
-            </div>
+      <!-- Active Model Catalog Card -->
+      <div class="anthropic-card">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Active Model Catalog</h3>
+            <span class="text-xs text-[#a8a29e]">Synchronized with active Google Antigravity account</span>
           </div>
-          <div id="modelsGrid" class="catalog-grid">
-            <!-- Dynamically populated -->
+          <div class="flex items-center gap-2">
+            <span id="sandboxModelCount" class="px-2.5 py-0.5 text-xs font-mono-code bg-white/5 border border-white/10 rounded text-white">0 Models</span>
+            <button class="btn-secondary text-xs py-1 px-2.5" onclick="syncModelsFromAntigravity()">↻ Sync Models</button>
           </div>
-        </article>
+        </div>
+        <div id="sandboxModelsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- Dynamically populated model cards -->
+        </div>
+      </div>
+    </div>
 
-        <!-- Real-Time WebSocket & Database Logs Console -->
-        <article class="anthropic-card">
-          <div class="card-caption">
-            <div>
-              <h2>Real-Time Live Stream & Telemetry</h2>
-              <span class="sub-caption">Instant corruption alerts & proxy logs via WebSocket</span>
-            </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <span id="wsIndicatorBadge" class="counter-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);">
-                ● WebSocket Connected
-              </span>
-              <button class="action-btn secondary-btn" style="padding: 4px 10px; font-size: 11px;" onclick="clearLiveLogs()">Clear</button>
-            </div>
+    <!-- TAB 4: 🛡️ SYSTEM & DATABASE SENTINEL -->
+    <div id="tab-sentinel" class="tab-content flex flex-col gap-6" style="display: none;">
+      <!-- Top Action Bar -->
+      <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#a8a29e]/15">
+        <div>
+          <h2 class="font-serif-title text-2xl font-semibold text-white">Compiled Binary Database & Sentinel</h2>
+          <p class="text-xs text-[#a8a29e] mt-1">Compiled C SQLite engine with sealed binary BLOBs and continuous CRC32 integrity watchdog.</p>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <button class="btn-secondary" onclick="auditDatabase()">Audit Database</button>
+          <button class="btn-secondary text-rose-400 border-rose-900/40 hover:bg-rose-950/30" onclick="testDatabaseCorruption()">Simulate Tampering</button>
+        </div>
+      </div>
+
+      <!-- Database Specs Card -->
+      <div class="anthropic-card">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Storage Architecture</h3>
+            <span class="text-xs text-[#a8a29e]">PGDB v1 format: Zero plaintext JSON, memory-mapped WAL transactions</span>
           </div>
-          <div class="console-output-wrap">
-            <pre id="liveLogsArea" class="editorial-terminal" style="height: 180px; max-height: 220px; overflow-y: auto; font-size: 11px; line-height: 1.5; color: #a8a29e; font-family: 'JetBrains Mono', monospace;">Connecting to live WebSocket event bus...</pre>
+          <span id="sentinelHealthBadge" class="px-3 py-1 rounded-full text-xs font-mono-code font-bold bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30">
+            Optimal
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <span class="text-[11px] text-[#a8a29e] block font-medium">Engine & Format</span>
+            <span id="sentinelEngineText" class="text-xs font-mono-code text-white block mt-1">Compiled C (SQLite WAL)</span>
           </div>
-        </article>
-      </section>
-    </main>
-  </div>
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <span class="text-[11px] text-[#a8a29e] block font-medium">Sealed Records</span>
+            <span id="sentinelRecordsText" class="text-xs font-mono-code text-[#f59e0b] block mt-1">0 Binary Records</span>
+          </div>
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <span class="text-[11px] text-[#a8a29e] block font-medium">Physical File Size</span>
+            <span id="sentinelSizeText" class="text-xs font-mono-code text-white block mt-1">0 KB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time WebSocket & Server Logs Console -->
+      <div class="anthropic-card">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-[#a8a29e]/10">
+          <div>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Real-Time Event Stream & Logs</h3>
+            <span class="text-xs text-[#a8a29e]">Live streaming stdout/stderr telemetry and instant corruption alarms</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn-secondary text-xs py-1 px-2.5" onclick="clearLiveLogs()">Clear Logs</button>
+          </div>
+        </div>
+        <pre id="sentinelLogsArea" class="editorial-terminal h-80 overflow-y-auto">Connecting to live WebSocket event bus...</pre>
+      </div>
+    </div>
+
+  </main>
 
   <script src="app.js"></script>
 </body>

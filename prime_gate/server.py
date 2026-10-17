@@ -27,6 +27,7 @@ from .translator import (
 )
 from .db import db, event_bus, WebSocketLogHandler
 from .db.sentinel import sentinel
+from .telemetry import telemetry
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("prime_gate.server")
@@ -311,7 +312,12 @@ async def api_db_test_corrupt(request: Request):
         "message": f"Injected simulated binary corruption into '{target_key}'. Check WebSocket stream and terminal logs!"
     }
 
-
+@app.get("/api/metrics/tokens")
+async def api_token_metrics(range: str = "minute"):
+    """Returns token consumption time-series chart data and KPIs (second, minute, hour, day)."""
+    if range not in ["second", "minute", "hour", "day"]:
+        range = "minute"
+    return telemetry.get_metrics(time_range=range)
 
 async def stream_antigravity_sse(
     upstream_url: str,
@@ -322,6 +328,11 @@ async def stream_antigravity_sse(
     model: str
 ) -> AsyncGenerator[str, None]:
     """Stream SSE chunks from Google Antigravity and yield OpenAI SSE format chunks."""
+    start_t = time.time()
+    prompt_tokens = max(1, len(json.dumps(wrapped_body.get("request", {}))) // 4)
+    completion_tokens = 0
+    reasoning_tokens = 0
+
     timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
@@ -351,11 +362,13 @@ async def stream_antigravity_sse(
                     parts = candidates[0].get("content", {}).get("parts", [])
                     for part in parts:
                         if part.get("thought") and part.get("text"):
+                            reasoning_tokens += max(1, len(part["text"].split()))
                             yield format_sse_chunk(
                                 completion_id, created, model,
                                 {"reasoning_content": part["text"]}
                             )
                         elif part.get("text"):
+                            completion_tokens += max(1, len(part["text"].split()))
                             yield format_sse_chunk(
                                 completion_id, created, model,
                                 {"content": part["text"]}
@@ -380,6 +393,16 @@ async def stream_antigravity_sse(
                             )
                 except Exception:
                     continue
+
+            # Record telemetry for completed stream
+            latency_ms = (time.time() - start_t) * 1000
+            telemetry.record_usage(
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                reasoning_tokens=reasoning_tokens,
+                latency_ms=latency_ms
+            )
 
             # Send final stop chunk
             finish_reason = "tool_calls" if has_emitted_tool_call else "stop"
@@ -474,6 +497,17 @@ async def chat_completions(request: Request):
                                         "arguments": json.dumps(fn.get("args", {}))
                                     }
                                 })
+
+                    latency_ms = (time.time() - created) * 1000
+                    p_toks = max(1, len(json.dumps(req_payload)) // 4)
+                    c_toks = max(1, len(content_text.split()))
+                    telemetry.record_usage(
+                        model=model,
+                        prompt_tokens=p_toks,
+                        completion_tokens=c_toks,
+                        reasoning_tokens=0,
+                        latency_ms=latency_ms
+                    )
 
                     return format_non_stream_response(
                         completion_id, created, model,
