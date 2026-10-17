@@ -17,6 +17,9 @@ import {
 interface DashboardPageProps {
   metrics: TelemetryMetrics;
   activeAccount: Account | null;
+  chartPoints: TokenVolumePoint[];
+  timeRange: '1s' | '1m' | '1h' | '1d';
+  onTimeRangeChange: (range: '1s' | '1m' | '1h' | '1d') => void;
   onSyncQuota: () => Promise<void>;
   isSyncing: boolean;
 }
@@ -24,11 +27,13 @@ interface DashboardPageProps {
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   metrics,
   activeAccount,
+  chartPoints,
+  timeRange,
+  onTimeRangeChange,
   onSyncQuota,
   isSyncing,
 }) => {
   const { showToast } = useToast();
-  const [timeRange, setTimeRange] = useState<'1s' | '1m' | '1h' | '1d'>('1m');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
@@ -48,31 +53,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     });
   };
 
-  // Build chart points from live data
-  const chartPoints: TokenVolumePoint[] = [
-    { timestamp: '1', timeLabel: '03:10', prompt: 0, reasoning: 0, completion: 0, total: 0 },
-    { timestamp: '2', timeLabel: '03:15', prompt: 0, reasoning: 0, completion: 0, total: 0 },
-    { timestamp: '3', timeLabel: '03:20', prompt: 0, reasoning: 0, completion: 0, total: 0 },
-    { timestamp: '4', timeLabel: '03:25', prompt: 0, reasoning: 0, completion: 0, total: 0 },
-    {
-      timestamp: '5',
-      timeLabel: '03:32',
-      prompt: metrics.tokens_today.prompt || 94901,
-      reasoning: metrics.tokens_today.reasoning || 1085,
-      completion: metrics.tokens_today.completion || 366,
-      total: (metrics.tokens_today.prompt || 94901) + (metrics.tokens_today.reasoning || 1085) + (metrics.tokens_today.completion || 366),
-    },
-    { timestamp: '6', timeLabel: '03:38', prompt: 0, reasoning: 0, completion: 0, total: 0 },
-  ];
-
   const quotaItems = activeAccount?.quota_summary && activeAccount.quota_summary.length > 0
     ? activeAccount.quota_summary
-    : [
-        { family: 'gemini-weekly', label: 'Gemini Models (Weekly Limit Remaining)', percentage: 100, reset_time: '2026-10-24T20:37:31Z' },
-        { family: 'gemini-5h', label: 'Gemini Models (Five Hour Limit Remaining)', percentage: 100, reset_time: '2026-10-18T01:37:31Z' },
-        { family: 'gp-weekly', label: 'Claude and GPT models (Weekly Limit Remaining)', percentage: 48.3, reset_time: '2026-10-20T19:05:52Z' },
-        { family: 'gp-5h', label: 'Claude and GPT models (Five Hour Limit Remaining)', percentage: 98.8, reset_time: '2026-10-18T04:19:12Z' },
-      ];
+    : [];
 
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -157,7 +140,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       <TokenChart
         data={chartPoints}
         timeRange={timeRange}
-        onTimeRangeChange={setTimeRange}
+        onTimeRangeChange={onTimeRangeChange}
       />
 
       {/* Bottom Grid: Live Quota Meter & OpenAI Client Gateway */}
@@ -190,7 +173,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {quotaItems.map((item, idx) => {
+            {quotaItems.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '36px 20px',
+                  color: '#a8a29e',
+                  fontSize: 13,
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: 12,
+                  border: '1px dashed rgba(168, 162, 158, 0.2)',
+                }}
+              >
+                <div>No live quota limits loaded yet for <strong style={{ color: '#ffffff' }}>{activeAccount?.email || 'the active account'}</strong>.</div>
+                <div style={{ fontSize: 12, color: '#78716c', marginTop: 4 }}>Click <strong>Sync</strong> above to fetch current quota buckets from Google Antigravity.</div>
+              </div>
+            ) : (
+              quotaItems.map((item, idx) => {
               const pct = item.percentage;
               const barColor = pct > 40 ? '#10b981' : pct > 15 ? '#f59e0b' : '#f43f5e';
               return (
@@ -237,7 +236,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
 

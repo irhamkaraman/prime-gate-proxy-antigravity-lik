@@ -419,20 +419,27 @@ async def api_auth_login():
 
 @app.get("/api/accounts")
 async def api_accounts_list():
-    """List all accounts currently configured in Prime Gate."""
+    """List all accounts currently configured in Prime Gate with live quota summaries."""
     accounts = account_mgr.load_accounts()
     active_acc = account_mgr.get_active_account()
+    active_email = active_acc.get("email") if active_acc else None
+
+    results = []
+    for a in accounts:
+        email = a.get("email")
+        quota_data = db.get(f"quota:{email}") or {}
+        results.append({
+            "email": email,
+            "projectId": a.get("projectId"),
+            "is_active": (email == active_email),
+            "tier": QuotaMonitor.get_tier_label(a),
+            "quota_summary": quota_data.get("quota", [])
+        })
+
     return {
-        "accounts": [
-            {
-                "email": a.get("email"),
-                "projectId": a.get("projectId"),
-                "is_active": a.get("email") == (active_acc.get("email") if active_acc else None),
-                "tier": QuotaMonitor.get_tier_label(a)
-            }
-            for a in accounts
-        ],
-        "total": len(accounts)
+        "accounts": results,
+        "total": len(accounts),
+        "active_account": active_email
     }
 
 @app.post("/api/auth/switch")
@@ -461,6 +468,7 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
     models_count = 0
     quota_count = 0
     tier_label = QuotaMonitor.get_tier_label(switched)
+    quota = []
     try:
         models = await QuotaMonitor.fetch_live_models_from_antigravity(switched, force_refresh=True)
         quota = await QuotaMonitor.fetch_live_quota_from_antigravity(switched, force_refresh=True)
@@ -475,7 +483,8 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
             "email": switched.get("email"),
             "tier": tier_label,
             "models_count": models_count,
-            "quota_count": quota_count
+            "quota_count": quota_count,
+            "quota": quota
         })
     except Exception:
         pass
@@ -646,9 +655,38 @@ async def api_db_test_corrupt(request: Request):
 @app.get("/api/metrics/tokens")
 async def api_token_metrics(range: str = "minute"):
     """Returns token consumption time-series chart data and KPIs (second, minute, hour, day)."""
-    if range not in ["second", "minute", "hour", "day"]:
-        range = "minute"
-    return telemetry.get_metrics(time_range=range)
+    if range in ["1s", "second", "sec"]:
+        r = "second"
+    elif range in ["1m", "minute", "min"]:
+        r = "minute"
+    elif range in ["1h", "hour", "hr"]:
+        r = "hour"
+    elif range in ["1d", "day"]:
+        r = "day"
+    else:
+        r = "minute"
+
+    data = telemetry.get_metrics(time_range=r)
+    s = data.get("summary", {})
+    data["metrics"] = {
+        "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
+        "tokens_today": {
+            "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
+            "prompt": s.get("total_prompt_tokens", 0),
+            "completion": s.get("total_completion_tokens", 0),
+            "reasoning": s.get("total_reasoning_tokens", 0)
+        },
+        "latency_ms": {
+            "ttft_avg": s.get("avg_latency_ms", 0.0),
+            "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
+        },
+        "cumulative": {
+            "requests": s.get("total_requests_all_time", 0),
+            "tokens": s.get("total_tokens_all_time", 0)
+        },
+        "active_subscribers": event_bus.subscriber_count
+    }
+    return data
 
 async def stream_antigravity_sse(
     upstream_url: str,
@@ -743,6 +781,34 @@ async def stream_antigravity_sse(
                 latency_ms=latency_ms
             )
 
+            # Live broadcast telemetry to WebSocket clients
+            try:
+                metrics_data = telemetry.get_metrics(time_range="minute")
+                s = metrics_data["summary"]
+                event_bus.broadcast_sync({
+                    "type": "TELEMETRY_UPDATE",
+                    "metrics": {
+                        "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
+                        "tokens_today": {
+                            "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
+                            "prompt": s.get("total_prompt_tokens", 0),
+                            "completion": s.get("total_completion_tokens", 0),
+                            "reasoning": s.get("total_reasoning_tokens", 0)
+                        },
+                        "latency_ms": {
+                            "ttft_avg": s.get("avg_latency_ms", 0.0),
+                            "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
+                        },
+                        "cumulative": {
+                            "requests": s.get("total_requests_all_time", 0),
+                            "tokens": s.get("total_tokens_all_time", 0)
+                        }
+                    },
+                    "chart_data": metrics_data.get("chart_data")
+                })
+            except Exception:
+                pass
+
             # Send final stop chunk
             finish_reason = "tool_calls" if has_emitted_tool_call else "stop"
             yield format_sse_chunk(completion_id, created, model, {}, finish_reason=finish_reason)
@@ -768,10 +834,20 @@ async def chat_completions(request: Request):
     completion_id = "chatcmpl-" + uuid.uuid4().hex
     created = int(time.time())
 
-    # Try active accounts with failover
+    # Try active account first, then failover to others
+    active_acc = account_mgr.get_active_account()
+    ordered_accounts = []
+    if active_acc:
+        ordered_accounts.append(active_acc)
+        for a in accounts:
+            if a.get("email") != active_acc.get("email"):
+                ordered_accounts.append(a)
+    else:
+        ordered_accounts = accounts
+
     last_error = None
-    for attempt in range(len(accounts)):
-        account = accounts[attempt]
+    for attempt in range(len(ordered_accounts)):
+        account = ordered_accounts[attempt]
         try:
             access_token = await get_access_token(account)
             project_id = account.get("projectId", "rising-fact-p41fc")
@@ -874,6 +950,34 @@ async def chat_completions(request: Request):
                             reasoning_tokens=reasoning_tokens,
                             latency_ms=latency_ms
                         )
+
+                        # Live broadcast telemetry to WebSocket clients
+                        try:
+                            metrics_data = telemetry.get_metrics(time_range="minute")
+                            s = metrics_data["summary"]
+                            event_bus.broadcast_sync({
+                                "type": "TELEMETRY_UPDATE",
+                                "metrics": {
+                                    "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
+                                    "tokens_today": {
+                                        "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
+                                        "prompt": s.get("total_prompt_tokens", 0),
+                                        "completion": s.get("total_completion_tokens", 0),
+                                        "reasoning": s.get("total_reasoning_tokens", 0)
+                                    },
+                                    "latency_ms": {
+                                        "ttft_avg": s.get("avg_latency_ms", 0.0),
+                                        "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
+                                    },
+                                    "cumulative": {
+                                        "requests": s.get("total_requests_all_time", 0),
+                                        "tokens": s.get("total_tokens_all_time", 0)
+                                    }
+                                },
+                                "chart_data": metrics_data.get("chart_data")
+                            })
+                        except Exception:
+                            pass
 
                         return format_non_stream_response(
                             completion_id, created, model,

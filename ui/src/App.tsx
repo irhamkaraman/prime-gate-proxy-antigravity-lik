@@ -13,24 +13,24 @@ import { PromptSandboxPage } from './pages/PromptSandboxPage';
 import { SentinelPage } from './pages/SentinelPage';
 import { DocumentationPage } from './pages/DocumentationPage';
 
-import { Account, TelemetryMetrics } from './types';
+import { Account, TelemetryMetrics, TokenVolumePoint } from './types';
 import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download } from 'lucide-react';
 
 const initialMetrics: TelemetryMetrics = {
   throughput_tokens_per_sec: 0.0,
   tokens_today: {
-    total: 96352,
-    prompt: 94901,
-    completion: 366,
-    reasoning: 1085,
+    total: 0,
+    prompt: 0,
+    completion: 0,
+    reasoning: 0,
   },
   latency_ms: {
-    ttft_avg: 3121,
+    ttft_avg: 0,
     status: 'optimal',
   },
   cumulative: {
-    requests: 21,
-    tokens: 96352,
+    requests: 0,
+    tokens: 0,
   },
   active_subscribers: 1,
 };
@@ -43,12 +43,14 @@ const MainLayout: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [metrics, setMetrics] = useState<TelemetryMetrics>(initialMetrics);
+  const [chartPoints, setChartPoints] = useState<TokenVolumePoint[]>([]);
+  const [timeRange, setTimeRange] = useState<'1s' | '1m' | '1h' | '1d'>('1m');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Fetch accounts list
+  // Fetch accounts list and real-time active account quota
   const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetch('/api/accounts');
@@ -56,7 +58,23 @@ const MainLayout: React.FC = () => {
         const data = await res.json();
         const list: Account[] = Array.isArray(data) ? data : data.accounts || [];
         setAccounts(list);
-        const active = list.find(a => a.is_active) || (list.length > 0 ? list[0] : null);
+        let active = list.find(a => a.is_active) || (list.length > 0 ? list[0] : null);
+
+        // Fetch live quota for the active account
+        try {
+          const qRes = await fetch('/api/quota');
+          if (qRes.ok) {
+            const qData = await qRes.json();
+            if (qData.quota && Array.isArray(qData.quota)) {
+              if (active) {
+                active = { ...active, quota_summary: qData.quota, tier: qData.tier || active.tier };
+              }
+            }
+          }
+        } catch (e) {
+          console.debug('Failed to fetch live quota in background:', e);
+        }
+
         setActiveAccount(active);
       }
     } catch (err) {
@@ -64,19 +82,46 @@ const MainLayout: React.FC = () => {
     }
   }, []);
 
-  // Fetch telemetry metrics
-  const fetchMetrics = useCallback(async () => {
+  // Fetch telemetry metrics and real-time time-series chart data
+  const fetchMetrics = useCallback(async (rangeToFetch: '1s' | '1m' | '1h' | '1d' = '1m') => {
     try {
-      const res = await fetch('/api/metrics/tokens?range=minute');
+      const res = await fetch(`/api/metrics/tokens?range=${rangeToFetch}`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.metrics) {
-          setMetrics(prev => ({
-            ...prev,
-            throughput_tokens_per_sec: data.metrics.throughput_tokens_per_sec ?? prev.throughput_tokens_per_sec,
-            tokens_today: data.metrics.tokens_today ?? prev.tokens_today,
-            cumulative: data.metrics.cumulative ?? prev.cumulative,
+          setMetrics(data.metrics);
+        } else if (data && data.summary) {
+          const s = data.summary;
+          setMetrics({
+            throughput_tokens_per_sec: s.current_tokens_per_sec ?? 0.0,
+            tokens_today: {
+              total: s.tokens_today ?? s.total_tokens_all_time ?? 0,
+              prompt: s.total_prompt_tokens ?? 0,
+              completion: s.total_completion_tokens ?? 0,
+              reasoning: s.total_reasoning_tokens ?? 0,
+            },
+            latency_ms: {
+              ttft_avg: s.avg_latency_ms ?? 0.0,
+              status: (s.avg_latency_ms ?? 0.0) < 4000 ? 'optimal' : 'warning',
+            },
+            cumulative: {
+              requests: s.total_requests_all_time ?? 0,
+              tokens: s.total_tokens_all_time ?? 0,
+            },
+            active_subscribers: 1,
+          });
+        }
+
+        if (data && data.chart_data && Array.isArray(data.chart_data.labels)) {
+          const pts: TokenVolumePoint[] = data.chart_data.labels.map((lbl: string, idx: number) => ({
+            timestamp: String(idx),
+            timeLabel: lbl,
+            prompt: data.chart_data.prompt_tokens[idx] || 0,
+            reasoning: data.chart_data.reasoning_tokens[idx] || 0,
+            completion: data.chart_data.completion_tokens[idx] || 0,
+            total: data.chart_data.total_tokens[idx] || 0,
           }));
+          setChartPoints(pts);
         }
       }
     } catch (err) {
@@ -92,14 +137,17 @@ const MainLayout: React.FC = () => {
       if (!res.ok) throw new Error('Quota sync failed');
       const data = await res.json();
       showToast(data.message || 'Live quota & models synced with Google Antigravity!', 'success');
+      if (data.quota && Array.isArray(data.quota)) {
+        setActiveAccount(prev => prev ? { ...prev, quota_summary: data.quota } : null);
+      }
       await fetchAccounts();
-      await fetchMetrics();
+      await fetchMetrics(timeRange);
     } catch (err: unknown) {
       showToast((err as Error).message || 'Failed to sync quota', 'error');
     } finally {
       setIsSyncing(false);
     }
-  }, [fetchAccounts, fetchMetrics, showToast]);
+  }, [fetchAccounts, fetchMetrics, showToast, timeRange]);
 
   // WebSocket Live Connection
   useEffect(() => {
@@ -120,13 +168,35 @@ const MainLayout: React.FC = () => {
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            if (data.type === 'telemetry_update' && data.metrics) {
-              setMetrics(prev => ({
-                ...prev,
-                throughput_tokens_per_sec: data.metrics.throughput ?? prev.throughput_tokens_per_sec,
-                tokens_today: data.metrics.tokens_today ?? prev.tokens_today,
-              }));
-            } else if (data.type === 'quota_update') {
+            const msgType = (data.type || '').toUpperCase();
+            if (msgType === 'TELEMETRY_UPDATE') {
+              if (data.metrics) {
+                setMetrics(prev => ({
+                  ...prev,
+                  throughput_tokens_per_sec: data.metrics.throughput_tokens_per_sec ?? prev.throughput_tokens_per_sec,
+                  tokens_today: data.metrics.tokens_today ?? prev.tokens_today,
+                  cumulative: data.metrics.cumulative ?? prev.cumulative,
+                  latency_ms: data.metrics.latency_ms ?? prev.latency_ms,
+                }));
+              }
+              if (data.chart_data && Array.isArray(data.chart_data.labels)) {
+                const pts: TokenVolumePoint[] = data.chart_data.labels.map((lbl: string, idx: number) => ({
+                  timestamp: String(idx),
+                  timeLabel: lbl,
+                  prompt: data.chart_data.prompt_tokens[idx] || 0,
+                  reasoning: data.chart_data.reasoning_tokens[idx] || 0,
+                  completion: data.chart_data.completion_tokens[idx] || 0,
+                  total: data.chart_data.total_tokens[idx] || 0,
+                }));
+                setChartPoints(pts);
+              }
+            } else if (msgType === 'ACCOUNT_SWITCHED') {
+              if (data.quota && Array.isArray(data.quota) && data.quota.length > 0) {
+                setActiveAccount(prev => prev ? { ...prev, email: data.email || prev.email, quota_summary: data.quota } : null);
+              }
+              fetchAccounts();
+              fetchMetrics(timeRange);
+            } else if (msgType === 'QUOTA_UPDATE' || msgType === 'QUOTA_UPDATED' || msgType === 'ACCOUNT_CONNECTED' || msgType === 'ACCOUNT_REMOVED') {
               fetchAccounts();
             }
           } catch (e) {
@@ -151,18 +221,18 @@ const MainLayout: React.FC = () => {
 
     connectWs();
     fetchAccounts();
-    fetchMetrics();
+    fetchMetrics('1m');
 
     const pollingInterval = setInterval(() => {
-      fetchMetrics();
-    }, 5000);
+      fetchMetrics(timeRange);
+    }, 4000);
 
     return () => {
       clearInterval(pollingInterval);
       clearTimeout(reconnectTimeout);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [fetchAccounts, fetchMetrics]);
+  }, [fetchAccounts, fetchMetrics, timeRange]);
 
   // Open "Add Account" Modal with Google OAuth flow & JSON import
   const handleOpenAddAccountModal = () => {
@@ -350,6 +420,12 @@ const MainLayout: React.FC = () => {
             <DashboardPage
               metrics={metrics}
               activeAccount={activeAccount}
+              chartPoints={chartPoints}
+              timeRange={timeRange}
+              onTimeRangeChange={(newRange) => {
+                setTimeRange(newRange);
+                fetchMetrics(newRange);
+              }}
               onSyncQuota={handleSyncQuota}
               isSyncing={isSyncing}
             />
