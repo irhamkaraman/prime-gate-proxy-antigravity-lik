@@ -101,13 +101,34 @@ Jalankan service API dan Web UI sekaligus:
 | `prime-gate auth list` | Menampilkan seluruh akun Google yang tersimpan. |
 | `prime-gate auth import` | Mengimpor akun dari config OpenCode. |
 | `prime-gate auth login` | Login akun baru via Google OAuth browser PKCE. |
-| `prime-gate auth remove <email>` | Menghapus akun tertentu dari Prime Gate. |
-| `prime-gate auth clear` | Menghapus seluruh akun dan mereset ke status onboarding awal. |
+| `prime-gate auth remove [EMAIL]` | Menghapus akun tertentu (atau memilih interaktif dari menu nomor). |
+| `prime-gate auth remove -e <email> -f` | Menghapus akun via flag tanpa konfirmasi (`--email`, `--force`). |
+| `prime-gate auth remove -a -f` | Menghapus SEMUA akun via flag tanpa konfirmasi (`--all`, `--force`). |
+| `prime-gate delete-account [email]` | Shortcut perintah langsung untuk menghapus akun atau semua akun. |
+| `prime-gate auth clear -y` | Menghapus seluruh akun dan mereset ke status onboarding awal. |
 | `prime-gate daemon start` | Menjalankan proxy & Web UI di background (headless). |
 | `prime-gate daemon status` | Memeriksa PID, port aktif, dan status daemon. |
 | `prime-gate daemon stop` | Menghentikan seluruh service background. |
+| `prime-gate db check` | Menjalankan audit kriptografis 32-bit CRC32 pada database binary. |
 | `prime-gate start` | Menjalankan API server di terminal foreground. |
 | `prime-gate ui` | Membuka Web UI dashboard di browser. |
+
+### 🗑️ Panduan Flag Hapus Akun (Terminal & Web UI):
+Prime Gate menyediakan fleksibilitas penuh untuk menghapus akun satu per satu maupun sekaligus:
+- **Hapus akun spesifik via flag:**
+  ```bash
+  python -m prime_gate.cli auth remove --email user@gmail.com --force
+  # Atau via perintah shortcut:
+  python -m prime_gate.cli delete-account -e user@gmail.com -f
+  ```
+- **Hapus SEMUA akun via flag:**
+  ```bash
+  python -m prime_gate.cli auth remove --all --force
+  ```
+- **Pemilihan interaktif:**
+  Jalankan `python -m prime_gate.cli auth remove` tanpa argumen untuk memilih dari daftar nomor akun.
+- **Di Web UI:**
+  Buka tab **Account Manager**, klik tombol merah **"Delete"** pada kartu akun yang ingin dihapus, atau klik **"Delete Account"** pada kartu Active Identity. Untuk menghapus semua, klik **"Clear All"**.
 
 ---
 

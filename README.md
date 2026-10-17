@@ -124,13 +124,34 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | `prime-gate auth list` | Show all stored Google Antigravity accounts. |
 | `prime-gate auth import` | Import accounts from `~/.config/opencode/antigravity-accounts.json`. |
 | `prime-gate auth login` | Open browser for Google OAuth 2.0 PKCE authentication. |
-| `prime-gate auth remove <email>` | Remove a specific account from Prime Gate. |
-| `prime-gate auth clear` | Remove all stored accounts and reset to initial onboarding state. |
+| `prime-gate auth remove [EMAIL]` | Remove account (or pick interactively from a numbered menu). |
+| `prime-gate auth remove -e <email> -f` | Delete account via flag with forced confirmation bypass (`--email`, `--force`). |
+| `prime-gate auth remove -a -f` | Delete ALL accounts via flags without prompt (`--all`, `--force`). |
+| `prime-gate delete-account [email]` | Direct top-level shortcut to delete account or all accounts. |
+| `prime-gate auth clear -y` | Remove all stored accounts and reset to initial onboarding state. |
 | `prime-gate daemon start` | Launch proxy & web UI in the background (headless). |
 | `prime-gate daemon status` | Check background process PID, memory, and ports. |
 | `prime-gate daemon stop` | Terminate all active background proxy services. |
+| `prime-gate db check` | Run 32-bit CRC32 cryptographic audit on binary database. |
 | `prime-gate start` | Run API server in foreground with live request logs. |
 | `prime-gate ui` | Start and open the Node.js Web UI Dashboard. |
+
+### 🗑️ Account Deletion & Management Flags:
+Prime Gate provides flexible flags to remove individual or all accounts from both terminal and Web UI:
+- **Delete specific account via flag:**
+  ```bash
+  python -m prime_gate.cli auth remove --email user@gmail.com --force
+  # Or via shortcut:
+  python -m prime_gate.cli delete-account -e user@gmail.com -f
+  ```
+- **Delete ALL accounts without prompt:**
+  ```bash
+  python -m prime_gate.cli auth remove --all --force
+  ```
+- **Interactive selection:**
+  Run `python -m prime_gate.cli auth remove` without arguments to select from a numbered list of registered accounts.
+- **In Web UI:**
+  Navigate to the **Account Manager** tab, click the red **"Delete"** button on any account card or **"Delete Account"** on the Active Identity card. Click **"Clear All"** to wipe all accounts.
 
 ---
 

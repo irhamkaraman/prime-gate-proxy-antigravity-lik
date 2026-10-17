@@ -131,7 +131,7 @@ python -m prime_gate.cli ui --port 52110
    - **"Sign in with Google"**: Authorizes via Google OAuth 2.0 PKCE in your default browser.
    - **"⚡ Quick Import from OpenCode Config"**: Reads credentials from `~/.config/opencode/antigravity-accounts.json`.
 
-### Terminal CLI Commands:
+### Terminal CLI Commands & Flags:
 ```bash
 # Authenticate via browser
 python -m prime_gate.cli auth login
@@ -142,12 +142,25 @@ python -m prime_gate.cli auth import
 # List connected accounts and detected tiers
 python -m prime_gate.cli auth list
 
-# Remove a specific account
+# Delete a specific account via positional email or interactive menu
 python -m prime_gate.cli auth remove user@gmail.com
 
-# Clear all accounts
-python -m prime_gate.cli auth clear
+# Delete a specific account via flag with forced confirmation bypass
+python -m prime_gate.cli auth remove --email user@gmail.com --force
+# (Short form: python -m prime_gate.cli delete-account -e user@gmail.com -f)
+
+# Delete ALL accounts via flag without interactive prompt
+python -m prime_gate.cli auth remove --all --force
+# (Alternative: python -m prime_gate.cli auth clear -y)
 ```
+
+### Web UI Account Management & Deletion:
+1. Open the **Account Manager** tab in the sidebar.
+2. In the **Active Identity** card:
+   - Click the red **"Delete Account"** button to permanently remove the currently active account.
+3. In the **Configured Accounts** deck:
+   - Every connected account has an individual red **"Delete"** button with a trash icon to delete that specific account.
+4. To wipe all connected accounts at once, click the red **"Clear All"** button in the top action bar. If all accounts are deleted, the Web UI automatically returns to the initial setup onboarding overlay.
 
 ---
 
@@ -355,8 +368,9 @@ Metrics distinguish between:
 | `prime-gate auth login` | `--port` | Launches browser for Google OAuth 2.0 PKCE. |
 | `prime-gate auth import` | None | Imports accounts from OpenCode configuration. |
 | `prime-gate auth list` | None | Lists connected accounts and detected tiers. |
-| `prime-gate auth remove` | `<email>` | Removes a specific account from Prime Gate. |
-| `prime-gate auth clear` | `--yes` | Wipes all accounts and resets database state. |
+| `prime-gate auth remove [EMAIL]` | `[EMAIL]`, `-e/--email`, `-a/--all`, `-f/--force` | Removes account(s) via positional arg, flags, or interactive prompt. |
+| `prime-gate delete-account` | `[EMAIL]`, `-e/--email`, `-a/--all`, `-f/--force` | Direct shortcut to delete account(s) via flag or interactive menu. |
+| `prime-gate auth clear` | `-y/--yes`, `-f/--force` | Wipes all accounts and resets database state. |
 | `prime-gate daemon start` | None | Launches background proxy & web UI on Windows. |
 | `prime-gate daemon status` | None | Checks background PID, memory, and port health. |
 | `prime-gate daemon stop` | None | Terminates active background proxy processes. |

@@ -120,15 +120,38 @@ class AccountManager:
         return accounts[self._active_index]
 
     def remove_account(self, email: str) -> bool:
-        """Removes an account by email from the binary database."""
+        """Removes an account by email from the binary database and purges cached models/quota."""
         accounts = self.load_accounts()
         initial_count = len(accounts)
-        updated = [acc for acc in accounts if acc.get("email", "").lower() != email.strip().lower()]
+        norm_email = email.strip().lower()
+        updated = [acc for acc in accounts if acc.get("email", "").strip().lower() != norm_email]
         if len(updated) < initial_count:
             self.save_accounts(updated)
+            try:
+                db.delete(f"models:{norm_email}")
+                db.delete(f"quota:{norm_email}")
+                if not updated:
+                    db.delete("models:latest")
+                    db.delete("quota:latest")
+            except Exception as e:
+                logger.warning(f"Failed to purge DB cache for removed account {norm_email}: {e}")
             return True
         return False
 
     def clear_accounts(self) -> bool:
-        """Wipes all accounts from the compiled binary database."""
+        """Wipes all accounts from the compiled binary database and purges all cached records."""
+        accounts = self.load_accounts()
+        for acc in accounts:
+            norm_email = acc.get("email", "").strip().lower()
+            if norm_email:
+                try:
+                    db.delete(f"models:{norm_email}")
+                    db.delete(f"quota:{norm_email}")
+                except Exception:
+                    pass
+        try:
+            db.delete("models:latest")
+            db.delete("quota:latest")
+        except Exception:
+            pass
         return self.save_accounts([])

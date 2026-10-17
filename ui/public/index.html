@@ -302,7 +302,15 @@
         <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-[#a8a29e]/10">
           <div>
             <span class="text-xs text-[#a8a29e] font-medium block">Active Identity</span>
-            <span id="accActiveEmail" class="font-serif-title text-xl font-bold text-white mt-0.5 block">—</span>
+            <div class="flex items-center gap-3 mt-1">
+              <span id="accActiveEmail" class="font-serif-title text-xl font-bold text-white block">—</span>
+              <button id="btnDeleteActiveAccount" class="btn-secondary text-[11px] py-1 px-2.5 text-rose-400 border-rose-900/40 hover:bg-rose-950/30 flex items-center gap-1" onclick="removeActiveAccount()" title="Delete currently active account">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete Account
+              </button>
+            </div>
           </div>
           <div class="flex items-center gap-3">
             <span id="accTierBadge" class="px-3 py-1 rounded-full text-xs font-semibold bg-[#d97706]/20 text-[#f59e0b] border border-[#d97706]/40 font-mono-code">
@@ -848,9 +856,29 @@ print(response.choices[0].message.content)</pre>
                 <td class="p-3 text-[#a8a29e]">prime-gate auth import</td>
               </tr>
               <tr class="hover:bg-white/[0.02]">
-                <td class="p-3 text-emerald-400">prime-gate auth remove &lt;email&gt;</td>
-                <td class="p-3 text-[#d6d3d1] font-sans">Remove a specific Google Antigravity account from proxy.</td>
+                <td class="p-3 text-emerald-400">prime-gate auth remove [EMAIL]</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Delete account via positional email or interactive menu.</td>
                 <td class="p-3 text-[#a8a29e]">prime-gate auth remove user@gmail.com</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth remove -e &lt;email&gt; -f</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Delete account via flag with forced confirmation bypass.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth remove -e user@gmail.com -f</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth remove -a -f</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Delete ALL accounts via flag without prompt.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth remove --all --force</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate delete-account [email]</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Direct top-level shortcut to delete account or all accounts.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate delete-account -e user@gmail.com</td>
+              </tr>
+              <tr class="hover:bg-white/[0.02]">
+                <td class="p-3 text-emerald-400">prime-gate auth clear -y</td>
+                <td class="p-3 text-[#d6d3d1] font-sans">Remove ALL configured accounts and reset onboarding state.</td>
+                <td class="p-3 text-[#a8a29e]">prime-gate auth clear -y</td>
               </tr>
               <tr class="hover:bg-white/[0.02]">
                 <td class="p-3 text-emerald-400">prime-gate daemon start|status|stop</td>
@@ -872,12 +900,23 @@ print(response.choices[0].message.content)</pre>
         <div class="flex items-center gap-3 mb-4 pb-3 border-b border-[#a8a29e]/10">
           <div class="w-8 h-8 rounded-lg bg-[#d97706]/20 border border-[#d97706]/40 flex items-center justify-center text-[#f59e0b] font-bold text-sm">06</div>
           <div>
-            <h3 class="font-serif-title text-lg font-semibold text-white">Frequently Asked Questions &amp; Troubleshooting</h3>
-            <p class="text-xs text-[#a8a29e]">Quick solutions to common operational and networking questions.</p>
+            <h3 class="font-serif-title text-lg font-semibold text-white">Helpdesk, FAQ &amp; Troubleshooting</h3>
+            <p class="text-xs text-[#a8a29e]">Quick solutions to common operational and account management questions.</p>
           </div>
         </div>
 
         <div class="space-y-3 text-xs">
+          <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
+            <h4 class="font-semibold text-white mb-1">Q: How do I delete or remove accounts via Terminal flags or Web UI?</h4>
+            <p class="text-[#a8a29e] leading-relaxed">
+              <strong class="text-white">In Web UI:</strong> Open the <strong>Account Manager</strong> tab. Click the red <span class="text-rose-400 font-medium">Delete</span> button next to any configured account, or click <span class="text-rose-400 font-medium">Delete Account</span> on the Active Identity card. To wipe all accounts, click <span class="text-rose-400 font-medium">Clear All</span>.<br>
+              <strong class="text-white">In Terminal:</strong> Use flexible flags:
+              <code class="text-[#f59e0b] font-mono-code block mt-1">prime-gate auth remove --email user@gmail.com --force</code>
+              <code class="text-[#f59e0b] font-mono-code block mt-0.5">prime-gate auth remove --all --force</code>
+              <code class="text-[#f59e0b] font-mono-code block mt-0.5">prime-gate delete-account -e user@gmail.com</code>
+            </p>
+          </div>
+
           <div class="p-3 bg-[#0f0d0b] border border-[#a8a29e]/10 rounded-lg">
             <h4 class="font-semibold text-white mb-1">Q: How often does Google Antigravity reset model quotas?</h4>
             <p class="text-[#a8a29e] leading-relaxed">

@@ -1,4 +1,5 @@
 import sys
+from typing import Optional, List, Dict, Any
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -227,17 +228,67 @@ def auth_login(port: int = 53123):
 @auth_app.command("remove")
 @auth_app.command("delete")
 def auth_remove(
-    email: str = typer.Argument(..., help="Email of the account to remove from Prime Gate.")
+    email: Optional[str] = typer.Argument(None, help="Email of the account to remove (positional)."),
+    email_flag: Optional[str] = typer.Option(None, "--email", "-e", help="Email of the account to remove via flag."),
+    delete_all: bool = typer.Option(False, "--all", "-a", help="Delete ALL configured accounts from Prime Gate."),
+    force: bool = typer.Option(False, "--force", "-f", "--yes", "-y", help="Skip interactive confirmation prompt.")
 ):
-    """Remove a specific Google Antigravity account from Prime Gate."""
-    if account_mgr.remove_account(email):
-        console.print(f"[bold green][OK] Berhasil menghapus akun {email} dari Prime Gate.[/bold green]")
+    """Remove or delete Google Antigravity accounts from Prime Gate with flexible flags."""
+    target_email = email_flag or email
+
+    if delete_all:
+        if not force:
+            confirm = typer.confirm("Yakin ingin menghapus SEMUA akun Antigravity dari Prime Gate?")
+            if not confirm:
+                console.print("[yellow]Operasi dibatalkan.[/yellow]")
+                return
+        if account_mgr.clear_accounts():
+            console.print("[bold green][OK] Semua akun Antigravity berhasil dihapus dari Prime Gate.[/bold green]")
+            console.print("[dim]Prime Gate sekarang kembali ke status onboarding awal.[/dim]")
+        else:
+            console.print("[bold red]Gagal membersihkan akun.[/bold red]")
+        return
+
+    accounts = account_mgr.load_accounts()
+    if not accounts:
+        console.print("[yellow]Tidak ada akun yang tersimpan di Prime Gate.[/yellow]")
+        return
+
+    if not target_email:
+        console.print("[bold cyan]Pilih akun yang ingin dihapus:[/bold cyan]")
+        for idx, acc in enumerate(accounts, 1):
+            console.print(f"  [bold white]{idx}.[/bold white] {acc.get('email')} [dim]({acc.get('projectId', 'default')})[/dim]")
+        choice = typer.prompt("Masukkan nomor akun yang ingin dihapus (atau 'q' untuk batal)")
+        if choice.strip().lower() == 'q':
+            console.print("[yellow]Operasi dibatalkan.[/yellow]")
+            return
+        try:
+            sel_idx = int(choice.strip()) - 1
+            if 0 <= sel_idx < len(accounts):
+                target_email = accounts[sel_idx].get("email")
+            else:
+                console.print("[bold red]Pilihan nomor tidak valid.[/bold red]")
+                return
+        except ValueError:
+            console.print("[bold red]Input harus berupa angka.[/bold red]")
+            return
+
+    if not force:
+        confirm = typer.confirm(f"Yakin ingin menghapus akun '{target_email}' dari Prime Gate?")
+        if not confirm:
+            console.print("[yellow]Operasi dibatalkan.[/yellow]")
+            return
+
+    if account_mgr.remove_account(target_email):
+        console.print(f"[bold green][OK] Berhasil menghapus akun {target_email} dari Prime Gate.[/bold green]")
+        remaining = account_mgr.load_accounts()
+        console.print(f"[dim]Sisa akun terdaftar: {len(remaining)} akun.[/dim]")
     else:
-        console.print(f"[bold yellow]Akun {email} tidak ditemukan di Prime Gate.[/bold yellow]")
+        console.print(f"[bold yellow]Akun {target_email} tidak ditemukan di Prime Gate.[/bold yellow]")
 
 @auth_app.command("clear")
 def auth_clear(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt.")
+    yes: bool = typer.Option(False, "--yes", "-y", "--force", "-f", help="Skip confirmation prompt.")
 ):
     """Remove ALL configured Google Antigravity accounts from Prime Gate."""
     if not yes:
@@ -373,7 +424,23 @@ def db_daemon_run(
         loop.run_forever()
     except KeyboardInterrupt:
         console.print("\n[yellow]Stopping Database Sentinel Daemon...[/yellow]")
-        loop.run_until_complete(sentinel.stop())
+@app.command("remove-account")
+@app.command("delete-account")
+def top_level_remove_account(
+    email: Optional[str] = typer.Argument(None, help="Email of the account to remove (positional)."),
+    email_flag: Optional[str] = typer.Option(None, "--email", "-e", help="Email of the account to remove via flag."),
+    delete_all: bool = typer.Option(False, "--all", "-a", help="Delete ALL configured accounts from Prime Gate."),
+    force: bool = typer.Option(False, "--force", "-f", "--yes", "-y", help="Skip interactive confirmation prompt.")
+):
+    """Direct shortcut to delete an account or all accounts using flags."""
+    auth_remove(email=email, email_flag=email_flag, delete_all=delete_all, force=force)
+
+@app.command("clear-accounts")
+def top_level_clear_accounts(
+    force: bool = typer.Option(False, "--force", "-f", "--yes", "-y", help="Skip interactive confirmation prompt.")
+):
+    """Direct shortcut to clear all accounts from Prime Gate."""
+    auth_clear(yes=force)
 
 if __name__ == "__main__":
     app()

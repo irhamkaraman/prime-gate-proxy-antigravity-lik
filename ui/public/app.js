@@ -284,8 +284,11 @@ async function fetchAccounts() {
             <span class="text-[10px] text-[#78716c] font-mono-code block mt-0.5">${a.tier || "Standard Tier"} • Project: ${a.projectId || "default"}</span>
           </div>
         </div>
-        <button class="btn-secondary text-xs py-1 px-2.5 text-rose-400 border-rose-900/40 hover:bg-rose-950/30" onclick="removeAccount('${a.email}')">
-          Disconnect
+        <button class="btn-secondary text-xs py-1 px-2.5 text-rose-400 border-rose-900/40 hover:bg-rose-950/30 flex items-center gap-1.5" onclick="removeAccount('${a.email}')" title="Delete account ${a.email}">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          Delete
         </button>
       </div>
     `).join("");
@@ -294,8 +297,18 @@ async function fetchAccounts() {
   }
 }
 
+async function removeActiveAccount() {
+  const activeEl = document.getElementById("accActiveEmail");
+  const email = activeEl ? activeEl.innerText.trim() : "";
+  if (!email || email === "—") {
+    alert("No active account to delete.");
+    return;
+  }
+  await removeAccount(email);
+}
+
 async function removeAccount(email) {
-  if (!confirm(`Are you sure you want to disconnect ${email}?`)) return;
+  if (!confirm(`Are you sure you want to permanently delete account "${email}" from Prime Gate?`)) return;
   try {
     const res = await fetch("/api/auth/remove", {
       method: "POST",
@@ -304,20 +317,27 @@ async function removeAccount(email) {
     });
     const data = await res.json();
     if (data.success) {
+      appendSentinelLog("Accounts", `Account removed from binary database: ${email}`, "WARN");
       await fetchAccounts();
       await fetchStatus();
+      if (data.total_accounts === 0) {
+        openAuthModal(false);
+      }
+    } else {
+      alert("Failed to delete account: " + (data.error || "Unknown error"));
     }
   } catch (err) {
-    alert("Failed to remove account: " + err.message);
+    alert("Failed to delete account: " + err.message);
   }
 }
 
 async function clearAllAccounts() {
-  if (!confirm("Remove ALL configured Google Antigravity accounts from Prime Gate?")) return;
+  if (!confirm("Are you sure you want to permanently delete ALL configured Google Antigravity accounts from Prime Gate? This will reset the proxy to initial onboarding state.")) return;
   try {
     const res = await fetch("/api/auth/clear", { method: "POST" });
     const data = await res.json();
     if (data.success) {
+      appendSentinelLog("Accounts", "All accounts wiped from compiled binary database.", "WARN");
       await fetchAccounts();
       await fetchStatus();
       openAuthModal(false);
