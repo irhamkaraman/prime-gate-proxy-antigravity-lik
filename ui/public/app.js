@@ -127,6 +127,7 @@ async function fetchStatus() {
 
     renderQuota(data.quota || []);
     fetchModels();
+    fetchAccounts();
   } catch (err) {
     indicator.className = "status-pill offline";
     statusText.innerText = "Core API Offline";
@@ -136,6 +137,81 @@ async function fetchStatus() {
         Please launch the service via <code>prime-gate daemon start</code> or <code>scripts\\start-all.bat</code>.
       </div>
     `;
+  }
+}
+
+async function fetchAccounts() {
+  const wrap = document.getElementById("accountsListWrap");
+  const deck = document.getElementById("accountsDeck");
+  if (!wrap || !deck) return;
+
+  try {
+    const res = await fetch("/api/accounts");
+    if (!res.ok) return;
+    const data = await res.json();
+    const accounts = data.accounts || [];
+
+    if (accounts.length === 0) {
+      wrap.style.display = "none";
+      return;
+    }
+
+    wrap.style.display = "block";
+    deck.innerHTML = accounts.map(a => `
+      <div class="account-item-row">
+        <div class="account-item-meta">
+          <div class="account-item-email">${a.email}</div>
+          <div class="account-item-badge ${a.is_active ? 'active-id' : ''}">
+            ${a.is_active ? '● Active Identity' : '○ Standby'} • ${a.tier}
+          </div>
+        </div>
+        <button class="account-remove-btn" onclick="removeAccount('${a.email}')" title="Disconnect this account">Disconnect</button>
+      </div>
+    `).join("");
+  } catch (e) {
+    console.error("Error fetching accounts:", e);
+  }
+}
+
+async function removeAccount(email) {
+  if (!confirm(`Are you sure you want to disconnect ${email} from Prime Gate?`)) {
+    return;
+  }
+  try {
+    const res = await fetch("/api/auth/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    if (data.success) {
+      isUserDismissedAuth = false;
+      await fetchStatus();
+      alert(`✓ Account ${email} disconnected successfully.`);
+    } else {
+      alert("Failed to disconnect account: " + (data.detail || "Account not found"));
+    }
+  } catch (err) {
+    alert("Request error: " + err.message);
+  }
+}
+
+async function clearAllAccounts() {
+  if (!confirm("Are you sure you want to remove ALL accounts from Prime Gate?\nThis will reset Prime Gate to the initial onboarding state.")) {
+    return;
+  }
+  try {
+    const res = await fetch("/api/auth/clear", { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      isUserDismissedAuth = false;
+      await fetchStatus();
+      alert("✓ All accounts have been disconnected from Prime Gate.");
+    } else {
+      alert("Failed to clear accounts.");
+    }
+  } catch (err) {
+    alert("Request error: " + err.message);
   }
 }
 

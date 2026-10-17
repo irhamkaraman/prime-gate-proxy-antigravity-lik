@@ -97,6 +97,8 @@ Jalankan service API dan Web UI sekaligus:
 | `prime-gate auth list` | Menampilkan seluruh akun Google yang tersimpan. |
 | `prime-gate auth import` | Mengimpor akun dari config OpenCode. |
 | `prime-gate auth login` | Login akun baru via Google OAuth browser PKCE. |
+| `prime-gate auth remove <email>` | Menghapus akun tertentu dari Prime Gate. |
+| `prime-gate auth clear` | Menghapus seluruh akun dan mereset ke status onboarding awal. |
 | `prime-gate daemon start` | Menjalankan proxy & Web UI di background (headless). |
 | `prime-gate daemon status` | Memeriksa PID, port aktif, dan status daemon. |
 | `prime-gate daemon stop` | Menghentikan seluruh service background. |

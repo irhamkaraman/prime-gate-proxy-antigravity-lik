@@ -201,6 +201,35 @@ def auth_login(port: int = 53123):
     except Exception as e:
         console.print(f"[bold red]Login gagal: {e}[/bold red]")
 
+@auth_app.command("remove")
+@auth_app.command("delete")
+def auth_remove(
+    email: str = typer.Argument(..., help="Email of the account to remove from Prime Gate.")
+):
+    """Remove a specific Google Antigravity account from Prime Gate."""
+    if account_mgr.remove_account(email):
+        console.print(f"[bold green][OK] Berhasil menghapus akun {email} dari Prime Gate.[/bold green]")
+    else:
+        console.print(f"[bold yellow]Akun {email} tidak ditemukan di Prime Gate.[/bold yellow]")
+
+@auth_app.command("clear")
+def auth_clear(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt.")
+):
+    """Remove ALL configured Google Antigravity accounts from Prime Gate."""
+    if not yes:
+        confirm = typer.confirm("Yakin ingin menghapus semua akun Antigravity dari Prime Gate?")
+        if not confirm:
+            console.print("[yellow]Operasi dibatalkan.[/yellow]")
+            return
+
+    if account_mgr.clear_accounts():
+        console.print("[bold green][OK] Semua akun Antigravity berhasil dihapus dari Prime Gate.[/bold green]")
+        console.print("[dim]Prime Gate sekarang kembali ke status onboarding awal.[/dim]")
+    else:
+        console.print("[bold red]Gagal membersihkan akun.[/bold red]")
+
+
 @daemon_app.command("start")
 def daemon_start(
     api_port: int = typer.Option(DEFAULT_API_PORT, "--port", "-p", help="API port"),

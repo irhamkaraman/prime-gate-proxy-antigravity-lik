@@ -163,6 +163,56 @@ async def api_auth_login():
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+@app.get("/api/accounts")
+async def api_accounts_list():
+    """List all accounts currently configured in Prime Gate."""
+    accounts = account_mgr.load_accounts()
+    active_acc = account_mgr.get_active_account()
+    return {
+        "accounts": [
+            {
+                "email": a.get("email"),
+                "projectId": a.get("projectId"),
+                "is_active": a.get("email") == (active_acc.get("email") if active_acc else None),
+                "tier": QuotaMonitor.get_tier_label(a)
+            }
+            for a in accounts
+        ],
+        "total": len(accounts)
+    }
+
+@app.post("/api/auth/remove")
+@app.post("/api/auth/delete")
+async def api_auth_remove(request: Request):
+    """Remove an account by email from Prime Gate."""
+    try:
+        body = await request.json()
+        email = body.get("email", "")
+    except Exception:
+        email = ""
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    success = account_mgr.remove_account(email)
+    remaining = account_mgr.load_accounts()
+    active_acc = account_mgr.get_active_account()
+    return {
+        "success": success,
+        "removed": email,
+        "total_accounts": len(remaining),
+        "active_account": active_acc.get("email") if active_acc else None
+    }
+
+@app.post("/api/auth/clear")
+async def api_auth_clear():
+    """Remove all accounts from Prime Gate."""
+    success = account_mgr.clear_accounts()
+    return {
+        "success": success,
+        "total_accounts": 0,
+        "active_account": None
+    }
+
+
 
 async def stream_antigravity_sse(
     upstream_url: str,

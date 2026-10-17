@@ -74,3 +74,18 @@ class AccountManager:
             return None
         self._active_index = (self._active_index + 1) % len(accounts)
         return accounts[self._active_index]
+
+    def remove_account(self, email: str) -> bool:
+        """Remove an account by email from local accounts.json."""
+        accounts = self.load_accounts()
+        initial_count = len(accounts)
+        updated = [acc for acc in accounts if acc.get("email", "").lower() != email.strip().lower()]
+        if len(updated) < initial_count:
+            self.save_accounts(updated, LOCAL_ACCOUNTS_FILE)
+            return True
+        return False
+
+    def clear_accounts(self) -> bool:
+        """Remove all accounts from Prime Gate local accounts.json."""
+        return self.save_accounts([], LOCAL_ACCOUNTS_FILE)
+

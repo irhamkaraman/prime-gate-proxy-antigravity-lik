@@ -95,6 +95,15 @@
               <span class="metric-val" id="serverUptime">0s</span>
             </div>
           </div>
+          <div id="accountsListWrap" class="accounts-list-wrap">
+            <div class="accounts-list-header">
+              <span>Connected Accounts</span>
+              <button class="clear-all-btn" onclick="clearAllAccounts()" title="Disconnect all accounts">Clear All</button>
+            </div>
+            <div id="accountsDeck" class="accounts-deck">
+              <!-- Dynamically populated accounts with Disconnect button -->
+            </div>
+          </div>
         </article>
 
         <!-- Quota Radar Card -->

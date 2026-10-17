@@ -120,6 +120,8 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | `prime-gate auth list` | Show all stored Google Antigravity accounts. |
 | `prime-gate auth import` | Import accounts from `~/.config/opencode/antigravity-accounts.json`. |
 | `prime-gate auth login` | Open browser for Google OAuth 2.0 PKCE authentication. |
+| `prime-gate auth remove <email>` | Remove a specific account from Prime Gate. |
+| `prime-gate auth clear` | Remove all stored accounts and reset to initial onboarding state. |
 | `prime-gate daemon start` | Launch proxy & web UI in the background (headless). |
 | `prime-gate daemon status` | Check background process PID, memory, and ports. |
 | `prime-gate daemon stop` | Terminate all active background proxy services. |
