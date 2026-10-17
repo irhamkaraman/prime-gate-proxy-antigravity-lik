@@ -763,7 +763,18 @@ async def stream_antigravity_sse(
 
             has_emitted_tool_call = False
             tool_index = 0
-            accumulated_content = ""
+            text_buffer = ""
+            in_call_block = False
+            call_buffer = ""
+
+            # Build declared tool mapping
+            declared_names = {}
+            if declared_tools and isinstance(declared_tools, list):
+                for t in declared_tools:
+                    if isinstance(t, dict):
+                        t_name = t.get("function", {}).get("name") or t.get("name")
+                        if t_name:
+                            declared_names[t_name] = t
 
             async for line in resp.aiter_lines():
                 if not line or not line.startswith("data:"):
@@ -800,6 +811,51 @@ async def stream_antigravity_sse(
                             has_emitted_tool_call = True
                             fn_call = part["functionCall"]
                             call_id = fn_call.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                            raw_name = fn_call.get("name", "")
+                            if raw_name.startswith("default_api:"):
+                                raw_name = raw_name.split(":", 1)[1]
+                            fn_name = raw_name
+
+                            if fn_name in ("shell", "run_command", "exec", "terminal"):
+                                for cand in ("bash", "shell", "run_command", "exec", "terminal", "execute_command"):
+                                    if cand in declared_names:
+                                        fn_name = cand
+                                        break
+                            elif fn_name in ("view_file", "read_file", "cat", "readFile", "read"):
+                                for cand in ("read_file", "read", "readFile", "view_file", "cat"):
+                                    if cand in declared_names:
+                                        fn_name = cand
+                                        break
+                            elif fn_name in ("write_to_file", "write_file", "edit_file", "writeFile", "write", "edit"):
+                                for cand in ("write_file", "write", "writeFile", "edit_file", "edit", "write_to_file"):
+                                    if cand in declared_names:
+                                        fn_name = cand
+                                        break
+                            elif fn_name in ("list_dir", "list_files", "ls", "listFiles", "list"):
+                                for cand in ("list_dir", "list_files", "list", "listFiles", "ls"):
+                                    if cand in declared_names:
+                                        fn_name = cand
+                                        break
+
+                            args = fn_call.get("args", {})
+                            if isinstance(args, str):
+                                try:
+                                    args = json.loads(args)
+                                except Exception:
+                                    args = {}
+                            if fn_name in declared_names:
+                                tool_def = declared_names[fn_name]
+                                params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or {}
+                                props = params.get("properties") if isinstance(params, dict) else None
+                                if props and isinstance(props, dict):
+                                    if "cmd" in props and "command" in args and "cmd" not in args:
+                                        args["cmd"] = args.pop("command")
+                                    elif "command" in props and "cmd" in args and "command" not in args:
+                                        args["command"] = args.pop("cmd")
+                                    filtered = {k: v for k, v in args.items() if k in props}
+                                    if filtered:
+                                        args = filtered
+
                             yield format_sse_chunk(
                                 completion_id, created, model,
                                 {
@@ -808,8 +864,8 @@ async def stream_antigravity_sse(
                                         "id": call_id,
                                         "type": "function",
                                         "function": {
-                                            "name": fn_call.get("name"),
-                                            "arguments": json.dumps(fn_call.get("args", {}))
+                                            "name": fn_name,
+                                            "arguments": json.dumps(args)
                                         }
                                     }]
                                 }
@@ -819,48 +875,151 @@ async def stream_antigravity_sse(
                             txt = part["text"]
                             if not txt:
                                 continue
-                            accumulated_content += txt
 
-                            # Check if the text contains an Antigravity text tool call e.g. call:default_api:shell{...}
-                            if "call:" in txt:
-                                cleaned, text_tcs = extract_text_tool_calls(txt, declared_tools)
-                                if text_tcs:
-                                    for tc in text_tcs:
-                                        has_emitted_tool_call = True
-                                        tc_id = tc.get("id") or ("call_" + uuid.uuid4().hex[:8])
-                                        yield format_sse_chunk(
-                                            completion_id, created, model,
-                                            {
-                                                "tool_calls": [{
-                                                    "index": tool_index,
-                                                    "id": tc_id,
-                                                    "type": "function",
-                                                    "function": tc["function"]
-                                                }]
-                                            }
-                                        )
-                                        tool_index += 1
-                                    if cleaned:
-                                        completion_tokens += max(1, len(cleaned.split()))
-                                        yield format_sse_chunk(
-                                            completion_id, created, model,
-                                            {"content": cleaned}
-                                        )
-                                    continue
+                            if in_call_block:
+                                call_buffer += txt
+                                if "{" in call_buffer:
+                                    depth = 0
+                                    in_str = False
+                                    quote_char = ''
+                                    escape = False
+                                    balanced = False
+                                    for ch in call_buffer:
+                                        if escape:
+                                            escape = False
+                                            continue
+                                        if ch == '\\':
+                                            escape = True
+                                            continue
+                                        if in_str:
+                                            if ch == quote_char:
+                                                in_str = False
+                                            continue
+                                        if ch in ('"', "'"):
+                                            in_str = True
+                                            quote_char = ch
+                                            continue
+                                        if ch == '{':
+                                            depth += 1
+                                        elif ch == '}':
+                                            depth -= 1
+                                            if depth == 0:
+                                                balanced = True
+                                                break
+                                    if balanced:
+                                        cleaned, tcs = extract_text_tool_calls(call_buffer, declared_tools)
+                                        if tcs:
+                                            for tc in tcs:
+                                                has_emitted_tool_call = True
+                                                tc_id = tc.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                                                yield format_sse_chunk(
+                                                    completion_id, created, model,
+                                                    {
+                                                        "tool_calls": [{
+                                                            "index": tool_index,
+                                                            "id": tc_id,
+                                                            "type": "function",
+                                                            "function": tc["function"]
+                                                        }]
+                                                    }
+                                                )
+                                                tool_index += 1
+                                            in_call_block = False
+                                            call_buffer = ""
+                                            if cleaned:
+                                                text_buffer += cleaned
+                            else:
+                                text_buffer += txt
+                                if "call:" in text_buffer:
+                                    idx = text_buffer.find("call:")
+                                    before_call = text_buffer[:idx]
+                                    call_tail = text_buffer[idx:]
+                                    text_buffer = ""
 
-                            completion_tokens += max(1, len(txt.split()))
-                            yield format_sse_chunk(
-                                completion_id, created, model,
-                                {"content": txt}
-                            )
+                                    if before_call:
+                                        if before_call.strip().startswith("Thought:") or before_call.strip().startswith("thought:"):
+                                            reasoning_tokens += max(1, len(before_call.split()))
+                                            yield format_sse_chunk(completion_id, created, model, {"reasoning_content": before_call})
+                                        else:
+                                            completion_tokens += max(1, len(before_call.split()))
+                                            yield format_sse_chunk(completion_id, created, model, {"content": before_call})
+
+                                    in_call_block = True
+                                    call_buffer = call_tail
+                                    if "{" in call_buffer:
+                                        depth = 0
+                                        in_str = False
+                                        quote_char = ''
+                                        escape = False
+                                        balanced = False
+                                        for ch in call_buffer:
+                                            if escape:
+                                                escape = False
+                                                continue
+                                            if ch == '\\':
+                                                escape = True
+                                                continue
+                                            if in_str:
+                                                if ch == quote_char:
+                                                    in_str = False
+                                                continue
+                                            if ch in ('"', "'"):
+                                                in_str = True
+                                                quote_char = ch
+                                                continue
+                                            if ch == '{':
+                                                depth += 1
+                                            elif ch == '}':
+                                                depth -= 1
+                                                if depth == 0:
+                                                    balanced = True
+                                                    break
+                                        if balanced:
+                                            cleaned, tcs = extract_text_tool_calls(call_buffer, declared_tools)
+                                            if tcs:
+                                                for tc in tcs:
+                                                    has_emitted_tool_call = True
+                                                    tc_id = tc.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                                                    yield format_sse_chunk(
+                                                        completion_id, created, model,
+                                                        {
+                                                            "tool_calls": [{
+                                                                "index": tool_index,
+                                                                "id": tc_id,
+                                                                "type": "function",
+                                                                "function": tc["function"]
+                                                            }]
+                                                        }
+                                                    )
+                                                    tool_index += 1
+                                                in_call_block = False
+                                                call_buffer = ""
+                                                if cleaned:
+                                                    text_buffer += cleaned
+                                else:
+                                    prefix_len = 0
+                                    for pfx in ("call", "cal", "ca", "c"):
+                                        if text_buffer.endswith(pfx):
+                                            prefix_len = len(pfx)
+                                            break
+                                    to_yield = text_buffer[:-prefix_len] if prefix_len > 0 else text_buffer
+                                    text_buffer = text_buffer[-prefix_len:] if prefix_len > 0 else ""
+
+                                    if to_yield:
+                                        if to_yield.strip().startswith("Thought:") or to_yield.strip().startswith("thought:"):
+                                            reasoning_tokens += max(1, len(to_yield.split()))
+                                            yield format_sse_chunk(completion_id, created, model, {"reasoning_content": to_yield})
+                                        else:
+                                            completion_tokens += max(1, len(to_yield.split()))
+                                            yield format_sse_chunk(completion_id, created, model, {"content": to_yield})
                 except Exception:
                     continue
 
-            # Fallback text tool-call extraction on accumulated content if not caught mid-stream
-            if not has_emitted_tool_call and "call:" in accumulated_content:
-                cleaned, text_tcs = extract_text_tool_calls(accumulated_content, declared_tools)
-                if text_tcs:
-                    for tc in text_tcs:
+            # Flush any remaining buffer on stream termination
+            if in_call_block and call_buffer:
+                cleaned, tcs = extract_text_tool_calls(call_buffer, declared_tools)
+                if tcs:
+                    for tc in tcs:
                         has_emitted_tool_call = True
                         tc_id = tc.get("id") or ("call_" + uuid.uuid4().hex[:8])
                         yield format_sse_chunk(
@@ -875,6 +1034,17 @@ async def stream_antigravity_sse(
                             }
                         )
                         tool_index += 1
+                else:
+                    completion_tokens += max(1, len(call_buffer.split()))
+                    yield format_sse_chunk(completion_id, created, model, {"content": call_buffer})
+
+            if text_buffer:
+                if text_buffer.strip().startswith("Thought:") or text_buffer.strip().startswith("thought:"):
+                    reasoning_tokens += max(1, len(text_buffer.split()))
+                    yield format_sse_chunk(completion_id, created, model, {"reasoning_content": text_buffer})
+                else:
+                    completion_tokens += max(1, len(text_buffer.split()))
+                    yield format_sse_chunk(completion_id, created, model, {"content": text_buffer})
 
             # Record telemetry for completed stream
             latency_ms = (time.time() - start_t) * 1000
@@ -1052,7 +1222,11 @@ async def chat_completions(request: Request):
                             cleaned, text_tcs = extract_text_tool_calls(content_text, raw_tools)
                             if text_tcs:
                                 tool_calls.extend(text_tcs)
-                                content_text = cleaned
+                                if cleaned.strip().startswith("Thought:") or cleaned.strip().startswith("thought:"):
+                                    reasoning_text += cleaned
+                                    content_text = ""
+                                else:
+                                    content_text = cleaned
                                 finish_reason = "tool_calls"
                         elif tool_calls:
                             finish_reason = "tool_calls"

@@ -87,17 +87,11 @@ def extract_text_tool_calls(
     Detects if the model emitted Antigravity text-based tool calls such as:
     call:default_api:shell{command: "...", timeout: 30000} or call:bash{...}
     and converts them into valid OpenAI tool_calls dicts.
+    Handles balanced braces, nested JSON, tool name mapping, and parameter filtering.
     """
     if not text or "call:" not in text:
         return text, []
 
-    pattern = r'call:(?:[a-zA-Z0-9_\-]+:)?([a-zA-Z0-9_\-]+)\s*(\{.*?\})'
-    matches = list(re.finditer(pattern, text, re.DOTALL))
-    if not matches:
-        return text, []
-
-    tool_calls = []
-    cleaned_text = text
     declared_names = {}
     if declared_tools and isinstance(declared_tools, list):
         for t in declared_tools:
@@ -106,22 +100,114 @@ def extract_text_tool_calls(
                 if fn_name:
                     declared_names[fn_name] = t
 
-    for i, m in enumerate(matches):
+    header_pattern = re.compile(r'call:(?:[a-zA-Z0-9_\-]+:)?([a-zA-Z0-9_\-]+)\s*\{')
+    pos = 0
+    tool_calls = []
+    cleaned_parts = []
+    call_idx = 0
+
+    while pos < len(text):
+        m = header_pattern.search(text, pos)
+        if not m:
+            cleaned_parts.append(text[pos:])
+            break
+
+        cleaned_parts.append(text[pos:m.start()])
         raw_name = m.group(1).strip()
-        raw_args = m.group(2).strip()
-        
+        brace_start = m.end() - 1
+
+        # Balanced brace scan
+        depth = 0
+        in_str = False
+        quote_char = ''
+        escape = False
+        brace_end = -1
+
+        for i in range(brace_start, len(text)):
+            ch = text[i]
+            if escape:
+                escape = False
+                continue
+            if ch == '\\':
+                escape = True
+                continue
+            if in_str:
+                if ch == quote_char:
+                    in_str = False
+                continue
+            if ch in ('"', "'"):
+                in_str = True
+                quote_char = ch
+                continue
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    brace_end = i
+                    break
+
+        if brace_end == -1:
+            cleaned_parts.append(text[m.start():])
+            break
+
+        raw_args = text[brace_start:brace_end + 1]
+        pos = brace_end + 1
+
+        # Tool name mapping
         fn_name = raw_name
-        # If model called default_api:shell or shell, but client declared 'bash', map it!
         if fn_name in ("shell", "run_command", "exec", "terminal"):
             for cand in ("bash", "shell", "run_command", "exec", "terminal", "execute_command"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("view_file", "read_file", "cat", "readFile", "read"):
+            for cand in ("read_file", "read", "readFile", "view_file", "cat"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("write_to_file", "write_file", "edit_file", "writeFile", "write", "edit"):
+            for cand in ("write_file", "write", "writeFile", "edit_file", "edit", "write_to_file"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("list_dir", "list_files", "ls", "listFiles", "list"):
+            for cand in ("list_dir", "list_files", "list", "listFiles", "ls"):
                 if cand in declared_names:
                     fn_name = cand
                     break
 
         parsed_args = parse_antigravity_args(raw_args)
 
+        # Filter args against declared properties if known
+        if fn_name in declared_names:
+            tool_def = declared_names[fn_name]
+            params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or {}
+            props = params.get("properties") if isinstance(params, dict) else None
+            if props and isinstance(props, dict):
+                # Normalize common parameter aliases
+                if "cmd" in props and "command" in parsed_args and "cmd" not in parsed_args:
+                    parsed_args["cmd"] = parsed_args.pop("command")
+                elif "command" in props and "cmd" in parsed_args and "command" not in parsed_args:
+                    parsed_args["command"] = parsed_args.pop("cmd")
+
+                if "path" in props:
+                    for alias in ("AbsolutePath", "filePath", "file_path", "TargetFile", "target_file"):
+                        if alias in parsed_args and "path" not in parsed_args:
+                            parsed_args["path"] = parsed_args.pop(alias)
+
+                if "content" in props:
+                    for alias in ("CodeContent", "code", "text"):
+                        if alias in parsed_args and "content" not in parsed_args:
+                            parsed_args["content"] = parsed_args.pop(alias)
+
+                # Filter out unrecognized properties (like timeout) so strict schema validators don't crash
+                filtered_args = {k: v for k, v in parsed_args.items() if k in props}
+                if filtered_args:
+                    parsed_args = filtered_args
+
         tool_calls.append({
-            "index": i,
+            "index": call_idx,
             "id": f"call_pg_{uuid.uuid4().hex[:8]}",
             "type": "function",
             "function": {
@@ -129,8 +215,9 @@ def extract_text_tool_calls(
                 "arguments": json.dumps(parsed_args)
             }
         })
-        cleaned_text = cleaned_text.replace(m.group(0), "").strip()
+        call_idx += 1
 
+    cleaned_text = "".join(cleaned_parts).strip()
     return cleaned_text, tool_calls
 
 
