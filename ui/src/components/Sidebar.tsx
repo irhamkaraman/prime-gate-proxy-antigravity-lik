@@ -69,6 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setSwitchingEmail(email);
       const res = await fetch(`/api/accounts/switch?email=${encodeURIComponent(email)}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
       if (!res.ok) {
         throw new Error('Failed to switch active account');

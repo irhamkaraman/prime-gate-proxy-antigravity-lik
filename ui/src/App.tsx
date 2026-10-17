@@ -14,7 +14,7 @@ import { SentinelPage } from './pages/SentinelPage';
 import { DocumentationPage } from './pages/DocumentationPage';
 
 import { Account, TelemetryMetrics } from './types';
-import { ExternalLink, Copy, Check, KeyRound, Sparkles } from 'lucide-react';
+import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download } from 'lucide-react';
 
 const initialMetrics: TelemetryMetrics = {
   throughput_tokens_per_sec: 0.0,
@@ -167,21 +167,54 @@ const MainLayout: React.FC = () => {
   // Open "Add Account" Modal with Google OAuth flow & JSON import
   const handleOpenAddAccountModal = () => {
     let pollInterval: number;
-    let authUrl = '';
-
     const startOAuth = async () => {
       try {
-        const res = await fetch('/api/auth/login', { method: 'POST' });
-        if (res.ok) {
-          const data = await res.json();
-          authUrl = data.auth_url || '';
-          if (authUrl) {
-            window.open(authUrl, '_blank');
+        const urlRes = await fetch('/api/auth/url');
+        if (urlRes.ok) {
+          const urlData = await urlRes.json();
+          if (urlData.auth_url) {
+            window.open(urlData.auth_url, '_blank');
             showToast('Google OAuth window opened. Please approve access.', 'info');
           }
         }
+        fetch('/api/auth/login', { method: 'POST' })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              showToast(`Account ${data.account} successfully connected!`, 'success');
+              fetchAccounts();
+              closeModal();
+            } else if (data.error) {
+              showToast(data.error, 'error');
+            }
+          })
+          .catch(e => {
+            console.error('OAuth background login error:', e);
+          });
       } catch (e) {
         console.error('Failed to trigger OAuth login:', e);
+        showToast('Failed to start Google sign-in process', 'error');
+      }
+    };
+
+    const handleImportOpenCode = async () => {
+      try {
+        showToast('Scanning OpenCode configuration for accounts...', 'info');
+        const res = await fetch('/api/auth/import', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            showToast(`Imported ${data.imported} account(s) from OpenCode!`, 'success');
+            await fetchAccounts();
+            closeModal();
+          } else {
+            showToast('No new OpenCode accounts found to import.', 'info');
+          }
+        } else {
+          showToast('Failed to import OpenCode accounts', 'error');
+        }
+      } catch (e) {
+        showToast('Failed to connect to backend for import', 'error');
       }
     };
 
@@ -225,9 +258,43 @@ const MainLayout: React.FC = () => {
             </button>
           </div>
 
+          {/* OpenCode Import Option */}
+          <div
+            style={{
+              padding: 18,
+              borderRadius: 12,
+              background: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Download size={18} color="#d6d3d1" />
+              <div>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: '#ffffff' }}>
+                  Import from OpenCode
+                </h4>
+                <p style={{ fontSize: 12, color: '#78716c', marginTop: 2 }}>
+                  Auto-sync existing accounts from local OpenCode JSON configuration.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleImportOpenCode}
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '10px 14px' }}
+            >
+              <Download size={14} />
+              <span>Import Configured Accounts</span>
+            </button>
+          </div>
+
           {/* Polling notice */}
           <div style={{ fontSize: 12, color: '#78716c', textAlign: 'center' }}>
-            Listening for Google authentication callback... This modal will auto-refresh once signed in.
+            Listening for authentication callback... This modal will auto-refresh once signed in.
           </div>
         </div>
       ),

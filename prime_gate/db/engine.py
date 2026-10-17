@@ -300,6 +300,27 @@ class BinaryDatabaseEngine:
             "recent_incidents": self.get_incidents(limit=5)
         }
 
+    def optimize_database(self) -> Dict[str, Any]:
+        """Runs SQLite PRAGMA wal_checkpoint(TRUNCATE) and VACUUM to reclaim space and optimize B-Tree pages."""
+        conn = self._get_connection()
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            conn.execute("VACUUM;")
+            size_bytes = self.db_path.stat().st_size if self.db_path.exists() else 0
+            return {
+                "success": True,
+                "healthy": True,
+                "message": "VACUUM and WAL checkpoint (TRUNCATE) completed successfully.",
+                "size_bytes": size_bytes
+            }
+        except Exception as e:
+            logger.error(f"Failed to vacuum/optimize database: {e}")
+            return {
+                "success": False,
+                "healthy": False,
+                "error": str(e)
+            }
+
     def close(self):
         if self._conn:
             self._conn.close()

@@ -24,18 +24,31 @@ export const SentinelPage: React.FC = () => {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/v1/health');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && Array.isArray(data.recent_logs)) {
-          setLogs(data.recent_logs.map((l: { timestamp: string; level: string; source: string; message: string }, idx: number) => ({
-            id: String(idx),
-            timestamp: l.timestamp,
-            level: (l.level.toLowerCase() === 'info' ? 'info' : l.level.toLowerCase() === 'warn' ? 'warn' : 'info') as AuditLogEvent['level'],
-            source: l.source,
-            message: l.message,
-          })));
+      // Try /api/sentinel/logs first, fallback to /v1/health
+      let rawLogs: any[] = [];
+      const resLogs = await fetch('/api/sentinel/logs');
+      if (resLogs.ok) {
+        const data = await resLogs.json();
+        rawLogs = data.logs || data.recent_logs || [];
+      } else {
+        const resHealth = await fetch('/v1/health');
+        if (resHealth.ok) {
+          const data = await resHealth.json();
+          rawLogs = data.recent_logs || (data.logs && data.logs.items) || [];
         }
+      }
+
+      if (Array.isArray(rawLogs)) {
+        setLogs(rawLogs.map((l: { timestamp: string; level: string; source?: string; logger?: string; message: string }, idx: number) => {
+          const rawLevel = (l.level || 'INFO').toLowerCase();
+          return {
+            id: String(idx),
+            timestamp: l.timestamp || new Date().toLocaleTimeString(),
+            level: (rawLevel === 'error' ? 'error' : rawLevel === 'warn' || rawLevel === 'warning' ? 'warn' : 'info') as AuditLogEvent['level'],
+            source: l.source || l.logger || 'daemon',
+            message: l.message || '',
+          };
+        }));
       }
     } catch (err) {
       console.error('Failed to fetch audit logs:', err);
@@ -45,11 +58,45 @@ export const SentinelPage: React.FC = () => {
   useEffect(() => {
     fetchStatus();
     fetchLogs();
+
+    // Connect to WebSocket for instant real-time daemon log streaming
+    let ws: WebSocket | null = null;
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws/live`);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'LOG_ENTRY') {
+            const rawLevel = (data.level || 'INFO').toLowerCase();
+            const newLog: AuditLogEvent = {
+              id: String(Date.now()) + Math.random(),
+              timestamp: new Date().toLocaleTimeString(),
+              level: (rawLevel === 'error' ? 'error' : rawLevel === 'warn' || rawLevel === 'warning' ? 'warn' : 'info') as AuditLogEvent['level'],
+              source: data.logger || 'server',
+              message: data.message || '',
+            };
+            setLogs(prev => [newLog, ...prev.slice(0, 199)]);
+          } else if (data.type === 'DB_MUTATION' || data.type === 'DB_HEALTH' || data.type === 'INIT_STATE') {
+            fetchStatus();
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+      };
+    } catch (e) {
+      console.warn('Sentinel WebSocket connection failed:', e);
+    }
+
     const timer = setInterval(() => {
       fetchStatus();
       fetchLogs();
-    }, 10000);
-    return () => clearInterval(timer);
+    }, 8000);
+
+    return () => {
+      clearInterval(timer);
+      if (ws) ws.close();
+    };
   }, []);
 
   const handleVerify = async () => {
@@ -235,7 +282,15 @@ export const SentinelPage: React.FC = () => {
                 }}
               >
                 <span style={{ color: '#78716c', flexShrink: 0 }}>
-                  {new Date(log.timestamp).toLocaleTimeString()}
+                  {(() => {
+                    const ts = log.timestamp || '';
+                    if (ts.includes(':') && !ts.includes('-') && !ts.includes('T')) return ts;
+                    try {
+                      const d = new Date(ts.includes('T') ? ts : ts.replace(' ', 'T'));
+                      if (!isNaN(d.getTime())) return d.toLocaleTimeString();
+                    } catch {}
+                    return ts;
+                  })()}
                 </span>
                 <span
                   style={{

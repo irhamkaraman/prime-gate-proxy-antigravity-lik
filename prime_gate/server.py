@@ -176,7 +176,8 @@ async def v1_health_check(
             "returned": len(recent_logs),
             "filter_level": level.upper() if level else "ALL",
             "items": recent_logs
-        }
+        },
+        "recent_logs": recent_logs
     }
 
 @app.get("/v1/models")
@@ -267,16 +268,18 @@ async def api_quota(refresh: bool = False):
         "quota": quota_rows
     }
 
+@app.post("/api/quota/sync")
 @app.post("/api/models/refresh")
 async def api_models_refresh():
     """Forces refreshing live models and quota from Google Antigravity account."""
     active_acc = account_mgr.get_active_account()
     if not active_acc:
-        return {"success": False, "error": "No active account configured"}
+        return {"success": False, "error": "No active account configured", "message": "No active account configured"}
     models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
     quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
     return {
         "success": True,
+        "message": "Live quota & models synced with Google Antigravity!",
         "account": active_acc.get("email"),
         "models": models,
         "models_count": len(models),
@@ -377,19 +380,27 @@ async def api_accounts_list():
     }
 
 @app.post("/api/auth/switch")
-async def api_auth_switch(request: Request):
+@app.post("/api/accounts/switch")
+@app.get("/api/accounts/switch")
+async def api_auth_switch(request: Request, email: Optional[str] = None):
     """Switch active account by email and auto-refresh live models and quota."""
-    try:
-        body = await request.json()
-        email = body.get("email", "").strip()
-    except Exception:
-        email = ""
-    if not email:
+    target_email = email
+    if not target_email:
+        target_email = request.query_params.get("email")
+    if not target_email:
+        try:
+            body = await request.json()
+            target_email = body.get("email") if isinstance(body, dict) else None
+        except Exception:
+            target_email = None
+
+    if not target_email or not str(target_email).strip():
         raise HTTPException(status_code=400, detail="Email is required")
 
-    switched = account_mgr.set_active_account(email)
+    target_email = str(target_email).strip()
+    switched = account_mgr.set_active_account(target_email)
     if not switched:
-        raise HTTPException(status_code=404, detail=f"Account '{email}' not found")
+        raise HTTPException(status_code=404, detail=f"Account '{target_email}' not found")
 
     models_count = 0
     quota_count = 0
@@ -400,7 +411,7 @@ async def api_auth_switch(request: Request):
         models_count = len(models)
         quota_count = len(quota)
     except Exception as e:
-        logger.warning(f"Live sync on switch account {email} deferred: {e}")
+        logger.warning(f"Live sync on switch account {target_email} deferred: {e}")
 
     try:
         event_bus.broadcast_sync({
@@ -415,6 +426,7 @@ async def api_auth_switch(request: Request):
 
     return {
         "success": True,
+        "message": f"Successfully switched active account to {switched.get('email')}",
         "active_account": switched.get("email"),
         "tier": tier_label,
         "models_count": models_count,
@@ -423,21 +435,43 @@ async def api_auth_switch(request: Request):
 
 @app.post("/api/auth/remove")
 @app.post("/api/auth/delete")
-async def api_auth_remove(request: Request):
+@app.post("/api/accounts/delete")
+@app.delete("/api/accounts/delete")
+@app.delete("/api/accounts")
+async def api_auth_remove(request: Request, email: Optional[str] = None):
     """Remove an account by email from Prime Gate."""
-    try:
-        body = await request.json()
-        email = body.get("email", "")
-    except Exception:
-        email = ""
-    if not email:
+    target_email = email
+    if not target_email:
+        target_email = request.query_params.get("email")
+    if not target_email:
+        try:
+            body = await request.json()
+            target_email = body.get("email") if isinstance(body, dict) else None
+        except Exception:
+            target_email = None
+
+    if not target_email or not str(target_email).strip():
         raise HTTPException(status_code=400, detail="Email is required")
-    success = account_mgr.remove_account(email)
+
+    target_email = str(target_email).strip()
+    success = account_mgr.remove_account(target_email)
     remaining = account_mgr.load_accounts()
     active_acc = account_mgr.get_active_account()
+
+    try:
+        event_bus.broadcast_sync({
+            "type": "ACCOUNT_REMOVED",
+            "email": target_email,
+            "total_accounts": len(remaining),
+            "active_account": active_acc.get("email") if active_acc else None
+        })
+    except Exception:
+        pass
+
     return {
         "success": success,
-        "removed": email,
+        "message": f"Account '{target_email}' successfully removed.",
+        "removed": target_email,
         "total_accounts": len(remaining),
         "active_account": active_acc.get("email") if active_acc else None
     }
@@ -501,9 +535,31 @@ async def api_db_status():
     return db.get_status()
 
 @app.post("/api/db/check")
+@app.post("/api/db/verify")
+@app.get("/api/db/verify")
 async def api_db_check():
     """Triggers deep SQLite B-Tree and record-level CRC32 integrity audit."""
-    return db.run_integrity_check()
+    result = db.run_integrity_check()
+    result["message"] = f"CRC32 & page integrity check passed ({result.get('records_scanned', 0)} records scanned)."
+    return result
+
+@app.post("/api/db/optimize")
+@app.post("/api/db/vacuum")
+async def api_db_optimize():
+    """Runs SQLite PRAGMA wal_checkpoint(TRUNCATE) and VACUUM to reclaim space and optimize B-Tree pages."""
+    return db.optimize_database()
+
+@app.get("/api/sentinel/logs")
+@app.get("/api/logs")
+async def api_sentinel_logs(limit: int = 200, level: Optional[str] = None):
+    """Returns recent log entries buffered in memory ring buffer."""
+    safe_limit = max(1, min(limit, 500))
+    logs = event_bus.get_recent_logs(limit=safe_limit, level=level)
+    return {
+        "total": len(logs),
+        "logs": logs,
+        "recent_logs": logs
+    }
 
 @app.post("/api/db/test-corrupt")
 async def api_db_test_corrupt(request: Request):

@@ -36,6 +36,8 @@ export const AccountManagerPage: React.FC<AccountManagerPageProps> = ({
       setSwitchingEmail(email);
       const res = await fetch(`/api/accounts/switch?email=${encodeURIComponent(email)}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
       if (!res.ok) throw new Error('Failed to switch active account');
       showToast(`Active account switched to ${email}`, 'success');
@@ -58,6 +60,8 @@ export const AccountManagerPage: React.FC<AccountManagerPageProps> = ({
           setDeletingEmail(email);
           const res = await fetch(`/api/accounts/delete?email=${encodeURIComponent(email)}`, {
             method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
           });
           if (!res.ok) throw new Error('Failed to delete account');
           showToast(`Account ${email} deleted successfully`, 'success');
