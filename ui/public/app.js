@@ -1,18 +1,22 @@
+/**
+ * Prime Gate Antigravity - System Dashboard Logic (Anthropic Theme)
+ */
+
 async function fetchStatus() {
   const indicator = document.getElementById("statusIndicator");
   const statusText = document.getElementById("statusText");
 
   try {
     const res = await fetch("/api/status");
-    if (!res.ok) throw new Error("API Offline");
+    if (!res.ok) throw new Error("API unreachable");
     const data = await res.json();
 
-    indicator.className = "status-indicator online";
-    statusText.innerText = "Online & Connected";
+    indicator.className = "status-pill online";
+    statusText.innerText = "Connected & Active";
 
-    document.getElementById("accountTier").innerText = data.tier || "Unknown";
-    document.getElementById("accountEmail").innerText = data.active_account || "Belum Login";
-    document.getElementById("accountCount").innerText = `${data.total_accounts} Akun Terdaftar`;
+    document.getElementById("accountTier").innerText = data.tier || "Active Plan";
+    document.getElementById("accountEmail").innerText = data.active_account || "No Account Configured";
+    document.getElementById("accountCount").innerText = `${data.total_accounts} Configured`;
 
     const uptimeMins = Math.floor(data.uptime / 60);
     const uptimeSecs = data.uptime % 60;
@@ -21,11 +25,12 @@ async function fetchStatus() {
     renderQuota(data.quota || []);
     fetchModels();
   } catch (err) {
-    indicator.className = "status-indicator offline";
-    statusText.innerText = "Python API Offline";
+    indicator.className = "status-pill offline";
+    statusText.innerText = "Core API Offline";
     document.getElementById("quotaContainer").innerHTML = `
-      <div style="color: #ef4444; font-size: 13px; padding: 10px;">
-        ⚠️ Python Core API tidak terdeteksi. Jalankan <code>prime-gate start</code> atau <code>prime-gate daemon start</code> di terminal.
+      <div class="empty-state" style="color: #f43f5e;">
+        ⚠️ Python Core API is not detected on port 52111.<br>
+        Please launch the service via <code>prime-gate daemon start</code> or <code>scripts\\start-all.bat</code>.
       </div>
     `;
   }
@@ -34,26 +39,26 @@ async function fetchStatus() {
 function renderQuota(quotaList) {
   const container = document.getElementById("quotaContainer");
   if (!quotaList || quotaList.length === 0) {
-    container.innerHTML = '<div style="color: #94a3b8; font-size: 13px;">Tidak ada data kuota aktif.</div>';
+    container.innerHTML = '<div class="empty-state">No quota telemetry available for this account.</div>';
     return;
   }
 
   container.innerHTML = quotaList.map(item => {
     const pct = item.percentage;
-    let color = "#34d399"; // green
-    if (pct < 20) color = "#ef4444"; // red
-    else if (pct < 50) color = "#f59e0b"; // yellow
+    let color = "#10b981"; // Emerald green
+    if (pct < 20) color = "#f43f5e"; // Rose
+    else if (pct < 50) color = "#d97706"; // Warm Terracotta
 
     return `
-      <div class="quota-item">
-        <div class="quota-info">
-          <span class="quota-title">${item.label}</span>
-          <span class="quota-pct" style="color: ${color}">${pct}%</span>
+      <div class="quota-node">
+        <div class="quota-header-row">
+          <span class="quota-title-text">${item.label}</span>
+          <span class="quota-pct-text" style="color: ${color}">${pct}%</span>
         </div>
-        <div class="quota-bar-bg">
-          <div class="quota-bar-fill" style="width: ${pct}%; background: ${color};"></div>
+        <div class="quota-track">
+          <div class="quota-progress-bar" style="width: ${pct}%; background: ${color};"></div>
         </div>
-        <div class="quota-reset">Reset: ${item.reset_time}</div>
+        <div class="quota-reset-stamp">Reset: ${item.reset_time}</div>
       </div>
     `;
   }).join("");
@@ -66,20 +71,21 @@ async function fetchModels() {
     const json = await res.json();
     const models = json.data || [];
 
-    document.getElementById("modelCountBadge").innerText = `${models.length} Model`;
+    document.getElementById("modelCountBadge").innerText = `${models.length} Models`;
 
     const grid = document.getElementById("modelsGrid");
     grid.innerHTML = models.map(m => `
-      <div class="model-item">
-        <div class="model-name">${m.id}</div>
-        <div class="model-id">Provider: ${m.owned_by}</div>
+      <div class="catalog-card">
+        <div class="catalog-model-id">${m.id}</div>
+        <div class="catalog-provider">Provider: ${m.owned_by}</div>
       </div>
     `).join("");
 
-    // Populate sandbox select
+    // Populate sandbox select box
     const select = document.getElementById("modelSelect");
+    const currentVal = select.value;
     select.innerHTML = models.map(m => `
-      <option value="${m.id}">${m.id}</option>
+      <option value="${m.id}" ${m.id === currentVal ? "selected" : ""}>${m.id}</option>
     `).join("");
   } catch (e) {
     console.error("Error fetching models:", e);
@@ -95,12 +101,12 @@ async function testPrompt() {
 
   const prompt = promptInput.value.trim();
   if (!prompt) {
-    alert("Ketik instruksi/prompt terlebih dahulu!");
+    alert("Please enter a prompt or instruction first.");
     return;
   }
 
   const model = modelSelect.value;
-  outputArea.innerText = "Menghubungkan ke Google Antigravity...";
+  outputArea.innerText = "Connecting to Google Antigravity upstream...";
   latencyBadge.innerText = "";
   sendBtn.disabled = true;
 
@@ -119,7 +125,7 @@ async function testPrompt() {
 
     if (!response.ok) {
       const errText = await response.text();
-      outputArea.innerText = `Error (${response.status}):\n${errText}`;
+      outputArea.innerText = `Upstream Error (${response.status}):\n${errText}`;
       sendBtn.disabled = false;
       return;
     }
@@ -142,7 +148,7 @@ async function testPrompt() {
         if (jsonStr === "[DONE]") continue;
 
         try {
-          const parsed = JSON.parse(jsonStr);
+          const parsed = json.parse(jsonStr);
           const delta = parsed.choices?.[0]?.delta || {};
 
           if (isFirstChunk) {
@@ -160,17 +166,18 @@ async function testPrompt() {
       }
     }
   } catch (err) {
-    outputArea.innerText = `Koneksi gagal: ${err.message}`;
+    outputArea.innerText = `Network connection failed: ${err.message}`;
   } finally {
     sendBtn.disabled = false;
   }
 }
 
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text);
-  alert("Endpoint URL disalin ke clipboard: " + text);
+function copyEndpoint() {
+  const code = document.getElementById("endpointCode").innerText;
+  navigator.clipboard.writeText(code);
+  alert("Endpoint copied to clipboard: " + code);
 }
 
-// Initial fetch & auto poll every 10 seconds
+// Initial fetch and auto-refresh every 8 seconds
 fetchStatus();
-setInterval(fetchStatus, 10000);
+setInterval(fetchStatus, 8000);
