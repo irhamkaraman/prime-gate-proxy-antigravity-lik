@@ -55,8 +55,8 @@ graph LR
    Eliminates Google Antigravity's strict schema errors (`exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`) for 100% stable Tool Calling & Function Execution.
 4. **Intelligent Quota & Tier Detection:**
    Distinguishes between **`Google AI Pro (Trial Tier)`** and **`Google AI Pro (Paid Tier)`**, automatically presenting only valid model catalogs.
-5. **Modern Tailwind CSS v4 Dashboard with Sidebar & Token Bar Chart:**
-   Self-contained offline dashboard with clean sidebar navigation, real-time token telemetry (per-second, per-minute, per-hour, per-day stacked bar charts with Chart.js), dedicated Account Manager with live quota meters, interactive Prompt Sandbox, and Database Sentinel diagnostics.
+5. **Modern React & TypeScript SPA Dashboard with Dedicated Page Routes:**
+   Built with Vite and strict TypeScript, featuring dedicated page routes (`/dashboard`, `/accounts`, `/sandbox`, `/sentinel`, `/docs`), instant HMR, sourcemap debugging, real-time token telemetry (per-second, per-minute, per-hour, per-day segmented radar chart), dedicated Account Manager with live quota meters, interactive Prompt Sandbox, and Database Sentinel diagnostics. Zero browser alert popups—everything uses accessible modal dialogs and smooth toast notifications.
 6. **Rich Terminal CLI Suite:**
    Modern terminal interface featuring `--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, and headless Windows background `daemon` management.
 7. **Compiled C Binary Database (Zero Plaintext JSON):**

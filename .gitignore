@@ -25,6 +25,7 @@ wheels/
 
 # Node.js
 node_modules/
+!ui/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
