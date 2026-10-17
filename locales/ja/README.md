@@ -52,16 +52,20 @@ git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
 cd prime-gate-proxy-antigravity-lik
 pip install -r requirements.txt
 
-# OpenCode設定からアカウントをインポート
-python -m prime_gate.cli auth import
-
-# クォータを確認
-python -m prime_gate.cli quota
-
 # バックグラウンドで起動 (Windows)
 scripts\start-all.bat
+# または CLI デーモンで起動
+python -m prime_gate.cli daemon start
 ```
-*ダッシュボード表示: `http://127.0.0.1:52110`*
+
+### Web UI オンボーディング
+1. ブラウザで **`http://127.0.0.1:52110`** を開きます。
+2. アカウント未設定の場合、セットアップ画面が表示されます：
+   - **"Sign in with Google"** をクリックして OAuth 2.0 PKCE でログイン。
+   - または **"⚡ Quick Import from OpenCode Config"** をクリックして既存設定をインポート。
+3. 認証完了後、自動的にメインダッシュボードへ遷移し、リアルタイムクォータと OpenAI エンドポイント (`http://127.0.0.1:52111/v1`) が利用可能になります。
+
+> 💡 **ターミナル操作:** `python -m prime_gate.cli auth login` または `python -m prime_gate.cli quota` もご利用いただけます。
 
 ---
 

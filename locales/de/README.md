@@ -52,16 +52,20 @@ git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
 cd prime-gate-proxy-antigravity-lik
 pip install -r requirements.txt
 
-# Account aus OpenCode importieren
-python -m prime_gate.cli auth import
-
-# Kontingente prüfen
-python -m prime_gate.cli quota
-
 # Im Hintergrund starten (Windows)
 scripts\start-all.bat
+# Oder via CLI Daemon
+python -m prime_gate.cli daemon start
 ```
-*Web-Dashboard öffnen: `http://127.0.0.1:52110`*
+
+### Web-UI-Onboarding
+1. Öffnen Sie Ihren Browser unter **`http://127.0.0.1:52110`**.
+2. Falls noch kein Konto verknüpft ist, erscheint das Anthropic-Setup-Overlay:
+   - Klicken Sie auf **"Sign in with Google"** für Google OAuth 2.0 PKCE.
+   - Oder wählen Sie **"⚡ Quick Import from OpenCode Config"**.
+3. Nach der Anmeldung schaltet das Dashboard automatisch um und aktiviert das Kontingente-Radar sowie den OpenAI-Endpunkt (`http://127.0.0.1:52111/v1`).
+
+> 💡 **Terminal-Alternative:** `python -m prime_gate.cli auth login` oder `python -m prime_gate.cli quota`.
 
 ---
 

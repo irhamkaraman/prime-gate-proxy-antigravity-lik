@@ -55,26 +55,29 @@ pip install -r requirements.txt
 ```
 *(Пользователи Windows могут дважды кликнуть `scripts\install.bat`)*
 
-### 2. Подключение учетной записи
+### 2. Запуск фонового демона и веб-интерфейса
+Запустите API и Web UI одной командой:
 ```bash
-# Авто-импорт из OpenCode
-python -m prime_gate.cli auth import
-
-# Или вход через браузер (OAuth 2.0 PKCE)
-python -m prime_gate.cli auth login
-```
-
-### 3. Проверка квоты
-```bash
-python -m prime_gate.cli quota
-```
-
-### 4. Запуск прокси и Web UI
-```bash
-# Запуск в фоновом режиме (Windows)
+# Фоновый запуск в один клик (Windows)
 scripts\start-all.bat
+
+# Или через CLI-демон
+python -m prime_gate.cli daemon start
 ```
-*Web-интерфейс доступен по адресу: `http://127.0.0.1:52110`.*
+
+### 3. Онбординг через Web UI и подключение аккаунта
+1. Откройте браузер по адресу **`http://127.0.0.1:52110`**.
+2. Если учетная запись еще не подключена, откроется окно онбординга:
+   - Нажмите **"Sign in with Google"** для авторизации через Google OAuth 2.0 PKCE.
+   - Или нажмите **"⚡ Quick Import from OpenCode Config"** для быстрого импорта из OpenCode.
+3. После авторизации откроется **главная панель управления** с радаром квот и эндпоинтом OpenAI (`http://127.0.0.1:52111/v1`).
+
+> 💡 **Альтернатива через терминал:**
+> ```bash
+> python -m prime_gate.cli auth login   # Авторизация через браузер
+> python -m prime_gate.cli auth import  # Импорт из OpenCode
+> python -m prime_gate.cli quota        # Просмотр статуса квот
+> ```
 
 ---
 

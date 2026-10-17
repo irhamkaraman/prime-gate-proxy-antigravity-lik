@@ -72,35 +72,38 @@ pip install -r requirements.txt
 ```
 *(Windows users can simply double-click `scripts\install.bat`)*
 
-### 2. Connect Your Google Antigravity Account
-- **Option A: Auto-import from existing OpenCode config:**
-  ```bash
-  python -m prime_gate.cli auth import
-  ```
-- **Option B: Authenticate a new Google Account via browser:**
-  ```bash
-  python -m prime_gate.cli auth login
-  ```
-
-### 3. Check Live Quota
-```bash
-python -m prime_gate.cli quota
-```
-
-### 4. Start Server & Dashboard
-- **One-click background launcher (Windows):**
+### 2. Launch Background Daemon & Web UI
+Start both the Python Core API and Node.js Web UI with a single command:
+- **Windows (One-Click Background Launcher):**
   ```bash
   scripts\start-all.bat
   ```
-- **Or start foreground API server:**
+- **Or via CLI Daemon:**
   ```bash
-  python -m prime_gate.cli start --port 52111
+  python -m prime_gate.cli daemon start
   ```
-- **Launch Web UI:**
+- **Or Foreground Terminal Mode:**
   ```bash
+  # Terminal 1: Core API
+  python -m prime_gate.cli start --port 52111
+
+  # Terminal 2: Web UI
   python -m prime_gate.cli ui --port 52110
   ```
-  *Open your browser at `http://127.0.0.1:52110`.*
+
+### 3. Open Web UI Onboarding & Connect Account
+1. Open your browser and navigate to **`http://127.0.0.1:52110`**.
+2. If you haven't logged in yet, the **Anthropic-styled Setup Onboarding** overlay will appear automatically:
+   - Click **"Sign in with Google"** to authenticate via Google OAuth 2.0 PKCE.
+   - Or click **"⚡ Quick Import from OpenCode Config"** if you already have accounts saved in OpenCode.
+3. Once authenticated, Prime Gate automatically transitions into the main **System Dashboard**, activating your live Quota Radar, active model catalog, and OpenAI endpoint (`http://127.0.0.1:52111/v1`).
+
+> 💡 **CLI Alternative:** Prefer CLI setup? You can also authenticate directly in terminal:
+> ```bash
+> python -m prime_gate.cli auth login   # Sign in via browser OAuth
+> python -m prime_gate.cli auth import  # Import OpenCode config
+> python -m prime_gate.cli quota        # View live quota table
+> ```
 
 ---
 

@@ -111,6 +111,35 @@ async def api_quota():
         "quota": QuotaMonitor.parse_quota_details(active_acc)
     }
 
+@app.post("/api/auth/import")
+async def api_auth_import():
+    """Import accounts from local OpenCode configuration."""
+    count = account_mgr.import_from_opencode()
+    accounts = account_mgr.load_accounts()
+    active_acc = account_mgr.get_active_account()
+    return {
+        "success": count > 0,
+        "imported": count,
+        "total_accounts": len(accounts),
+        "active_account": active_acc.get("email") if active_acc else None
+    }
+
+@app.post("/api/auth/login")
+async def api_auth_login():
+    """Trigger interactive Google OAuth PKCE login via browser."""
+    import asyncio
+    from .auth import start_interactive_login
+    try:
+        new_account = await asyncio.to_thread(start_interactive_login)
+        accounts = account_mgr.load_accounts()
+        accounts = [a for a in accounts if a.get("email") != new_account["email"]]
+        accounts.append(new_account)
+        account_mgr.save_accounts(accounts)
+        return {"success": True, "account": new_account.get("email")}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 async def stream_antigravity_sse(
     upstream_url: str,
     headers: Dict[str, str],

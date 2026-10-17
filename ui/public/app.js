@@ -2,6 +2,96 @@
  * Prime Gate Antigravity - System Dashboard Logic (Anthropic Theme)
  */
 
+let isUserDismissedAuth = false;
+let hasConfiguredAccount = false;
+
+function openAuthModal(canDismiss = true) {
+  const modal = document.getElementById("authModal");
+  const closeBtn = document.getElementById("authModalCloseBtn");
+  if (!modal) return;
+  modal.style.display = "flex";
+  if (closeBtn) {
+    closeBtn.style.display = canDismiss ? "block" : "none";
+  }
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById("authModal");
+  if (!modal) return;
+  modal.style.display = "none";
+  isUserDismissedAuth = true;
+}
+
+async function triggerImportOpenCode() {
+  const statusNotice = document.getElementById("authStatusNotice");
+  const importBtn = document.getElementById("importAuthBtn");
+  const googleBtn = document.getElementById("googleLoginBtn");
+
+  try {
+    statusNotice.innerText = "Scanning local OpenCode configuration...";
+    statusNotice.style.color = "#f59e0b";
+    importBtn.disabled = true;
+    googleBtn.disabled = true;
+
+    const res = await fetch("/api/auth/import", { method: "POST" });
+    const data = await res.json();
+
+    if (data.success && data.imported > 0) {
+      statusNotice.innerText = `✓ Successfully imported ${data.imported} account(s)! Unlocking dashboard...`;
+      statusNotice.style.color = "#10b981";
+      isUserDismissedAuth = false;
+      setTimeout(async () => {
+        closeAuthModal();
+        await fetchStatus();
+      }, 1000);
+    } else {
+      statusNotice.innerText = "No OpenCode credentials found. Use 'Sign in with Google' instead.";
+      statusNotice.style.color = "#f43f5e";
+    }
+  } catch (err) {
+    statusNotice.innerText = `Import failed: ${err.message}`;
+    statusNotice.style.color = "#f43f5e";
+  } finally {
+    importBtn.disabled = false;
+    googleBtn.disabled = false;
+  }
+}
+
+async function triggerGoogleLogin() {
+  const statusNotice = document.getElementById("authStatusNotice");
+  const importBtn = document.getElementById("importAuthBtn");
+  const googleBtn = document.getElementById("googleLoginBtn");
+
+  try {
+    statusNotice.innerText = "Launching browser for Google OAuth sign-in... Please approve.";
+    statusNotice.style.color = "#f59e0b";
+    importBtn.disabled = true;
+    googleBtn.disabled = true;
+
+    const res = await fetch("/api/auth/login", { method: "POST" });
+    const data = await res.json();
+
+    if (data.success) {
+      statusNotice.innerText = `✓ Authenticated as ${data.account}! Loading dashboard...`;
+      statusNotice.style.color = "#10b981";
+      isUserDismissedAuth = false;
+      setTimeout(async () => {
+        closeAuthModal();
+        await fetchStatus();
+      }, 1200);
+    } else {
+      statusNotice.innerText = `Login failed: ${data.error || "Unable to complete OAuth"}`;
+      statusNotice.style.color = "#f43f5e";
+    }
+  } catch (err) {
+    statusNotice.innerText = `Login request error: ${err.message}`;
+    statusNotice.style.color = "#f43f5e";
+  } finally {
+    importBtn.disabled = false;
+    googleBtn.disabled = false;
+  }
+}
+
 async function fetchStatus() {
   const indicator = document.getElementById("statusIndicator");
   const statusText = document.getElementById("statusText");
@@ -14,6 +104,8 @@ async function fetchStatus() {
     indicator.className = "status-pill online";
     statusText.innerText = "Connected & Active";
 
+    hasConfiguredAccount = data.total_accounts > 0 && !!data.active_account;
+
     document.getElementById("accountTier").innerText = data.tier || "Active Plan";
     document.getElementById("accountEmail").innerText = data.active_account || "No Account Configured";
     document.getElementById("accountCount").innerText = `${data.total_accounts} Configured`;
@@ -21,6 +113,17 @@ async function fetchStatus() {
     const uptimeMins = Math.floor(data.uptime / 60);
     const uptimeSecs = data.uptime % 60;
     document.getElementById("serverUptime").innerText = `${uptimeMins}m ${uptimeSecs}s`;
+
+    // Onboarding check: If no account is configured, enforce the onboarding splash screen
+    if (!hasConfiguredAccount) {
+      openAuthModal(false); // Cannot dismiss if 0 accounts
+    } else if (!isUserDismissedAuth) {
+      // If accounts are configured and user did not manually open modal, ensure modal is closed
+      const modal = document.getElementById("authModal");
+      if (modal && modal.style.display !== "none" && !document.getElementById("authStatusNotice").innerText.includes("Launching")) {
+        closeAuthModal();
+      }
+    }
 
     renderQuota(data.quota || []);
     fetchModels();

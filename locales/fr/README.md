@@ -52,16 +52,20 @@ git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
 cd prime-gate-proxy-antigravity-lik
 pip install -r requirements.txt
 
-# Importer les comptes depuis OpenCode
-python -m prime_gate.cli auth import
-
-# Vérifier les quotas
-python -m prime_gate.cli quota
-
 # Démarrer en arrière-plan (Windows)
 scripts\start-all.bat
+# Ou via le démon CLI
+python -m prime_gate.cli daemon start
 ```
-*Accédez au tableau de bord Web sur : `http://127.0.0.1:52110`*
+
+### Intégration via l'interface Web (Onboarding)
+1. Ouvrez votre navigateur sur **`http://127.0.0.1:52110`**.
+2. Si aucun compte n'est configuré, l'écran d'accueil s'affiche automatiquement :
+   - Cliquez sur **"Sign in with Google"** pour vous connecter via Google OAuth 2.0 PKCE.
+   - Ou cliquez sur **"⚡ Quick Import from OpenCode Config"** pour importer votre compte existant.
+3. Une fois l'authentification réussie, l'accès au tableau de bord complet est déverrouillé, affichant le radar des quotas et le point de terminaison OpenAI (`http://127.0.0.1:52111/v1`).
+
+> 💡 **En ligne de commande :** `python -m prime_gate.cli auth login` ou `python -m prime_gate.cli quota`.
 
 ---
 

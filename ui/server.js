@@ -53,7 +53,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(502, { "Content-Type": "application/json" });
       res.end(JSON.stringify({
         error: {
-          message: `Python Core API (port ${API_PORT}) tidak terhubung. Pastikan 'prime-gate start' sedang berjalan.`,
+          message: `Python Core API (port ${API_PORT}) is unreachable. Please ensure 'prime-gate start' or daemon is active.`,
           detail: err.message
         }
       }));

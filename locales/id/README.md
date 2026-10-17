@@ -55,31 +55,35 @@ pip install -r requirements.txt
 ```
 *(Pengguna Windows dapat langsung klik dua kali file `scripts\install.bat`)*
 
-### 2. Hubungkan Akun Google Antigravity
-- **Impor langsung dari OpenCode:**
-  ```bash
-  python -m prime_gate.cli auth import
-  ```
-- **Atau login akun Google baru via browser:**
-  ```bash
-  python -m prime_gate.cli auth login
-  ```
-
-### 3. Cek Status Kuota
-```bash
-python -m prime_gate.cli quota
-```
-
-### 4. Menjalankan Server
-- **Jalankan Background Service Sekali Klik (Windows):**
+### 2. Jalankan Background Service & Web UI
+Jalankan service API dan Web UI sekaligus:
+- **Windows (Sekali Klik):**
   ```bash
   scripts\start-all.bat
   ```
-- **Buka Web UI Dashboard:**
+- **Atau via CLI Daemon:**
   ```bash
+  python -m prime_gate.cli daemon start
+  ```
+- **Atau Mode Terminal Terpisah:**
+  ```bash
+  python -m prime_gate.cli start --port 52111
   python -m prime_gate.cli ui --port 52110
   ```
-  *Buka browser di `http://127.0.0.1:52110`.*
+
+### 3. Buka Web UI Onboarding & Hubungkan Akun
+1. Buka browser di **`http://127.0.0.1:52110`**.
+2. Jika belum ada akun, layar **Setup Onboarding** bergaya Anthropic akan otomatis tampil:
+   - Klik **"Sign in with Google"** untuk login via Google OAuth PKCE.
+   - Atau klik **"⚡ Quick Import from OpenCode Config"** untuk mengimpor akun yang sudah tersimpan di OpenCode.
+3. Setelah login berhasil, modal otomatis tertutup dan halaman langsung beralih ke **Dasbor Utama**, menampilkan radar kuota real-time dan endpoint OpenAI (`http://127.0.0.1:52111/v1`).
+
+> 💡 **Alternatif Terminal:** Lebih suka via CLI? Anda juga dapat langsung login lewat terminal:
+> ```bash
+> python -m prime_gate.cli auth login   # Login via browser OAuth
+> python -m prime_gate.cli auth import  # Impor config OpenCode
+> python -m prime_gate.cli quota        # Tampilkan tabel visual kuota
+> ```
 
 ---
 

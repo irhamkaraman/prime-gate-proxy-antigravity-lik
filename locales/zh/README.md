@@ -55,35 +55,35 @@ pip install -r requirements.txt
 ```
 *(Windows 用户可直接双击运行 `scripts\install.bat`)*
 
-### 2. 连接 Google Antigravity 账号
-- **从已有 OpenCode 配置导入：**
-  ```bash
-  python -m prime_gate.cli auth import
-  ```
-- **或通过浏览器进行 Google OAuth 授权：**
-  ```bash
-  python -m prime_gate.cli auth login
-  ```
-
-### 3. 查看实时配额
-```bash
-python -m prime_gate.cli quota
-```
-
-### 4. 启动服务与 Web 控制台
-- **一键后台启动（Windows）：**
+### 2. 启动后台守护进程与 Web 控制台
+一键启动 Python 核心 API 与 Node.js Web UI：
+- **Windows（一键后台启动）：**
   ```bash
   scripts\start-all.bat
   ```
-- **前台启动 API 服务：**
+- **或通过 CLI 守护进程：**
+  ```bash
+  python -m prime_gate.cli daemon start
+  ```
+- **或前台终端模式：**
   ```bash
   python -m prime_gate.cli start --port 52111
-  ```
-- **启动 Web 控制台：**
-  ```bash
   python -m prime_gate.cli ui --port 52110
   ```
-  *在浏览器中访问：`http://127.0.0.1:52110`。*
+
+### 3. 打开 Web 控制台与连接账号
+1. 在浏览器中访问 **`http://127.0.0.1:52110`**。
+2. 若尚未配置账号，系统将自动弹出 Anthropic 风格的 **引导配置窗口**：
+   - 点击 **"Sign in with Google"** 进行 OAuth 2.0 PKCE 认证。
+   - 或点击 **"⚡ Quick Import from OpenCode Config"** 快速导入现有凭据。
+3. 授权成功后，页面将自动解锁并进入 **主仪表盘**，实时展示配额雷达、可用模型与 OpenAI 端点 (`http://127.0.0.1:52111/v1`)。
+
+> 💡 **终端命令行替代方案：** 偏好纯命令行操作？您也可以直接在终端中运行：
+> ```bash
+> python -m prime_gate.cli auth login   # 浏览器 OAuth 登录
+> python -m prime_gate.cli auth import  # 导入 OpenCode 配置
+> python -m prime_gate.cli quota        # 查看配额雷达表格
+> ```
 
 ---
 
