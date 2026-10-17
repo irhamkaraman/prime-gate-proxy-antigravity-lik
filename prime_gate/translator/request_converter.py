@@ -110,27 +110,44 @@ def transform_openai_to_antigravity(body: Dict[str, Any]) -> Tuple[str, Dict[str
             if parts:
                 contents.append({"role": "model", "parts": parts})
 
-        elif role == "tool":
+        elif role in ("tool", "function"):
             call_id = msg.get("tool_call_id")
             fn_name = msg.get("name") or tool_call_map.get(call_id, "unknown_tool")
             out_val = msg.get("content", "")
+
+            # Ensure response payload is ALWAYS a JSON Object (dict / google.protobuf.Struct)
+            # Protobuf will reject lists at functionResponse.response with:
+            # "Proto field is not repeating, cannot start list."
+            response_dict = {}
             if isinstance(out_val, str):
                 try:
-                    out_val = json.loads(out_val)
+                    parsed = json.loads(out_val)
+                    if isinstance(parsed, dict):
+                        response_dict = parsed
+                    else:
+                        response_dict = {"output": parsed}
                 except Exception:
-                    out_val = {"output": out_val}
-            elif not isinstance(out_val, dict):
-                out_val = {"output": str(out_val)}
+                    response_dict = {"output": out_val}
+            elif isinstance(out_val, dict):
+                response_dict = out_val
+            else:
+                response_dict = {"output": out_val if out_val is not None else ""}
 
-            contents.append({
-                "role": "user",
-                "parts": [{
-                    "functionResponse": {
-                        "name": fn_name,
-                        "response": out_val
-                    }
-                }]
-            })
+            fn_part = {
+                "functionResponse": {
+                    "name": fn_name,
+                    "response": response_dict
+                }
+            }
+
+            # If preceding turn was already user containing functionResponse, merge parts for parallel tool calls
+            if contents and contents[-1].get("role") == "user" and any("functionResponse" in p for p in contents[-1].get("parts", [])):
+                contents[-1]["parts"].append(fn_part)
+            else:
+                contents.append({
+                    "role": "user",
+                    "parts": [fn_part]
+                })
 
     # System instruction
     final_sys_parts = [SYSTEM_INSTRUCTION] + system_texts
