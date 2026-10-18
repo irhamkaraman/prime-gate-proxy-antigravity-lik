@@ -250,16 +250,40 @@ def transform_anthropic_to_antigravity(
             else:
                 contents.append({"role": target_role, "parts": parts})
 
-    # System instruction
+    # Antigravity/Gemini protocol invariants:
+    # 1. First turn must be 'user'
+    if contents and contents[0].get("role") == "model":
+        contents.insert(0, {"role": "user", "parts": [{"text": "Hello"}]})
+
+    # 2. Last turn cannot be 'model' (Anthropic prefill messages ending with assistant turn
+    #    trigger Google Antigravity 400 'Requests ending with a model turn are not supported')
+    if contents and contents[-1].get("role") == "model":
+        contents.append({"role": "user", "parts": [{"text": "Continue"}]})
+
+    # System instruction handling
+    # Google Antigravity Sandbox Gateway imposes an undocumented character cap (~1,500 chars)
+    # on dedicated `systemInstruction` objects, throwing false-positive 429 RESOURCE_EXHAUSTED.
+    # If the system prompt is large (e.g. Claude Code CLI harness prompts > 1,200 chars),
+    # we inject it directly into the first user turn in `contents`, where Antigravity allows 1M+ tokens.
+    system_instruction = None
     if system_texts:
-        system_instruction = {
-            "role": "user",
-            "parts": [{"text": "\n\n".join([t for t in system_texts if t])}]
-        }
+        full_system_str = "\n\n".join([t for t in system_texts if t])
+    else:
+        full_system_str = SYSTEM_INSTRUCTION
+
+    if len(full_system_str) > 1200:
+        instruction_prefix = f"[System Instruction]\n{full_system_str}\n\n"
+        if contents and contents[0].get("role") == "user":
+            if contents[0].get("parts") and "text" in contents[0]["parts"][0]:
+                contents[0]["parts"][0]["text"] = instruction_prefix + contents[0]["parts"][0]["text"]
+            else:
+                contents[0]["parts"].insert(0, {"text": instruction_prefix.strip()})
+        else:
+            contents.insert(0, {"role": "user", "parts": [{"text": instruction_prefix.strip()}]})
     else:
         system_instruction = {
             "role": "user",
-            "parts": [{"text": SYSTEM_INSTRUCTION}]
+            "parts": [{"text": full_system_str}]
         }
 
     # Tools definition
@@ -347,8 +371,9 @@ def transform_anthropic_to_antigravity(
 
     req_payload: Dict[str, Any] = {
         "contents": contents,
-        "systemInstruction": system_instruction,
     }
+    if system_instruction:
+        req_payload["systemInstruction"] = system_instruction
     if generation_config:
         req_payload["generationConfig"] = generation_config
     if tools_list:

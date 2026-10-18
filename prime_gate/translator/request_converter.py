@@ -316,16 +316,34 @@ def transform_openai_to_antigravity(
                     "parts": [fn_part]
                 })
 
-    # System instruction: prioritize client's own system prompt over generic fallback
+    # Antigravity/Gemini protocol invariants:
+    if contents and contents[0].get("role") == "model":
+        contents.insert(0, {"role": "user", "parts": [{"text": "Hello"}]})
+    if contents and contents[-1].get("role") == "model":
+        contents.append({"role": "user", "parts": [{"text": "Continue"}]})
+
+    # System instruction: prioritize client's own system prompt over generic fallback.
+    # If system prompt exceeds 1,200 chars, merge into the first user turn in contents
+    # to avoid Google Antigravity internal gateway 429 RESOURCE_EXHAUSTED.
+    system_instruction = None
     if system_texts:
-        system_instruction = {
-            "role": "user",
-            "parts": [{"text": "\n\n".join([p for p in system_texts if p])}]
-        }
+        full_system_str = "\n\n".join([p for p in system_texts if p])
+    else:
+        full_system_str = SYSTEM_INSTRUCTION
+
+    if len(full_system_str) > 1200:
+        instruction_prefix = f"[System Instruction]\n{full_system_str}\n\n"
+        if contents and contents[0].get("role") == "user":
+            if contents[0].get("parts") and "text" in contents[0]["parts"][0]:
+                contents[0]["parts"][0]["text"] = instruction_prefix + contents[0]["parts"][0]["text"]
+            else:
+                contents[0]["parts"].insert(0, {"text": instruction_prefix.strip()})
+        else:
+            contents.insert(0, {"role": "user", "parts": [{"text": instruction_prefix.strip()}]})
     else:
         system_instruction = {
             "role": "user",
-            "parts": [{"text": SYSTEM_INSTRUCTION}]
+            "parts": [{"text": full_system_str}]
         }
 
     # Tools
@@ -422,9 +440,10 @@ def transform_openai_to_antigravity(
 
     req_payload: Dict[str, Any] = {
         "contents": contents,
-        "systemInstruction": system_instruction,
         "generationConfig": generation_config
     }
+    if system_instruction:
+        req_payload["systemInstruction"] = system_instruction
 
     if tools:
         req_payload["tools"] = tools
