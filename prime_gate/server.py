@@ -31,6 +31,9 @@ from .translator import (
 from .db import db, event_bus, WebSocketLogHandler
 from .db.sentinel import sentinel
 from .telemetry import telemetry
+from .compactor import ContextCompactor
+from .resilience import AccountFailoverPool
+from .sentinel.loop_guard import AgentLoopGuard
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("prime_gate.server")
@@ -897,33 +900,97 @@ async def stream_cached_response_sse(
     yield "data: [DONE]\n\n"
 
 async def stream_antigravity_sse(
-    upstream_url: str,
-    headers: Dict[str, str],
-    wrapped_body: Dict[str, Any],
+    ordered_accounts: List[Dict[str, Any]],
+    model: str,
+    req_payload: Dict[str, Any],
     completion_id: str,
     created: int,
-    model: str,
     declared_tools: Optional[List[Dict[str, Any]]] = None,
-    account_email: Optional[str] = None,
     cache_meta: Optional[Dict[str, Any]] = None
 ) -> AsyncGenerator[str, None]:
-    """Stream SSE chunks from Google Antigravity and yield OpenAI SSE format chunks."""
+    """Stream SSE chunks from Google Antigravity with transparent mid-flight failover."""
     start_t = time.time()
-    prompt_tokens = max(1, len(json.dumps(wrapped_body.get("request", {}))) // 4)
+    prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
     completion_tokens = 0
     reasoning_tokens = 0
     accumulated_content: List[str] = []
 
     timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
-            if resp.status_code != 200:
-                err_text = await resp.aread()
-                logger.error(f"Upstream stream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
-                yield f"data: {json.dumps({'error': {'message': f'Upstream error: {resp.status_code}'}})}\n\n"
-                yield "data: [DONE]\n\n"
-                return
+    connected_resp = None
+    connected_account = None
 
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        for attempt, account in enumerate(ordered_accounts):
+            account_email = account.get("email", "")
+            try:
+                access_token = await get_access_token(account)
+                project_id = account.get("projectId", "rising-fact-p41fc")
+                upstream_url = f"{ANTIGRAVITY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Antigravity/2.24.0.0",
+                    "Accept": "text/event-stream"
+                }
+                wrapped_body = {
+                    "project": project_id,
+                    "model": model,
+                    "request": req_payload,
+                    "requestType": "agent",
+                    "userAgent": "antigravity",
+                    "requestId": "agent-" + uuid.uuid4().hex
+                }
+
+                req = client.build_request("POST", upstream_url, headers=headers, json=wrapped_body)
+                resp = await client.send(req, stream=True)
+
+                if resp.status_code in (429, 503):
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=120)
+                    logger.warning(
+                        f"[MID-FLIGHT FAILOVER] Upstream HTTP {resp.status_code} on {account_email}. "
+                        f"Rotating to next available account transparently..."
+                    )
+                    try:
+                        event_bus.broadcast_sync({
+                            "type": "ACCOUNT_FAILOVER",
+                            "account": account_email,
+                            "status_code": resp.status_code
+                        })
+                    except Exception:
+                        pass
+                    await resp.aclose()
+                    continue
+
+                if resp.status_code != 200:
+                    err_text = await resp.aread()
+                    logger.error(f"Upstream stream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
+                    await resp.aclose()
+                    if attempt < len(ordered_accounts) - 1:
+                        continue
+                    yield f"data: {json.dumps({'error': {'message': f'Upstream error: {resp.status_code}'}})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
+                # Successfully connected to upstream
+                connected_resp = resp
+                connected_account = account
+                break
+            except Exception as e:
+                logger.error(f"[MID-FLIGHT FAILOVER] Connection attempt failed for {account_email}: {e}")
+                if attempt == len(ordered_accounts) - 1:
+                    yield f"data: {json.dumps({'error': {'message': f'Upstream connection failed: {e}'}})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+                continue
+
+        if not connected_resp:
+            yield f"data: {json.dumps({'error': {'message': 'All upstream accounts exhausted or failed.'}})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+
+        resp = connected_resp
+        account_email = connected_account.get("email") if connected_account else None
+        try:
             # Yield initial role chunk required by Vercel AI SDK (@ai-sdk/openai-compatible) and Cursor/Continue
             yield format_sse_chunk(completion_id, created, model, {"role": "assistant", "content": ""})
 
@@ -1274,6 +1341,9 @@ async def stream_antigravity_sse(
             finish_reason = "tool_calls" if has_emitted_tool_call else "stop"
             yield format_sse_chunk(completion_id, created, model, {}, finish_reason=finish_reason)
             yield "data: [DONE]\n\n"
+        finally:
+            await resp.aclose()
+
 
 @app.post("/v1/chat/completions")
 @app.post("/chat/completions")
@@ -1290,6 +1360,44 @@ async def chat_completions(request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
+    cache_cfg = db.get_cache_config()
+
+    # -------------------------------------------------------------
+    # 1. Smart Agent Context Compactor
+    # -------------------------------------------------------------
+    raw_messages = body.get("messages", [])
+    if cache_cfg.get("compactor_enabled", True) and isinstance(raw_messages, list):
+        compacted_messages, compactor_stats = ContextCompactor.compact_messages(
+            messages=raw_messages,
+            keep_recent_user_turns=cache_cfg.get("compactor_window", 3),
+            max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40)
+        )
+        if compactor_stats.get("compacted"):
+            logger.info(
+                f"[COMPACTOR] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
+                f"saved ~{compactor_stats['chars_saved']} chars across {len(compacted_messages)} messages."
+            )
+            body["messages"] = compacted_messages
+
+    # -------------------------------------------------------------
+    # 2. AI Agent Runaway Loop Killer & Sentinel Guard
+    # -------------------------------------------------------------
+    if cache_cfg.get("loop_guard_enabled", True) and isinstance(body.get("messages"), list):
+        intervened_messages, loop_detected, loop_signature = AgentLoopGuard.check_and_intervene(
+            messages=body.get("messages", []),
+            max_repeats=cache_cfg.get("loop_guard_max_repeat", 3)
+        )
+        if loop_detected:
+            logger.warning(f"[LOOP GUARD] Runaway loop intercepted for '{loop_signature}'. Injected corrective intervention.")
+            body["messages"] = intervened_messages
+            try:
+                event_bus.broadcast_sync({
+                    "type": "LOOP_GUARD_INTERVENTION",
+                    "tool": loop_signature
+                })
+            except Exception:
+                pass
+
     # Try active account first, then failover to others
     active_acc = account_mgr.get_active_account()
     model, req_payload = transform_openai_to_antigravity(body, account=active_acc)
@@ -1300,7 +1408,7 @@ async def chat_completions(request: Request):
     # -------------------------------------------------------------
     # Smart Cache Evaluation Layer
     # -------------------------------------------------------------
-    cache_cfg = db.get_cache_config()
+
     headers_no_cache = (
         request.headers.get("x-cache-bypass", "").lower() in ("true", "1") or
         request.headers.get("x-no-cache", "").lower() in ("true", "1")
@@ -1400,18 +1508,31 @@ async def chat_completions(request: Request):
         "eligible": cache_eligible
     }
 
-    ordered_accounts = []
-    if active_acc:
-        ordered_accounts.append(active_acc)
-        for a in accounts:
-            if a.get("email") != active_acc.get("email"):
-                ordered_accounts.append(a)
-    else:
-        ordered_accounts = accounts
+    quota_cache = QuotaMonitor.get_cached_quotas()
+    ordered_accounts = AccountFailoverPool.get_ordered_accounts(
+        accounts=accounts,
+        preferred_account=active_acc,
+        quota_cache=quota_cache
+    )
+
+    if stream:
+        return StreamingResponse(
+            stream_antigravity_sse(
+                ordered_accounts=ordered_accounts,
+                model=model,
+                req_payload=req_payload,
+                completion_id=completion_id,
+                created=created,
+                declared_tools=body.get("tools"),
+                cache_meta=cache_meta
+            ),
+            media_type="text/event-stream"
+        )
 
     last_error = None
     for attempt in range(len(ordered_accounts)):
         account = ordered_accounts[attempt]
+        account_email = account.get("email", "")
         try:
             access_token = await get_access_token(account)
             project_id = account.get("projectId", "rising-fact-p41fc")
@@ -1434,28 +1555,27 @@ async def chat_completions(request: Request):
                 "Accept": "text/event-stream"
             }
 
-            if stream:
-                return StreamingResponse(
-                    stream_antigravity_sse(
-                        upstream_url, headers, wrapped_body,
-                        completion_id, created, model,
-                        declared_tools=body.get("tools"),
-                        account_email=account.get("email"),
-                        cache_meta=cache_meta
-                    ),
-                    media_type="text/event-stream"
-                )
-            else:
-                timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
-                        if resp.status_code == 429:
-                            logger.warning(f"Account {account.get('email')} quota exceeded (429). Trying next...")
+            timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
+                    if resp.status_code in (429, 503):
+                        AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=120)
+                        logger.warning(f"[FAILOVER] Account {account_email} quota exceeded ({resp.status_code}). Rotating to next...")
+                        try:
+                            event_bus.broadcast_sync({
+                                "type": "ACCOUNT_FAILOVER",
+                                "account": account_email,
+                                "status_code": resp.status_code
+                            })
+                        except Exception:
+                            pass
+                        continue
+                    if resp.status_code != 200:
+                        err_text = await resp.aread()
+                        logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
+                        if attempt < len(ordered_accounts) - 1:
                             continue
-                        if resp.status_code != 200:
-                            err_text = await resp.aread()
-                            logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
-                            raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
+                        raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
 
                         content_text = ""
                         reasoning_text = ""

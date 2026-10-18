@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prime-gate-proxy-antigravity-lik"
-version = "1.0.0b1"
+version = "1.2.0"
 description = "Production-grade, OpenAI-compatible proxy gateway for Google Antigravity with rich CLI and Glassmorphic Web UI dashboard"
 readme = "README.md"
 authors = [{ name = "irhamkaraman", email = "irhamkaraman@gmail.com" }]

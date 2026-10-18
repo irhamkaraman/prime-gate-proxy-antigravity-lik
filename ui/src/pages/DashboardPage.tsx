@@ -42,6 +42,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const { showToast } = useToast();
   const { navigate } = useNavigation();
   const [benchmarks, setBenchmarks] = useState<ModelBenchmarksResponse | null>(null);
+  const [currency, setCurrency] = useState<'USD' | 'IDR'>('IDR');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
 
@@ -74,11 +75,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* 4 Stat Cards Grid */}
+      {/* 5 Stat Cards Grid */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: 16,
         }}
       >
@@ -116,7 +117,59 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </div>
 
-        {/* Card 3: Average Latency */}
+        {/* Card 3: Economic Value Delivered */}
+        <div className="glass-card" style={{ padding: '20px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Value Delivered</span>
+            <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.06)', borderRadius: 6, padding: '2px 4px', gap: 2 }}>
+              <button
+                onClick={() => setCurrency('IDR')}
+                style={{
+                  border: 'none',
+                  background: currency === 'IDR' ? '#f59e0b' : 'transparent',
+                  color: currency === 'IDR' ? '#000000' : '#a8a29e',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                IDR
+              </button>
+              <button
+                onClick={() => setCurrency('USD')}
+                style={{
+                  border: 'none',
+                  background: currency === 'USD' ? '#f59e0b' : 'transparent',
+                  color: currency === 'USD' ? '#000000' : '#a8a29e',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                USD
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 12 }}>
+            <span style={{ fontSize: 24, fontWeight: 800, color: '#10b981', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
+              {currency === 'IDR'
+                ? `Rp ${(benchmarks?.total_idr_delivered || 0).toLocaleString('id-ID')}`
+                : `$${(benchmarks?.total_usd_delivered || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            </span>
+          </div>
+          <div style={{ fontSize: 12, color: '#78716c', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="badge badge-emerald" style={{ fontSize: 9, padding: '1px 5px' }}>Free Tier</span>
+            <span>Commercial API savings benchmark</span>
+          </div>
+        </div>
+
+        {/* Card 4: Average Latency */}
         <div className="glass-card" style={{ padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Average Latency (TTFT)</span>
@@ -133,7 +186,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </div>
 
-        {/* Card 4: Cumulative Handled */}
+        {/* Card 5: Cumulative Handled */}
         <div className="glass-card" style={{ padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Cumulative Handled</span>
@@ -150,6 +203,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </div>
       </div>
+
 
       {/* Token Consumption Breakdown Chart */}
       <TokenChart

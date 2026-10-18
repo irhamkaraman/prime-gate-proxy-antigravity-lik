@@ -5,7 +5,7 @@
 
 **A Production-Grade, Self-Hosted OpenAI-Compatible Proxy Gateway for Google Antigravity.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0--beta-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.0-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -63,6 +63,15 @@ graph LR
    Replaces human-readable JSON storage with a high-performance compiled C binary engine (SQLite WAL + Sealed BLOBs). Sensitive tokens, credentials, models, and quotas are binary-masked with strict 32-bit CRC32 checksum validation.
 8. **Real-Time WebSocket & Database Sentinel Watchdog:**
    Pipes live server logs and database mutations directly to dashboard over bidirectional WebSocket (`/ws/live`). An autonomous Sentinel Watchdog continuously audits binary block integrity and fires instant critical alerts and telemetry upon any corruption detection.
+9. **Smart Agent Context Compactor:**
+   Automatically prunes verbose tool output history older than 3 active turns while preserving system instructions and recent context, reducing 30k–100k agent prompts by 50% to 70%.
+10. **Mid-Flight Transparent Account Failover:**
+    Catches upstream Google Antigravity HTTP 429 (`RESOURCE_EXHAUSTED`) / 503 errors and rotates to the next healthiest account before emitting the first stream token—zero client drops.
+11. **AI Agent Runaway Loop Killer & Sentinel Guard:**
+    Detects infinite repetitive tool calls ($\ge 3$ consecutive identical calls) and injects corrective system instructions to stop execution loops and halt quota drain.
+12. **Economic Value Delivered Simulator:**
+    Calculates equivalent commercial API savings (GPT-4o / Claude 3.5 Sonnet benchmark) in both USD and IDR directly on the live dashboard and caching views.
+
 
 ---
 

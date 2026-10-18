@@ -24,8 +24,9 @@ This guide details how to install, authenticate, run, and connect Prime Gate wit
 7. [Real-Time Reasoning & Thinking Mode](#7-real-time-reasoning--thinking-mode)
 8. [Compiled Binary Database & Sentinel Watchdog](#8-compiled-binary-database--sentinel-watchdog)
 9. [Token Telemetry & Metrics](#9-token-telemetry--metrics)
-10. [CLI Command Reference](#10-cli-command-reference)
-11. [Troubleshooting & FAQs](#11-troubleshooting--faqs)
+10. [Enterprise Engine & Resilience (v1.2.0)](#10-enterprise-engine--resilience-v120)
+11. [CLI Command Reference](#11-cli-command-reference)
+12. [Troubleshooting & FAQs](#12-troubleshooting--faqs)
 
 ---
 
@@ -358,11 +359,35 @@ Metrics distinguish between:
 
 ---
 
-## 10. CLI Command Reference
+## 10. Enterprise Engine & Resilience (v1.2.0)
+
+Prime Gate v1.2.0 introduces four enterprise-grade runtime mechanisms designed for autonomous coding agents (Cursor, OpenCode, Continue, Claude Code, Cline):
+
+### 1. Smart Agent Context Compactor
+- **Problem:** AI coding agents generate multi-turn dialogues with verbose command outputs (`cat`, `read_file`, `git log`), inflating context from 20k to over 100k tokens and causing latency spikes or context truncation.
+- **Solution:** `ContextCompactor` slides over conversation history and prunes verbose tool output blocks older than the active window (default 3 turns; max 40 lines). The first 20 and last 20 lines are preserved, with middle lines compressed.
+- **Safety Guarantee:** User messages, assistant text, system prompts, and recent turns remain strictly 100% unaltered.
+
+### 2. Transparent Mid-Flight Account Failover
+- **Problem:** When an account runs out of quota mid-session, upstream Google Antigravity returns HTTP 429 (`RESOURCE_EXHAUSTED`), breaking the client IDE stream.
+- **Solution:** `AccountFailoverPool` intercepts 429/503 errors before the first SSE chunk is yielded to the client. It marks the failing account in cooldown (120–300s) and transparently connects to the next healthy account.
+- **Client Experience:** Zero client crashes, zero dropped streams, zero manual account switching.
+
+### 3. AI Agent Runaway Loop Sentinel
+- **Problem:** Autonomous agents sometimes repeat failing tool calls indefinitely with identical arguments, draining quota.
+- **Solution:** `AgentLoopGuard` hashes tool call signatures. If $\ge 3$ consecutive identical tool calls are detected, Sentinel injects a surgical system intervention advising the model to stop repeating and re-evaluate.
+
+### 4. Economic Value Delivered Simulator
+- **Live Commercial Cost Equivalents:** Compares token volume against commercial GPT-4o / Claude 3.5 Sonnet API rates (\$2.50 / \$10.00 per 1M tokens) with USD and IDR live currency toggling on the dashboard.
+
+---
+
+## 11. CLI Command Reference
 
 | Command | Arguments | Description |
 | :--- | :--- | :--- |
 | `prime-gate --version` | None | Displays version, codename, and system runtime. |
+
 | `prime-gate quota` | `--refresh` | Prints quota percentage bar and active model table. |
 | `prime-gate check-models` | `--refresh` | Queries live models from Google Antigravity servers. |
 | `prime-gate auth login` | `--port` | Launches browser for Google OAuth 2.0 PKCE. |

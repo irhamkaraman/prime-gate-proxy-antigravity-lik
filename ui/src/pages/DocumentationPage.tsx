@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useToast } from '../context/ToastContext';
-import { BookOpen, Copy, Check, Terminal, Code2, Server, ExternalLink } from 'lucide-react';
+import { BookOpen, Copy, Check, Terminal, Code2, Server, ExternalLink, Sparkles } from 'lucide-react';
 
 export const DocumentationPage: React.FC = () => {
   const { showToast } = useToast();
@@ -111,6 +111,41 @@ main();`;
           </div>
         </div>
       </div>
+
+      {/* v1.2.0 Enterprise Engine Architecture */}
+      <div className="glass-card" style={{ padding: '24px 28px' }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Sparkles size={18} color="#f59e0b" />
+          <span>v1.2.0 Enterprise Engine Capabilities</span>
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+          <div style={{ background: '#090807', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#34d399' }}>1. Smart Context Compactor</div>
+            <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 6, lineHeight: 1.5 }}>
+              Automatically trims historical tool call logs (&gt;3 turns old) while preserving system instructions and recent context, reducing 30k–100k prompts by 50–70%.
+            </p>
+          </div>
+          <div style={{ background: '#090807', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8' }}>2. Mid-Flight Transparent Failover</div>
+            <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 6, lineHeight: 1.5 }}>
+              Catches upstream HTTP 429 quota exhaustion and rotates to the next healthy Google account before emitting the first stream token—zero client drops.
+            </p>
+          </div>
+          <div style={{ background: '#090807', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#f43f5e' }}>3. AI Runaway Loop Sentinel</div>
+            <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 6, lineHeight: 1.5 }}>
+              Detects infinite loops where agents repeat identical failing tool calls (&ge;3 times) and injects corrective system interventions to halt quota drain.
+            </p>
+          </div>
+          <div style={{ background: '#090807', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>4. Economic Value Simulator</div>
+            <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 6, lineHeight: 1.5 }}>
+              Calculates equivalent commercial API savings (GPT-4o / Claude 3.5 Sonnet benchmark) in USD and IDR directly on the live dashboard.
+            </p>
+          </div>
+        </div>
+      </div>
+
 
       {/* Code Snippets Section */}
       <div className="glass-card" style={{ padding: '24px 28px' }}>

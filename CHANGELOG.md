@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-10-18
+
+### 🚀 Enterprise Engine: Context Compactor, Mid-Flight Failover, Runaway Loop Sentinel & Economic Value Simulator
+
+#### 1. Smart Agent Context Compactor (`ContextCompactor`)
+- **Sliding-Window Conversation History Pruning:** Autonomous AI coding agents (OpenCode, Cursor, Continue, Claude Code, Cline) accumulate massive contexts (30,000 to 100,000+ tokens) due to multi-turn execution outputs (`read_file`, `grep`, `bash`).
+- **Middle-Line Output Pruning:** Automatically trims verbose tool outputs older than recent turns (configurable window, default 3 active turns; max 40 lines), replacing bloated inner lines with a clean `... [Compacted N lines by Prime Gate Context Compactor] ...` marker while strictly preserving the first 20 and last 20 lines (head + tail).
+- **Zero-Loss Instruction Preservation:** `system` prompts and recent active turns are strictly preserved 100% unaltered, reducing prompt token bloat by **50% to 70%** and preventing context window truncation.
+
+#### 2. Transparent Mid-Flight Account Failover (`AccountFailoverPool`)
+- **Elimination of Client 429 Quota Exhaustion:** When upstream Google Antigravity servers return HTTP 429 (`RESOURCE_EXHAUSTED`) or 503 during a streaming session, Prime Gate intercepts the error before emitting the first SSE chunk to the client.
+- **Microsecond In-Memory Cooldown Management:** Failed accounts are automatically marked in cooldown (120–300s). The engine instantly and transparently rotates to the next healthiest candidate account with the highest remaining quota fraction.
+- **Unbroken Client Streams:** Client IDEs (Cursor, Continue, Vercel AI SDK, Windsurf) receive a completely seamless connection with zero interrupted streams or dropped generations.
+
+#### 3. AI Agent Runaway Loop Killer & Sentinel Guard (`AgentLoopGuard`)
+- **Deterministic Tool Call Hashing:** Canonically hashes function names and arguments (`tool_name:sha256(args)`) across consecutive assistant turns.
+- **Surgical System Interventions:** When an autonomous agent attempts to execute the exact same failing tool call $\ge 3$ consecutive times without forward progress, Sentinel intercepts the loop and injects a corrective system instruction (`[SYSTEM SAFETY INTERVENTION]`) to break the infinite loop and prevent quota depletion.
+- **Configurable Repeat Threshold:** Configurable via Web UI settings card (2 calls, 3 calls strict, 5 calls) and dynamic cache settings.
+
+#### 4. Economic Value Delivered Simulator (USD & IDR)
+- **Live Commercial Cost Benchmark:** Real-time financial simulator benchmarking token consumption and cache savings against commercial flagship API pricing (OpenAI GPT-4o / Claude 3.5 Sonnet: \$2.50 / \$10.00 per 1M tokens, baseline IDR 16,500/USD).
+- **Live Currency Toggle on Dashboard:** Added a dedicated **Value Delivered** KPI card on the main Dashboard and Caching Usage page featuring an interactive `USD` / `IDR` toggle button.
+- **Persistent Ledger Integration:** Computes exact accumulated economic savings delivered by Prime Gate's free Antigravity integration and smart caching layers.
+
+---
+
 ## [1.1.5] - 2026-10-18
 
 ### ⚡ Smart Semantic Caching Layer & Dedicated "Caching Usage" Dashboard

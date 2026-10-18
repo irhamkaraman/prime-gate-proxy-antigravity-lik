@@ -11,6 +11,8 @@ export interface ModelBenchmark {
   reasoning_tokens: number;
   cache_hits?: number;
   tokens_saved?: number;
+  usd_value_saved?: number;
+  idr_value_saved?: number;
   avg_latency_ms: number;
   min_latency_ms: number;
   max_latency_ms: number;
@@ -27,6 +29,8 @@ export interface ModelBenchmarksResponse {
   total_tokens: number;
   total_cache_hits?: number;
   total_tokens_saved?: number;
+  total_usd_delivered?: number;
+  total_idr_delivered?: number;
   top_spender_model: string | null;
   models: ModelBenchmark[];
 }
@@ -67,6 +71,11 @@ export interface CacheConfig {
   bypass_tools: boolean;
   min_prompt_length: number;
   ttl_seconds: number;
+  compactor_enabled?: boolean;
+  compactor_window?: number;
+  compactor_max_tool_lines?: number;
+  loop_guard_enabled?: boolean;
+  loop_guard_max_repeat?: number;
 }
 
 export interface CacheStats {
@@ -75,8 +84,11 @@ export interface CacheStats {
   total_tokens_saved: number;
   hit_ratio_pct: number;
   estimated_seconds_saved: number;
+  usd_value_saved?: number;
+  idr_value_saved?: number;
   config: CacheConfig;
 }
+
 
 export interface CacheEntry {
   id: number;

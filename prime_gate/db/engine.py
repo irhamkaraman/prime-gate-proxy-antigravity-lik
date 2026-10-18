@@ -499,12 +499,21 @@ class BinaryDatabaseEngine:
                 "last_seen_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["last_seen"])) if r["last_seen"] else "N/A"
             })
 
+        usd_saved = round((total_tokens_saved * 0.000005), 2)
+        idr_saved = int(usd_saved * 16250)
+        total_usd_val = round((total_tokens_all * 0.000005), 2)
+        total_idr_val = int(total_usd_val * 16250)
+
         return {
             "total_models_tracked": len(benchmarks),
             "total_requests": total_requests_all,
             "total_tokens": total_tokens_all,
             "total_cache_hits": total_cache_hits,
             "total_tokens_saved": total_tokens_saved,
+            "usd_value_saved": usd_saved,
+            "idr_value_saved": idr_saved,
+            "total_usd_delivered": total_usd_val,
+            "total_idr_delivered": total_idr_val,
             "top_spender_model": benchmarks[0]["model"] if benchmarks else None,
             "models": benchmarks
         }
@@ -582,20 +591,30 @@ class BinaryDatabaseEngine:
     # =========================================================================
 
     def get_cache_config(self) -> Dict[str, Any]:
-        """Retrieves current Smart Cache configuration."""
+        """Retrieves current Smart Cache, Compactor & Sentinel configuration."""
         cfg = self.get("cache:config")
         if not cfg or not isinstance(cfg, dict):
             return {
                 "enabled": True,
-                "bypass_tools": True,  # Bypass caching if request contains tool definitions
+                "bypass_tools": False,
                 "min_prompt_length": 5,
-                "ttl_seconds": 86400 * 7 # 7 days
+                "ttl_seconds": 86400 * 7,
+                "compactor_enabled": True,
+                "compactor_window_turns": 3,
+                "compactor_max_chars": 600,
+                "loop_guard_enabled": True,
+                "loop_guard_max_repeats": 3,
             }
         return {
             "enabled": bool(cfg.get("enabled", True)),
-            "bypass_tools": bool(cfg.get("bypass_tools", True)),
+            "bypass_tools": bool(cfg.get("bypass_tools", False)),
             "min_prompt_length": int(cfg.get("min_prompt_length", 5)),
-            "ttl_seconds": int(cfg.get("ttl_seconds", 86400 * 7))
+            "ttl_seconds": int(cfg.get("ttl_seconds", 86400 * 7)),
+            "compactor_enabled": bool(cfg.get("compactor_enabled", True)),
+            "compactor_window_turns": int(cfg.get("compactor_window_turns", 3)),
+            "compactor_max_chars": int(cfg.get("compactor_max_chars", 600)),
+            "loop_guard_enabled": bool(cfg.get("loop_guard_enabled", True)),
+            "loop_guard_max_repeats": int(cfg.get("loop_guard_max_repeats", 3)),
         }
 
     def set_cache_config(self, config: Dict[str, Any]) -> bool:
@@ -701,6 +720,8 @@ class BinaryDatabaseEngine:
         final_hits = max(total_hits, log_hits)
         hit_ratio = round((final_hits / log_total_reqs * 100), 1) if log_total_reqs > 0 else 0.0
         est_seconds_saved = round(final_hits * 2.5, 1)
+        usd_saved = round((final_tokens_saved * 0.000005), 2)
+        idr_saved = int(usd_saved * 16250)
         cfg = self.get_cache_config()
 
         return {
@@ -709,6 +730,8 @@ class BinaryDatabaseEngine:
             "total_tokens_saved": final_tokens_saved,
             "hit_ratio_pct": hit_ratio,
             "estimated_seconds_saved": est_seconds_saved,
+            "usd_value_saved": usd_saved,
+            "idr_value_saved": idr_saved,
             "config": cfg
         }
 

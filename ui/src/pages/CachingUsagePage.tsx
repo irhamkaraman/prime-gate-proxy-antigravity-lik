@@ -22,7 +22,10 @@ import {
   Sliders,
   Database,
   Cpu,
+  Minimize2,
+  ShieldAlert,
 } from 'lucide-react';
+
 
 interface CachingUsagePageProps {
   lastLedgerUpdate?: number;
@@ -332,10 +335,15 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               Zero upstream tokens consumed
             </div>
           </div>
-          <div style={{ fontSize: 11, color: '#10b981', marginTop: 8, fontWeight: 600 }}>
-            ⚡ 100% Free quota execution
+          <div style={{ fontSize: 11, color: '#10b981', marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>⚡ 100% Free quota execution</span>
+            <span style={{ color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+              {stats?.idr_value_saved ? `Rp ${stats.idr_value_saved.toLocaleString('id-ID')}` : '$0.00'}
+            </span>
           </div>
         </div>
+
+
 
         {/* Card 2: Cache Hit Ratio */}
         <div className="glass-card" style={{ padding: '20px 24px' }}>
@@ -723,6 +731,212 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                   );
                 })}
               </div>
+            </div>
+          </div>
+
+          {/* Card 5: Smart Agent Context Compactor */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '18px 20px',
+              borderRadius: 12,
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Minimize2 size={16} color={config.compactor_enabled !== false ? '#34d399' : '#78716c'} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                    Context Compactor
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: config.compactor_enabled !== false ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                    color: config.compactor_enabled !== false ? '#34d399' : '#78716c',
+                    border: `1px solid ${config.compactor_enabled !== false ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                  }}
+                >
+                  {config.compactor_enabled !== false ? 'ACTIVE' : 'OFF'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
+                Prunes verbose tool execution outputs older than recent turns. Slashes 30k–100k token prompts by 50–70% while keeping system & recent turns 100% intact.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: 3,
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                }}
+              >
+                {[
+                  { window: 1, label: '1 turn' },
+                  { window: 3, label: '3 turns (Safe)' },
+                  { window: 5, label: '5 turns' },
+                ].map(item => {
+                  const isActive = (config.compactor_window ?? 3) === item.window;
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => handleSaveConfig({ compactor_window: item.window })}
+                      disabled={isSavingConfig}
+                      style={{
+                        padding: '6px 0',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                        fontFamily: 'var(--font-mono)',
+                        textAlign: 'center',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: isActive ? '#10b981' : 'transparent',
+                        color: isActive ? '#ffffff' : '#a8a29e',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => handleSaveConfig({ compactor_enabled: config.compactor_enabled === false ? true : false })}
+                disabled={isSavingConfig}
+                className={`btn btn-sm ${config.compactor_enabled !== false ? 'btn-primary' : 'btn-secondary'}`}
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '7px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: config.compactor_enabled !== false ? '#10b981' : undefined,
+                  borderColor: config.compactor_enabled !== false ? '#10b981' : undefined,
+                  color: '#ffffff',
+                }}
+              >
+                {config.compactor_enabled !== false ? 'Compactor Enabled' : 'Compactor Disabled'}
+              </button>
+            </div>
+          </div>
+
+          {/* Card 6: AI Agent Runaway Loop Sentinel */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '18px 20px',
+              borderRadius: 12,
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ShieldAlert size={16} color={config.loop_guard_enabled !== false ? '#f43f5e' : '#78716c'} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                    Runaway Loop Sentinel
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: config.loop_guard_enabled !== false ? 'rgba(244, 63, 94, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                    color: config.loop_guard_enabled !== false ? '#f43f5e' : '#78716c',
+                    border: `1px solid ${config.loop_guard_enabled !== false ? 'rgba(244, 63, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                  }}
+                >
+                  {config.loop_guard_enabled !== false ? 'GUARDING' : 'OFF'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
+                Catches autonomous agents trapped in repetitive failing tool loops. Surgically injects corrective guidance to break infinite loops and stop quota drain.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: 3,
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                }}
+              >
+                {[
+                  { repeat: 2, label: '2 calls' },
+                  { repeat: 3, label: '3 calls (Strict)' },
+                  { repeat: 5, label: '5 calls' },
+                ].map(item => {
+                  const isActive = (config.loop_guard_max_repeat ?? 3) === item.repeat;
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => handleSaveConfig({ loop_guard_max_repeat: item.repeat })}
+                      disabled={isSavingConfig}
+                      style={{
+                        padding: '6px 0',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                        fontFamily: 'var(--font-mono)',
+                        textAlign: 'center',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: isActive ? '#f43f5e' : 'transparent',
+                        color: isActive ? '#ffffff' : '#a8a29e',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => handleSaveConfig({ loop_guard_enabled: config.loop_guard_enabled === false ? true : false })}
+                disabled={isSavingConfig}
+                className={`btn btn-sm ${config.loop_guard_enabled !== false ? 'btn-primary' : 'btn-secondary'}`}
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '7px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: config.loop_guard_enabled !== false ? '#f43f5e' : undefined,
+                  borderColor: config.loop_guard_enabled !== false ? '#f43f5e' : undefined,
+                  color: '#ffffff',
+                }}
+              >
+                {config.loop_guard_enabled !== false ? 'Loop Guard Active' : 'Loop Guard Disabled'}
+              </button>
             </div>
           </div>
         </div>
