@@ -13,7 +13,7 @@ class AccountFailoverPool:
     _cooldowns: Dict[str, float] = {}
 
     @classmethod
-    def mark_rate_limited(cls, email: str, cooldown_seconds: int = 300):
+    def mark_rate_limited(cls, email: str, cooldown_seconds: int = 30):
         """Places an account in cooldown after an upstream 429 response."""
         cls._cooldowns[email] = time.time() + cooldown_seconds
         logger.warning(

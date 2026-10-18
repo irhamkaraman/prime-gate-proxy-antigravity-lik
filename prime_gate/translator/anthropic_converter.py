@@ -316,6 +316,35 @@ def transform_anthropic_to_antigravity(
     if "stop_sequences" in body and isinstance(body["stop_sequences"], list):
         generation_config["stopSequences"] = body["stop_sequences"]
 
+    # Anthropic Extended Thinking & Reasoning Effort Support
+    raw_thinking = body.get("thinking")
+    effort = str(body.get("reasoning_effort") or body.get("effort") or "").lower().strip()
+    thinking_cfg: Optional[Dict[str, Any]] = None
+
+    if isinstance(raw_thinking, dict) and raw_thinking.get("type") in ("enabled", "adaptive"):
+        thinking_cfg = {"includeThoughts": True}
+        budget = raw_thinking.get("budget_tokens")
+        if budget and isinstance(budget, int) and budget > 0:
+            thinking_cfg["thinkingBudget"] = budget
+        if model_spec.get("thinking_level") in ["low", "medium", "high"]:
+            thinking_cfg["thinkingLevel"] = model_spec["thinking_level"]
+    elif effort in ("low", "medium", "high"):
+        thinking_cfg = {"includeThoughts": True, "thinkingLevel": effort}
+        if effort == "low":
+            thinking_cfg["thinkingBudget"] = 1000
+        elif effort == "medium":
+            thinking_cfg["thinkingBudget"] = 4000
+        elif effort == "high":
+            thinking_cfg["thinkingBudget"] = 8000
+    elif model_spec.get("supports_thinking") and ("-high" in model.lower() or "thinking" in model.lower()):
+        thinking_cfg = {"includeThoughts": True, "thinkingLevel": "high", "thinkingBudget": 8000}
+
+    if thinking_cfg:
+        generation_config["thinkingConfig"] = thinking_cfg
+        # Ensure temperature conforms to Gemini thinking constraints (must be default/1.0)
+        generation_config["temperature"] = 1.0
+
+
     req_payload: Dict[str, Any] = {
         "contents": contents,
         "systemInstruction": system_instruction,
@@ -515,7 +544,7 @@ async def stream_anthropic_sse(
                 resp = await client.send(req, stream=True)
 
                 if resp.status_code in (429, 503):
-                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=120)
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
                     logger.warning(
                         f"[MID-FLIGHT FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}. "
                         f"Rotating to next available account transparently..."
@@ -529,6 +558,7 @@ async def stream_anthropic_sse(
                     except Exception:
                         pass
                     await resp.aclose()
+                    await asyncio.sleep(0.4)
                     continue
 
                 if resp.status_code != 200:

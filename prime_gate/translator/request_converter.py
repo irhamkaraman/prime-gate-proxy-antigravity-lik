@@ -82,9 +82,23 @@ def resolve_model_info(raw_model: str, account_email: Optional[str] = None) -> T
             return _return_spec(spec)
 
     # 3. Dynamic Family / Generic Alias Resolution based on DB state:
-    is_generic_sonnet = m_lower in ["sonnet", "claude-sonnet", "claude-3-7-sonnet", "claude-3.7-sonnet", "claude-3-5-sonnet", "claude-3.5-sonnet"]
-    is_generic_opus = m_lower in ["opus", "claude-opus", "claude-3-opus", "claude-3.5-opus"]
-    is_generic_flash = m_lower in ["flash", "gemini-flash", "google-flash"]
+    is_generic_sonnet = m_lower in [
+        "sonnet", "claude-sonnet", "claude-3-7-sonnet", "claude-3.7-sonnet",
+        "claude-3-5-sonnet", "claude-3.5-sonnet", "claude-3-5-sonnet-20241022",
+        "claude-3-7-sonnet-20250219", "claude-3-sonnet", "claude-sonnet-4-6"
+    ]
+    is_generic_opus = m_lower in [
+        "opus", "claude-opus", "claude-3-opus", "claude-3.5-opus",
+        "claude-3-opus-20240229", "claude-opus-4-6-thinking"
+    ]
+    is_generic_haiku = m_lower in [
+        "haiku", "claude-haiku", "claude-3-5-haiku", "claude-3.5-haiku",
+        "claude-3-5-haiku-20241022", "claude-3-haiku"
+    ]
+    is_generic_flash = m_lower in [
+        "flash", "gemini-flash", "google-flash", "gemini-3-flash",
+        "gemini-3.8-flash", "gemini-3.5-flash", "gemini-3"
+    ]
     is_generic_oss = m_lower in ["oss", "gpt-oss", "gpt-oss-120b"]
     is_legacy_gemini = m_lower.startswith("gemini-2.") or m_lower.startswith("gemini-2-") or m_lower in ["gemini-2", "gemini-2.0", "gemini-2.5"]
 
@@ -96,7 +110,17 @@ def resolve_model_info(raw_model: str, account_email: Optional[str] = None) -> T
         for spec in models_catalog:
             if "sonnet" in spec["id"].lower():
                 return _return_spec(spec)
+    elif is_generic_haiku:
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower() and spec.get("recommended"):
+                return _return_spec(spec)
+        for spec in models_catalog:
+            if "flash" in spec["id"].lower():
+                return _return_spec(spec)
     elif is_generic_flash:
+        for spec in models_catalog:
+            if "3.8-flash" in spec["id"].lower() and spec.get("recommended"):
+                return _return_spec(spec)
         for spec in models_catalog:
             if "flash" in spec["id"].lower() and spec.get("recommended"):
                 return _return_spec(spec)
