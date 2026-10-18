@@ -220,19 +220,69 @@ Jalankan API Gateway Python dan Dasbor Web Node.js dengan satu perintah:
 
 ## 🔌 Panduan Integrasi Alat Coding AI
 
+Prime Gate menyediakan gerbang dual-protocol berkinerja tinggi:
+- **Protokol Pesan Anthropic:** `http://127.0.0.1:52111/v1/messages` (SSE streaming native, tool calling, reasoning/thinking)
+- **Protokol OpenAI Compatible:** `http://127.0.0.1:52111/v1` (Chat completions, daftar model, telemetri kesehatan)
+
+Gunakan API Key `prime-gate-proxy` (atau string apapun).
+
+---
+
 ### 1. Claude Code CLI (Anthropic Native)
-Atur variabel lingkungan berikut di terminal Anda sebelum menjalankan `claude`:
+
+Prime Gate memiliki dukungan protokol Anthropic Messages API bawaan yang dirancang khusus untuk [Claude Code CLI](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview). Mendukung penuh pemanggilan tools secara dua arah (bidirectional tool-calling), prompt harness berukuran besar (>4.000 karakter), dan loop coding otonom.
+
+#### Model yang Didukung:
+- `gemini-3.8-flash` atau `gemini-3-flash` *(Direkomendasikan: Super cepat, responsif, dan hemat kuota)*
+- `claude-sonnet-4-6` atau `claude-3-7-sonnet-20250219` *(Penalaran tinggi dengan extended thinking)*
+- `claude-opus-4-6-thinking`
+- `gemini-3.1-flash-lite`
+
+#### Jalankan Cepat (Sesi Terminal Saat Ini):
+- **Windows PowerShell:**
+  ```powershell
+  $env:ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
+  $env:ANTHROPIC_API_KEY="prime-gate-proxy"
+  $env:ANTHROPIC_MODEL="gemini-3.8-flash"  # atau claude-sonnet-4-6
+  claude
+  ```
+- **Linux / macOS (Bash / Zsh):**
+  ```bash
+  export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
+  export ANTHROPIC_API_KEY="prime-gate-proxy"
+  export ANTHROPIC_MODEL="gemini-3.8-flash"  # atau claude-sonnet-4-6
+  claude
+  ```
+
+#### Konfigurasi Permanen:
+- **Windows (Tersimpan Permanen di Profil Pengguna):**
+  ```powershell
+  [System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "http://127.0.0.1:52111", "User")
+  [System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "prime-gate-proxy", "User")
+  [System.Environment]::SetEnvironmentVariable("ANTHROPIC_MODEL", "gemini-3.8-flash", "User")
+  ```
+- **Linux / macOS (Tambahkan ke `~/.bashrc` atau `~/.zshrc`):**
+  ```bash
+  echo 'export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"' >> ~/.bashrc
+  echo 'export ANTHROPIC_API_KEY="prime-gate-proxy"' >> ~/.bashrc
+  echo 'export ANTHROPIC_MODEL="gemini-3.8-flash"' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+
+#### Contoh Perintah Penggunaan:
 ```bash
-# Windows PowerShell
-$env:ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
-$env:ANTHROPIC_API_KEY="prime-gate-proxy"
+# Membuka sesi interaktif Claude Code
 claude
 
-# Linux / macOS
-export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
-export ANTHROPIC_API_KEY="prime-gate-proxy"
-claude
+# Menjalankan satu instruksi langsung tanpa sesi interaktif
+claude -p "Jelaskan struktur direktori project ini dan temukan potensi bug"
+
+# Menentukan model tertentu secara eksplisit
+claude --model gemini-3.8-flash
+claude --model claude-sonnet-4-6
 ```
+
+> ⚡ **Catatan Mesin Prime Gate:** Claude Code menyertakan 28 deklarasi tool dan instruksi harness besar (~4.500 karakter). Prime Gate secara otomatis menormalkan dan memasukkan instruksi tersebut ke dalam alur percakapan multi-turn `contents` Google Antigravity, sehingga mencegah false-positive error `429 RESOURCE_EXHAUSTED` dari upstream gateway.
 
 ---
 

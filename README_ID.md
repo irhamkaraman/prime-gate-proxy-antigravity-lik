@@ -5,6 +5,24 @@ Dokumentasi lengkap resmi dalam Bahasa Indonesia tersedia di:
 
 ---
 
+### 💻 Quickstart Claude Code CLI:
+```powershell
+# Windows PowerShell
+$env:ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
+$env:ANTHROPIC_API_KEY="prime-gate-proxy"
+$env:ANTHROPIC_MODEL="gemini-3.8-flash"
+claude
+```
+```bash
+# Linux / macOS
+export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
+export ANTHROPIC_API_KEY="prime-gate-proxy"
+export ANTHROPIC_MODEL="gemini-3.8-flash"
+claude
+```
+
+---
+
 ### Ringkasan Cepat:
 - **Protokol:** Kompatibel 100% dengan OpenAI API (`/v1/chat/completions`) & Anthropic Messages API (`/v1/messages`).
 - **Keamanan:** 100% Anti-Banned dengan emulasi resmi Google Cloud Code / Antigravity PKCE.
@@ -13,4 +31,4 @@ Dokumentasi lengkap resmi dalam Bahasa Indonesia tersedia di:
   - Core API Gateway: `http://127.0.0.1:52111`
   - Dasbor Web UI: `http://127.0.0.1:52110`
 
-Silakan baca dokumentasi lengkap di: [`locales/id/README.md`](locales/id/README.md)
+Silakan baca panduan lengkap di: [`locales/id/README.md`](locales/id/README.md)

@@ -239,9 +239,67 @@ Prime Gate provides flexible flags to remove individual or all accounts from bot
 
 ## 🔌 AI Client Integration & Setup Guide
 
-Prime Gate provides a 100% OpenAI-compliant gateway at **`http://127.0.0.1:52111/v1`**. Use API Key `prime-gate-proxy` (or any non-empty string).
+Prime Gate provides a dual-protocol high-performance gateway:
+- **Anthropic Messages Protocol:** `http://127.0.0.1:52111/v1/messages` (Native SSE streaming, tool-calling, extended thinking)
+- **OpenAI Compatible Protocol:** `http://127.0.0.1:52111/v1` (Chat completions, model listing, health telemetry)
 
-### 1. Cursor IDE
+Use API Key `prime-gate-proxy` (or any non-empty string).
+
+---
+
+### 1. Claude Code CLI (Anthropic Native)
+
+Prime Gate includes native Anthropic Messages API support engineered specifically for [Claude Code CLI](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview), supporting full bidirectional tool calling, massive harness system prompts (>4k chars), and deep agentic coding loops.
+
+#### Quick Start (Current Terminal Session):
+- **Windows PowerShell:**
+  ```powershell
+  $env:ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
+  $env:ANTHROPIC_API_KEY="prime-gate-proxy"
+  $env:ANTHROPIC_MODEL="gemini-3.8-flash"  # or claude-sonnet-4-6
+  claude
+  ```
+- **macOS / Linux (Bash / Zsh):**
+  ```bash
+  export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
+  export ANTHROPIC_API_KEY="prime-gate-proxy"
+  export ANTHROPIC_MODEL="gemini-3.8-flash"  # or claude-sonnet-4-6
+  claude
+  ```
+
+#### Persistent Configuration:
+- **Windows (Permanent User Environment):**
+  ```powershell
+  [System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", "http://127.0.0.1:52111", "User")
+  [System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "prime-gate-proxy", "User")
+  [System.Environment]::SetEnvironmentVariable("ANTHROPIC_MODEL", "gemini-3.8-flash", "User")
+  ```
+- **macOS / Linux (Add to `~/.bashrc` or `~/.zshrc`):**
+  ```bash
+  echo 'export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"' >> ~/.bashrc
+  echo 'export ANTHROPIC_API_KEY="prime-gate-proxy"' >> ~/.bashrc
+  echo 'export ANTHROPIC_MODEL="gemini-3.8-flash"' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+
+#### Common Commands:
+```bash
+# Start interactive agent session
+claude
+
+# Single-prompt execution (scriptable)
+claude -p "Explain the architecture of this repository"
+
+# Explicit model selection on startup
+claude --model gemini-3.8-flash
+claude --model claude-sonnet-4-6
+```
+
+> ⚡ **Engine Note:** Claude Code CLI dispatches 28 tool declarations and a ~4,500-character system harness. Prime Gate automatically normalizes and injects these into Google Antigravity's multi-million token conversation stream to prevent false-positive `429 RESOURCE_EXHAUSTED` gateway errors.
+
+---
+
+### 2. Cursor IDE
 1. Open Cursor Settings (**Ctrl+,** or **Cmd+,**).
 2. Go to **Features** &gt; **Models**.
 3. Under **OpenAI API Key**, enter: `prime-gate-proxy`.
@@ -256,7 +314,7 @@ Prime Gate provides a 100% OpenAI-compliant gateway at **`http://127.0.0.1:52111
 
 ---
 
-### 2. OpenCode (`~/.config/opencode/opencode.json`)
+### 3. OpenCode (`~/.config/opencode/opencode.json`)
 Add or merge the `antigravity` provider in your OpenCode configuration:
 ```json
 {
@@ -279,7 +337,7 @@ Add or merge the `antigravity` provider in your OpenCode configuration:
 
 ---
 
-### 3. Continue.dev (`~/.continue/config.json`)
+### 4. Continue.dev (`~/.continue/config.json`)
 Add Prime Gate into your `models` list:
 ```json
 {
@@ -304,16 +362,16 @@ Add Prime Gate into your `models` list:
 
 ---
 
-### 4. Cline / Roo Code (VS Code Extension)
+### 5. Cline / Roo Code (VS Code Extension)
 1. Open Cline Settings.
-2. Select API Provider: **OpenAI Compatible**.
-3. Set **Base URL**: `http://127.0.0.1:52111/v1`.
+2. Select API Provider: **OpenAI Compatible** (or **Anthropic** at `http://127.0.0.1:52111`).
+3. Set **Base URL**: `http://127.0.0.1:52111/v1` (or `http://127.0.0.1:52111` for Anthropic).
 4. Set **API Key**: `prime-gate-proxy`.
 5. Set **Model ID**: `claude-sonnet-4-6` or `gemini-3.8-flash`.
 
 ---
 
-### 5. Aider (Terminal AI Pair Programmer)
+### 6. Aider (Terminal AI Pair Programmer)
 Launch Aider pointing to the Prime Gate proxy endpoint:
 ```bash
 aider --openai-api-base http://127.0.0.1:52111/v1 \
@@ -323,7 +381,7 @@ aider --openai-api-base http://127.0.0.1:52111/v1 \
 
 ---
 
-### 6. Python OpenAI SDK
+### 7. Python OpenAI SDK
 ```python
 from openai import OpenAI
 
@@ -353,7 +411,7 @@ for chunk in response:
 
 ---
 
-### 7. Node.js / TypeScript SDK
+### 8. Node.js / TypeScript SDK
 ```typescript
 import OpenAI from "openai";
 
@@ -376,7 +434,7 @@ main();
 
 ---
 
-### 8. cURL / REST API Test
+### 9. cURL / REST API Test
 ```bash
 curl -X POST http://127.0.0.1:52111/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -390,7 +448,7 @@ curl -X POST http://127.0.0.1:52111/v1/chat/completions \
 
 ---
 
-### 9. Health & Observability API (`/v1/health`)
+### 10. Health & Observability API (`/v1/health`)
 Query gateway status, operational health for all models, quota buckets, and recent structured logs:
 ```bash
 # Basic health check
