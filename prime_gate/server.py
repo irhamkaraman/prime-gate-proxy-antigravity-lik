@@ -812,9 +812,12 @@ async def api_delete_cache_entry(entry_id: int):
 async def api_clear_cache():
     """Clears all cached entries and resets cache hit stats."""
     success = db.clear_cache()
-    event_bus.broadcast_sync({
-        "type": "CACHE_CLEARED"
-    })
+    try:
+        event_bus.broadcast_sync({
+            "type": "CACHE_CLEARED"
+        })
+    except Exception as e:
+        logger.warning(f"Failed to broadcast CACHE_CLEARED: {e}")
     return {"success": success, "message": "Smart cache cleared successfully."}
 
 @app.get("/api/cache/config")
@@ -831,10 +834,13 @@ async def api_set_cache_config(request: Request):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     success = db.set_cache_config(body)
     new_cfg = db.get_cache_config()
-    event_bus.broadcast_sync({
-        "type": "CACHE_CONFIG_UPDATED",
-        "config": new_cfg
-    })
+    try:
+        event_bus.broadcast_sync({
+            "type": "CACHE_CONFIG_UPDATED",
+            "config": new_cfg
+        })
+    except Exception as e:
+        logger.warning(f"Failed to broadcast CACHE_CONFIG_UPDATED: {e}")
     return {"success": success, "config": new_cfg}
 
 def compute_cache_key(model: str, messages: List[Dict[str, Any]]) -> tuple[str, str, str]:

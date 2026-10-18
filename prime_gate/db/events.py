@@ -99,6 +99,10 @@ class DBEventBus:
             # Prevent logging errors inside log handler
             pass
 
+    def broadcast_sync(self, event: Dict[str, Any]):
+        """Broadcast event dictionary to all active WebSocket clients from synchronous context."""
+        self.dispatch_sync(event)
+
     def notify_corruption(self, key: str, reason: str, details: Optional[Dict[str, Any]] = None):
         """Immediately broadcast a CRITICAL database corruption notification."""
         payload = {
