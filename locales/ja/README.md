@@ -38,10 +38,36 @@
    Google Antigravity でサポートされていない JSON 制約（`exclusiveMinimum`、`$schema` 等）を自動除去し、ツール呼び出しを安定動作させます。
 4. **アカウントクォータ＆プラン自動判定:**
    **`Google AI Pro (Trial Tier)`** と **`Paid Tier`** を自動判別し、利用可能なモデルのみを動的に提示します。
-5. **グラスモーフィズムデザインの Web UI:**
-   Node.js 製の軽量ダッシュボード（`http://127.0.0.1:52110`）でクォータ残量メーターや対話型プロンプトテストを提供。
+5. **最新 React 18 + TypeScript SPA ダッシュボード:**
+   Vite ベースの高速 SPA（`/dashboard`、`/benchmarks`、`/accounts`、`/sandbox`、`/sentinel`）を採用。リアルタイムトークン推移グラフ、アカウント別クォータ管理、インタラクティブなテスト環境を完備。
 6. **高機能 CLI スイート:**
    `quota`（クォータ一覧表示）、`auth`（アカウント管理・OAuth ログイン）、Windows 向けバックグラウンドデーモン管理に対応。
+
+---
+
+## 📸 ユーザーインターフェース＆デモ
+
+React 18、TypeScript、WebSocket を採用したグラスモーフィズムデザインの Web 管理画面：
+
+### 1. ダッシュボード＆リアルタイムテレメトリ (`/dashboard`)
+トークン生成速度（tok/s）、過去24時間の累積トークン量、平均レスポンス遅延（TTFT）、時間帯別トークン消費グラフ（`1m`、`1h`、`1d`、`1month`）、消費量上位モデルのリーダーボードをリアルタイム表示。
+![ダッシュボード＆テレメトリ](../../docs/images/dashboard-telemetry.png)
+
+### 2. 利用状況とモデルベンチマーク (`/benchmarks`)
+SQLite WAL モードによるリアルタイム永続リクエスト台帳。モデル別の消費統計、遅延ベンチマーク、トークン比率、加重クォータ影響スコア（Claude 3x, GPT 2x, Gemini 1x）を可視化し、検索・フィルタリングに対応。
+![利用状況とモデルベンチマーク](../../docs/images/usage-benchmarks.png)
+
+### 3. アカウント管理＆動的モデルカタログ (`/accounts`)
+複数 Google OAuth アカウントの集中管理とアクティブ切り替え、クォータ残量メーター、機能バッジ付きモデルカタログ（Thinking 対応、画像/マルチモーダル、コンテキスト長、ストリーミング）。
+![アカウント管理＆モデル](../../docs/images/accounts-models.png)
+
+### 4. プロンプトサンドボックス (`/sandbox`)
+ストリーミング推論を直接テストできる対話型サンドボックス。システムプロンプト、温度、最大トークンを設定し、TTFT や生成速度（tok/s）をリアルタイム計測。
+![プロンプトサンドボックス](../../docs/images/prompt-sandbox.png)
+
+### 5. システム＆データベースセンチネル (`/sentinel`)
+バイナリ SQLite WAL ストレージの健全性監査。CRC32 チェックサム検証、ページキャッシュ使用率、VACUUM 最適化、WebSocket 経由のリアルタイム監査ログ表示に対応。
+![システム＆データベースセンチネル](../../docs/images/system-sentinel.png)
 
 ---
 

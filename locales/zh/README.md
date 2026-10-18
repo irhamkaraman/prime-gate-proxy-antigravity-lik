@@ -38,10 +38,36 @@
    自动清理 Google Antigravity 不支持的 JSON 约束（如 `exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`），确保函数与工具调用（Tool Calling）100% 稳定运行。
 4. **智能配额与套餐识别：**
    自动识别 **`Google AI Pro (Trial Tier 体验版)`** 与 **`Paid 付费版`**，精准呈现可用模型。
-5. **毛玻璃风现代化 Web UI：**
-   基于 Node.js 构建，零第三方 npm 依赖，在 `http://127.0.0.1:52110` 提供实时配额仪表盘与交互式测试沙箱。
+5. **现代化 React 18 + TypeScript SPA 控制台：**
+   采用 Vite 构建，支持独立页面路由（`/dashboard`、`/benchmarks`、`/accounts`、`/sandbox`、`/sentinel`），提供实时 Token 柱状雷达图、账号配额监控与交互式测试沙箱。
 6. **丰富的终端 CLI 支持：**
    包含 `--version`、`quota`（可视化配额表）、`auth`（账号导入与 OAuth 登录）以及 Windows 后台守护进程（Daemon）管理。
+
+---
+
+## 📸 界面演示与视觉概览
+
+基于 React 18、TypeScript 和实时 WebSocket 构建的 Anthropic 风格暗色毛玻璃控制台：
+
+### 1. 仪表盘与实时遥测 (`/dashboard`)
+实时监控 Token 吞吐速率、24小时滑动消耗统计、平均响应延迟（TTFT）、分段 Token 消耗柱状图（`1m`、`1h`、`1d`、`1month`）以及高消耗模型排行榜预览。
+![仪表盘与实时遥测](../../docs/images/dashboard-telemetry.png)
+
+### 2. 用量统计与模型基准 (`/benchmarks`)
+基于 SQLite WAL 持久化账本实时记录每次 API 调用。直观展示各模型的请求量、延迟基准、Token 占比份额以及加权配额消耗评分（Claude 3x、GPT 2x、Gemini 1x），支持实时搜索过滤与请求 ID 一键复制。
+![用量统计与模型基准](../../docs/images/usage-benchmarks.png)
+
+### 3. 账号管理与动态模型目录 (`/accounts`)
+多账号 OAuth 集中管理，支持多账号轮询与实时配额状态监控；自动探测 Google Antigravity 可用模型并展示特性标签（思维链支持、多模态视觉、上下文长度、流式输出）。
+![账号管理与模型目录](../../docs/images/accounts-models.png)
+
+### 4. 交互式提示词沙箱 (`/sandbox`)
+用于测试流式模型输出的交互式工作台。可自由配置系统提示词、用户指令、采样温度与最大 Token 上限，并在右侧实时查看推理速度（TTFT、总耗时、每秒输出 Token 数）。
+![提示词沙箱](../../docs/images/prompt-sandbox.png)
+
+### 5. 系统与数据库哨兵 (`/sentinel`)
+底层二进制 SQLite WAL 存储健康巡检中心。支持 CRC32 完整性校验、页缓存状态分析、数据库 VACUUM 碎片清理，并通过双向 WebSocket 实时查看后台审计守护日志。
+![系统与数据库哨兵](../../docs/images/system-sentinel.png)
 
 ---
 

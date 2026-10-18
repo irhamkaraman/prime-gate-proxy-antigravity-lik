@@ -38,10 +38,36 @@ Utilisez vos quotas Google Antigravity – y compris **Claude Sonnet 4.6 (Thinki
    Supprime automatiquement les contraintes JSON Schema non supportées (`exclusiveMinimum`, `$schema`, `additionalProperties`) pour une exécution stable des outils.
 4. **Détection intelligente des quotas et abonnements :**
    Distingue automatiquement **`Google AI Pro (Trial Tier)`** de la version **`Paid Tier`**.
-5. **Tableau de bord Web Glassmorphic :**
-   Interface visuelle en Node.js sans dépendances externes (`http://127.0.0.1:52110`) avec indicateurs de quotas et bac à sable de test.
+5. **Tableau de bord SPA moderne React 18 + TypeScript :**
+   Application web modulaire sous Vite avec routes dédiées (`/dashboard`, `/benchmarks`, `/accounts`, `/sandbox`, `/sentinel`), graphiques de tokens en direct, gestion multi-comptes et bac à sable interactif.
 6. **Suite CLI complète :**
    Commandes interactives `--version`, `quota`, `auth`, et gestion du démon en arrière-plan sous Windows.
+
+---
+
+## 📸 Interface utilisateur & Démonstration
+
+Interface moderne en dark glassmorphism conçue avec React 18, TypeScript et WebSockets temps réel :
+
+### 1. Tableau de bord & Télémétrie en temps réel (`/dashboard`)
+Surveillance en direct de la vitesse de génération (tokens/s), consommation sur 24 heures glissantes, latence moyenne (TTFT), graphique segmenté (`1m`, `1h`, `1d`, `1month`) et classement des modèles les plus consommateurs.
+![Tableau de bord & Télémétrie](../../docs/images/dashboard-telemetry.png)
+
+### 2. Utilisation & Benchmarks des modèles (`/benchmarks`)
+Registre persistant SQLite WAL consignant chaque requête API en direct. Affiche les statistiques par modèle, latences, répartition des tokens et score pondéré d'impact sur le quota (Claude 3x, GPT 2x, Gemini 1x) avec recherche instantanée.
+![Utilisation & Benchmarks](../../docs/images/usage-benchmarks.png)
+
+### 3. Gestionnaire de comptes & Catalogue de modèles (`/accounts`)
+Gestion multi-comptes Google OAuth avec rotation du compte actif, indicateurs de quotas en direct et découverte automatique des modèles avec badges de capacités (Thinking, Vision/Multimodal, Contexte, Streaming).
+![Gestionnaire de comptes & Modèles](../../docs/images/accounts-models.png)
+
+### 4. Bac à sable de prompts (`/sandbox`)
+Banc d'essai interactif pour tester l'inférence en streaming. Configurez les prompts système, la température et les limites de tokens avec mesures en direct (TTFT, durée totale, tokens/seconde).
+![Bac à sable de prompts](../../docs/images/prompt-sandbox.png)
+
+### 5. Sentinelle système & Base de données (`/sentinel`)
+Console de contrôle du stockage binaire SQLite en mode WAL : vérification d'intégrité CRC32, allocation du cache de pages, compactage VACUUM et journal d'audit du démon en direct via WebSockets.
+![Sentinelle système & Base de données](../../docs/images/system-sentinel.png)
 
 ---
 

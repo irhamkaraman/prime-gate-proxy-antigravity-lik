@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dynamic Usage Dashboard Sync:** The Usage page (`ModelBenchmarkPage`) and Dashboard benchmark preview widget now automatically re-calculate token rankings, throughput, and latency metrics in real time upon every inbound request hit.
 - **Live Status Visual Pill:** Added a glowing `LIVE REALTIME` / `POLLING SYNC` badge in the header confirming persistent stream connectivity without disrupting user table pagination or search filters.
 
+#### 7. Visual Interface Demonstration & Multi-Language Documentation
+- **Showcase Gallery:** Captured and stored high-resolution demonstration screenshots for all 5 SPA application views in `docs/images/` (`dashboard-telemetry.png`, `usage-benchmarks.png`, `accounts-models.png`, `prompt-sandbox.png`, `system-sentinel.png`).
+- **Comprehensive Multi-Lingual Sync:** Updated all documentation across 6 languages (English, 简体中文, Русский, 日本語, Deutsch, Français) with detailed feature walkthroughs and visual previews.
+
 ---
 
 ## [1.1.2] - 2026-10-18
