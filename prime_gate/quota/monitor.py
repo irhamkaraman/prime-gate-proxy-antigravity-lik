@@ -321,6 +321,19 @@ class QuotaMonitor:
             quota_list = db_quota["quota"]
             cls._quota_cache[email] = (quota_list, now)
             return quota_list
+        return []
+
+    @classmethod
+    def get_cached_quotas(cls, email: Optional[str]) -> List[Dict[str, Any]]:
+        """Synchronously retrieves the most recent quota buckets from memory or binary DB."""
+        if not email:
+            return []
+        if email in cls._quota_cache:
+            return cls._quota_cache[email][0]
+        db_quota = db.get(f"quota:{email}")
+        if db_quota and isinstance(db_quota, dict) and db_quota.get("quota"):
+            return db_quota["quota"]
+        return []
 
     @staticmethod
     def parse_quota_details(account: Dict[str, Any]) -> List[Dict[str, Any]]:

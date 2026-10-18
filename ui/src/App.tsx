@@ -8,6 +8,7 @@ import { ToastContainer } from './components/ToastContainer';
 import { Modal } from './components/Modal';
 
 import { DashboardPage } from './pages/DashboardPage';
+import { ModelBenchmarkPage } from './pages/ModelBenchmarkPage';
 import { AccountManagerPage } from './pages/AccountManagerPage';
 import { PromptSandboxPage } from './pages/PromptSandboxPage';
 import { SentinelPage } from './pages/SentinelPage';
@@ -429,6 +430,10 @@ const MainLayout: React.FC = () => {
               onSyncQuota={handleSyncQuota}
               isSyncing={isSyncing}
             />
+          )}
+
+          {currentRoute === 'benchmarks' && (
+            <ModelBenchmarkPage activeAccount={activeAccount} />
           )}
 
           {currentRoute === 'accounts' && (

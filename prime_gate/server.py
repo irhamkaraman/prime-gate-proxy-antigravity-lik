@@ -88,6 +88,28 @@ async def on_startup():
 
         asyncio.create_task(_startup_sync())
 
+    # Seed baseline request log if empty but telemetry exists
+    try:
+        if db.get_request_logs(limit=1)["total"] == 0 and telemetry.total_tokens_all_time > 0:
+            active_email = active_acc.get("email") if active_acc else None
+            quota_snap = QuotaMonitor.get_cached_quotas(active_email) if active_email else None
+            db.record_request_hit(
+                request_id="seed-telemetry-baseline",
+                timestamp=time.time() - 3600,
+                account_email=active_email,
+                model="gemini-3-flash",
+                prompt_tokens=telemetry.total_prompt_tokens,
+                completion_tokens=telemetry.total_completion_tokens,
+                reasoning_tokens=telemetry.total_reasoning_tokens,
+                latency_ms=1250.0,
+                status_code=200,
+                stream=1,
+                quota_snapshot=quota_snap
+            )
+            logger.info("Seeded initial baseline request log from cumulative telemetry.")
+    except Exception as e:
+        logger.warning(f"Could not seed baseline request log: {e}")
+
 @app.on_event("shutdown")
 async def on_shutdown():
     await sentinel.stop()
@@ -733,6 +755,28 @@ async def api_token_metrics(range: str = "minute"):
     }
     return data
 
+@app.get("/api/analytics/models")
+async def api_model_benchmarks():
+    """Returns aggregated model benchmarks, token rankings, and quota impact scores."""
+    return db.get_model_benchmarks()
+
+@app.get("/api/analytics/requests")
+async def api_request_logs(
+    limit: int = 50,
+    offset: int = 0,
+    model: Optional[str] = None,
+    account: Optional[str] = None
+):
+    """Returns paginated, searchable request hits with token and quota snapshots."""
+    safe_limit = max(1, min(limit, 500))
+    return db.get_request_logs(limit=safe_limit, offset=offset, model=model, account=account)
+
+@app.delete("/api/analytics/requests")
+async def api_clear_request_logs():
+    """Clears all request hit logs from database."""
+    success = db.clear_request_logs()
+    return {"success": success, "message": "All request logs have been cleared."}
+
 async def stream_antigravity_sse(
     upstream_url: str,
     headers: Dict[str, str],
@@ -740,7 +784,8 @@ async def stream_antigravity_sse(
     completion_id: str,
     created: int,
     model: str,
-    declared_tools: Optional[List[Dict[str, Any]]] = None
+    declared_tools: Optional[List[Dict[str, Any]]] = None,
+    account_email: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """Stream SSE chunks from Google Antigravity and yield OpenAI SSE format chunks."""
     start_t = time.time()
@@ -1056,6 +1101,25 @@ async def stream_antigravity_sse(
                 latency_ms=latency_ms
             )
 
+            # Record granular request hit into persistent database ledger
+            try:
+                quota_snap = QuotaMonitor.get_cached_quotas(account_email) if account_email else None
+                db.record_request_hit(
+                    request_id=completion_id,
+                    timestamp=created,
+                    account_email=account_email,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=reasoning_tokens,
+                    latency_ms=latency_ms,
+                    status_code=200,
+                    stream=1,
+                    quota_snapshot=quota_snap
+                )
+            except Exception as e:
+                logger.error(f"Failed to record request hit to db: {e}")
+
             # Live broadcast telemetry to WebSocket clients
             try:
                 metrics_data = telemetry.get_metrics(time_range="minute")
@@ -1150,7 +1214,8 @@ async def chat_completions(request: Request):
                     stream_antigravity_sse(
                         upstream_url, headers, wrapped_body,
                         completion_id, created, model,
-                        declared_tools=body.get("tools")
+                        declared_tools=body.get("tools"),
+                        account_email=account.get("email")
                     ),
                     media_type="text/event-stream"
                 )
@@ -1242,6 +1307,26 @@ async def chat_completions(request: Request):
                             reasoning_tokens=reasoning_tokens,
                             latency_ms=latency_ms
                         )
+
+                        # Record granular request hit into persistent database ledger
+                        try:
+                            acc_email = account.get("email")
+                            quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if acc_email else None
+                            db.record_request_hit(
+                                request_id=completion_id,
+                                timestamp=created,
+                                account_email=acc_email,
+                                model=model,
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=completion_tokens,
+                                reasoning_tokens=reasoning_tokens,
+                                latency_ms=latency_ms,
+                                status_code=200,
+                                stream=0,
+                                quota_snapshot=quota_snap
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to record request hit to db: {e}")
 
                         # Live broadcast telemetry to WebSocket clients
                         try:

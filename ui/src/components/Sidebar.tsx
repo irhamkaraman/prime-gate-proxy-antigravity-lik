@@ -4,6 +4,7 @@ import { useModal } from '../context/ModalContext';
 import { useToast } from '../context/ToastContext';
 import {
   Activity,
+  BarChart3,
   Users,
   Terminal,
   ShieldCheck,
@@ -41,6 +42,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'dashboard',
       label: 'Dashboard & Telemetry',
       icon: <Activity size={18} />,
+    },
+    {
+      id: 'benchmarks',
+      label: 'Model Benchmark & Usage',
+      icon: <BarChart3 size={18} />,
     },
     {
       id: 'accounts',

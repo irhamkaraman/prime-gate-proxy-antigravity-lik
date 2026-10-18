@@ -1,4 +1,58 @@
-export type RoutePath = 'dashboard' | 'accounts' | 'sandbox' | 'sentinel' | 'docs';
+export type RoutePath = 'dashboard' | 'benchmarks' | 'accounts' | 'sandbox' | 'sentinel' | 'docs';
+
+export interface ModelBenchmark {
+  model: string;
+  requests_count: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  reasoning_tokens: number;
+  avg_latency_ms: number;
+  min_latency_ms: number;
+  max_latency_ms: number;
+  tokens_per_second: number;
+  token_share_pct: number;
+  quota_impact_score: number;
+  last_seen_ts: number | null;
+  last_seen_formatted: string;
+}
+
+export interface ModelBenchmarksResponse {
+  total_models_tracked: number;
+  total_requests: number;
+  total_tokens: number;
+  top_spender_model: string | null;
+  models: ModelBenchmark[];
+}
+
+export interface RequestLogEntry {
+  id: number;
+  request_id: string;
+  timestamp: number;
+  time_formatted: string;
+  account_email: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  reasoning_tokens: number;
+  total_tokens: number;
+  latency_ms: number;
+  status_code: number;
+  stream: boolean;
+  quota_snapshot?: Array<{
+    family: string;
+    label: string;
+    percentage: number;
+    reset_time: string;
+  }> | null;
+}
+
+export interface RequestLogsResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  logs: RequestLogEntry[];
+}
 
 export interface Account {
   email: string;

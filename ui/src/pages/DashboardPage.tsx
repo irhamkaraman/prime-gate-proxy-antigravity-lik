@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { TelemetryMetrics, Account, TokenVolumePoint } from '../types';
+import React, { useState, useEffect } from 'react';
+import { TelemetryMetrics, Account, TokenVolumePoint, ModelBenchmarksResponse } from '../types';
 import { TokenChart } from '../components/TokenChart';
 import { useToast } from '../context/ToastContext';
+import { useNavigation } from '../context/NavigationContext';
 import {
   Zap,
   Clock,
@@ -12,6 +13,9 @@ import {
   Cpu,
   ShieldCheck,
   Sparkles,
+  BarChart3,
+  ArrowRight,
+  Flame,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -34,8 +38,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   isSyncing,
 }) => {
   const { showToast } = useToast();
+  const { navigate } = useNavigation();
+  const [benchmarks, setBenchmarks] = useState<ModelBenchmarksResponse | null>(null);
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/analytics/models')
+      .then(res => res.json())
+      .then(data => setBenchmarks(data))
+      .catch(err => console.debug('Failed to load benchmarks on dashboard:', err));
+  }, []);
 
   const gatewayUrl = 'http://127.0.0.1:52111/v1';
   const apiKey = 'prime-gate-proxy';
@@ -142,6 +155,109 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         timeRange={timeRange}
         onTimeRangeChange={onTimeRangeChange}
       />
+
+      {/* Top Token Spenders & Quota Drainers Leaderboard */}
+      <div className="glass-card" style={{ padding: '24px 28px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(245, 158, 11, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#f59e0b',
+              }}
+            >
+              <BarChart3 size={18} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
+                Top Token Spenders & Quota Drainers
+              </h2>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 2 }}>
+                Persistent request hit analysis and quota impact scoring
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('benchmarks')}
+            className="btn btn-secondary btn-sm"
+            style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.3)', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span>View Full Hit Ledger</span>
+            <ArrowRight size={14} />
+          </button>
+        </div>
+
+        {(!benchmarks || !benchmarks.models || benchmarks.models.length === 0) ? (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '28px 20px',
+              color: '#a8a29e',
+              fontSize: 13,
+              background: 'rgba(255, 255, 255, 0.02)',
+              borderRadius: 12,
+              border: '1px dashed rgba(168, 162, 158, 0.2)',
+            }}
+          >
+            No request hits recorded yet. Send queries through OpenAI clients or the Prompt Sandbox to generate benchmarks.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {benchmarks.models.slice(0, 4).map((m, idx) => {
+              const share = m.token_share_pct;
+              const barColor = share > 50 ? '#f59e0b' : share > 20 ? '#3b82f6' : '#10b981';
+              return (
+                <div key={m.model}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#fafaf9', fontFamily: 'var(--font-mono)' }}>
+                        {m.model}
+                      </span>
+                      {idx === 0 && <span className="badge badge-amber" style={{ fontSize: 10 }}>#1 Spender</span>}
+                      {m.quota_impact_score >= 30 && (
+                        <span className="badge badge-rose" style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <Flame size={10} /> Quota Drainer ({m.quota_impact_score})
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 12, color: '#a8a29e', fontFamily: 'var(--font-mono)' }}>
+                        {m.total_tokens.toLocaleString()} tokens
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: barColor, fontFamily: 'var(--font-mono)', minWidth: 42, textAlign: 'right' }}>
+                        {share}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ height: 6, background: 'rgba(255, 255, 255, 0.08)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        width: `${Math.min(100, Math.max(2, share))}%`,
+                        height: '100%',
+                        background: barColor,
+                        borderRadius: 999,
+                        transition: 'width 0.4s ease',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#78716c', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
+                    <span>{m.requests_count} hits &bull; Avg Latency: {m.avg_latency_ms}ms</span>
+                    <span>Last seen: {m.last_seen_formatted}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Bottom Grid: Live Quota Meter & OpenAI Client Gateway */}
       <div

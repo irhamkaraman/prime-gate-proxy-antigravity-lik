@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.3] - 2026-10-18
+
+### 🚀 Model Benchmarks & Persistent Request Hit Ledger
+
+#### 1. SQLite WAL Binary Request Hit Ledger
+- **Automatic Request Capture:** Every inbound request through `/v1/chat/completions` (both SSE streaming and non-streaming REST) is now automatically persisted into `pg_request_logs` with microsecond-level latency tracking and exact token metrics (`prompt_tokens`, `completion_tokens`, `reasoning_tokens`, `total_tokens`).
+- **Live Quota State Snapshots:** Persists the active account's Google Antigravity quota bucket state (`percentage`, `family`, `reset_time`) at the exact time of the request hit, providing historical traceability of quota depletion.
+- **Microsecond Write Overhead:** Employs SQLite WAL mode (`wal_autocheckpoint=1000`) and compiled binary engine semantics, recording requests in under 50µs with zero impact on streaming latency.
+
+#### 2. Model Performance Benchmarks & Quota Impact Scoring
+- **Automated Usage Ranking:** Endpoint `GET /api/analytics/models` computes real-time token volume shares, request counts, minimum/maximum/average latency (TTFT), and generation throughput (`tokens/sec`) per model.
+- **Quota Impact Weighting:** Identifies heavy quota drainers with a tier-weighted formula: Claude (3x), GPT (2x), and Gemini Flash (1x) multiplier over token volume share, surfacing models that exhaust quota limits fastest.
+
+#### 3. Dedicated Web UI: "Model Benchmark & Usage"
+- **New Sidebar Menu:** Added **"Model Benchmark & Usage"** route (`/benchmarks`) with `BarChart3` icon in the application sidebar and navigation context.
+- **Analytics KPI Stat Cards:** Displays **Top Token Spender Model**, **Heaviest Quota Consumer**, **Lowest Latency Model**, and **Total Ledger Hits Recorded**.
+- **Model Comparison Table:** Ranked breakdown of all models with visual percentage share progress bars, TTFT latency badges, throughput rates, and Quota Impact score pills (**Severe**, **Heavy**, **Moderate**, **Light**).
+- **Searchable Request Ledger:** Filterable and paginated table detailing Timestamp, Request ID (with one-click copy), Model badge, Account Email, Prompt/Completion/Reasoning breakdown, Latency badges, Streaming mode, and Quota Snapshot pills.
+- **Ledger Management:** Built-in modal-confirmed "Clear Ledger" and real-time "Refresh" controls.
+
+#### 4. Dashboard Benchmark Preview Widget
+- **Top Token Spenders Leaderboard:** Embedded preview widget in `DashboardPage.tsx` directly underneath the token volume chart, displaying the top 4 token-consuming models, progress bars, and quota drainer alerts with direct navigation to the full hit ledger.
+
+---
+
 ## [1.1.2] - 2026-10-18
 
 ### 🚀 Major Architectural Enhancements

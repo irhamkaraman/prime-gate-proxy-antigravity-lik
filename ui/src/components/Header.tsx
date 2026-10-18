@@ -15,6 +15,10 @@ const ROUTE_META: Record<RoutePath, { title: string; subtitle: string }> = {
     title: 'Token Telemetry & Traffic Radar',
     subtitle: 'Real-time throughput, granular token consumption, and live Google Antigravity quotas',
   },
+  benchmarks: {
+    title: 'Model Benchmarks & Request Hit Ledger',
+    subtitle: 'Persistent database tracking, latency rankings, token splits, and quota depletion analysis',
+  },
   accounts: {
     title: 'Google Antigravity Accounts',
     subtitle: 'Manage connected OAuth accounts, switch active identity, or sync live model limits',

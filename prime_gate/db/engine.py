@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import sqlite3
 import logging
 from pathlib import Path
@@ -79,6 +80,27 @@ class BinaryDatabaseEngine:
                 created_at REAL NOT NULL
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_request_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id TEXT NOT NULL,
+                timestamp REAL NOT NULL,
+                account_email TEXT,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                latency_ms REAL NOT NULL DEFAULT 0.0,
+                status_code INTEGER NOT NULL DEFAULT 200,
+                stream INTEGER NOT NULL DEFAULT 0,
+                quota_snapshot TEXT,
+                created_at REAL NOT NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_req_timestamp ON pg_request_logs(timestamp DESC);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_req_model ON pg_request_logs(model);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_req_account ON pg_request_logs(account_email);")
         logger.info(f"Binary Database Engine initialized at: {self.db_path} (WAL Mode enabled)")
 
     def set(self, key: str, payload: Dict[str, Any], record_type: int = REC_SYSTEM) -> bool:
@@ -320,6 +342,199 @@ class BinaryDatabaseEngine:
                 "healthy": False,
                 "error": str(e)
             }
+
+    def record_request_hit(
+        self,
+        request_id: str,
+        timestamp: float,
+        account_email: Optional[str],
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        reasoning_tokens: int = 0,
+        latency_ms: float = 0.0,
+        status_code: int = 200,
+        stream: int = 0,
+        quota_snapshot: Optional[Any] = None
+    ) -> bool:
+        """Records a granular API request hit into the persistent database ledger."""
+        try:
+            total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
+            now = time.time()
+            quota_json = None
+            if quota_snapshot is not None:
+                if isinstance(quota_snapshot, str):
+                    quota_json = quota_snapshot
+                else:
+                    quota_json = json.dumps(quota_snapshot)
+
+            conn = self._get_connection()
+            conn.execute("""
+                INSERT INTO pg_request_logs (
+                    request_id, timestamp, account_email, model,
+                    prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
+                    latency_ms, status_code, stream, quota_snapshot, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                request_id, timestamp or now, account_email, model,
+                prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
+                latency_ms, status_code, stream, quota_json, now
+            ))
+            event_bus.notify_mutation("REQUEST_HIT", request_id, 0)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to record request hit for '{request_id}': {e}")
+            return False
+
+    def get_model_benchmarks(self) -> Dict[str, Any]:
+        """
+        Computes benchmark metrics, token consumption rankings, latency benchmarks,
+        and quota impact scores per model across all historical hits.
+        """
+        conn = self._get_connection()
+        total_tokens_all = conn.execute("SELECT SUM(total_tokens) FROM pg_request_logs").fetchone()[0] or 0
+        total_requests_all = conn.execute("SELECT COUNT(*) FROM pg_request_logs").fetchone()[0] or 0
+
+        cursor = conn.execute("""
+            SELECT
+                model,
+                COUNT(*) as req_count,
+                SUM(prompt_tokens) as total_prompt,
+                SUM(completion_tokens) as total_completion,
+                SUM(reasoning_tokens) as total_reasoning,
+                SUM(total_tokens) as total_tokens,
+                AVG(latency_ms) as avg_latency,
+                MIN(latency_ms) as min_latency,
+                MAX(latency_ms) as max_latency,
+                MAX(timestamp) as last_seen
+            FROM pg_request_logs
+            GROUP BY model
+            ORDER BY total_tokens DESC
+        """)
+        rows = cursor.fetchall()
+
+        benchmarks = []
+        for r in rows:
+            m_total = r["total_tokens"] or 0
+            m_prompt = r["total_prompt"] or 0
+            m_comp = r["total_completion"] or 0
+            m_think = r["total_reasoning"] or 0
+            m_reqs = r["req_count"] or 0
+            avg_lat = round(r["avg_latency"] or 0.0, 1)
+
+            share_pct = round((m_total / total_tokens_all * 100), 2) if total_tokens_all > 0 else 0.0
+            
+            # Throughput estimate: tokens per second during generation
+            tok_per_sec = 0.0
+            if avg_lat > 0 and m_comp > 0:
+                tok_per_sec = round((m_comp / (avg_lat / 1000.0)), 1)
+
+            # Quota impact score based on token volume & model weight (Claude/GPT weigh more)
+            model_lower = r["model"].lower()
+            tier_multiplier = 1.0
+            if "claude" in model_lower or "opus" in model_lower:
+                tier_multiplier = 3.0
+            elif "gpt" in model_lower:
+                tier_multiplier = 2.0
+            
+            quota_score = round(share_pct * tier_multiplier, 1)
+
+            benchmarks.append({
+                "model": r["model"],
+                "requests_count": m_reqs,
+                "total_tokens": m_total,
+                "prompt_tokens": m_prompt,
+                "completion_tokens": m_comp,
+                "reasoning_tokens": m_think,
+                "avg_latency_ms": avg_lat,
+                "min_latency_ms": round(r["min_latency"] or 0.0, 1),
+                "max_latency_ms": round(r["max_latency"] or 0.0, 1),
+                "tokens_per_second": tok_per_sec,
+                "token_share_pct": share_pct,
+                "quota_impact_score": quota_score,
+                "last_seen_ts": r["last_seen"],
+                "last_seen_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["last_seen"])) if r["last_seen"] else "N/A"
+            })
+
+        return {
+            "total_models_tracked": len(benchmarks),
+            "total_requests": total_requests_all,
+            "total_tokens": total_tokens_all,
+            "top_spender_model": benchmarks[0]["model"] if benchmarks else None,
+            "models": benchmarks
+        }
+
+    def get_request_logs(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        model: Optional[str] = None,
+        account: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Retrieves paginated and filtered list of granular request hits."""
+        conn = self._get_connection()
+        query = "SELECT * FROM pg_request_logs WHERE 1=1"
+        params = []
+
+        if model:
+            query += " AND model = ?"
+            params.append(model)
+        if account:
+            query += " AND account_email = ?"
+            params.append(account)
+
+        # Count total
+        count_query = query.replace("SELECT *", "SELECT COUNT(*)")
+        total_count = conn.execute(count_query, params).fetchone()[0]
+
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor = conn.execute(query, params)
+        rows = cursor.fetchall()
+
+        logs = []
+        for r in rows:
+            quota_obj = None
+            if r["quota_snapshot"]:
+                try:
+                    quota_obj = json.loads(r["quota_snapshot"])
+                except Exception:
+                    quota_obj = r["quota_snapshot"]
+
+            logs.append({
+                "id": r["id"],
+                "request_id": r["request_id"],
+                "timestamp": r["timestamp"],
+                "time_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["timestamp"])),
+                "account_email": r["account_email"] or "default",
+                "model": r["model"],
+                "prompt_tokens": r["prompt_tokens"],
+                "completion_tokens": r["completion_tokens"],
+                "reasoning_tokens": r["reasoning_tokens"],
+                "total_tokens": r["total_tokens"],
+                "latency_ms": round(r["latency_ms"], 1),
+                "status_code": r["status_code"],
+                "stream": bool(r["stream"]),
+                "quota_snapshot": quota_obj
+            })
+
+        return {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "logs": logs
+        }
+
+    def clear_request_logs(self) -> bool:
+        """Clears all request logs from the database."""
+        try:
+            conn = self._get_connection()
+            conn.execute("DELETE FROM pg_request_logs;")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to clear request logs: {e}")
+            return False
 
     def close(self):
         if self._conn:
