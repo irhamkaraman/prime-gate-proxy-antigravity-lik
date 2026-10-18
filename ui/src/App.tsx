@@ -47,6 +47,7 @@ const MainLayout: React.FC = () => {
   const [chartPoints, setChartPoints] = useState<TokenVolumePoint[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>('1m');
   const timeRangeRef = useRef<TimeRange>('1m');
+  const [lastLedgerUpdate, setLastLedgerUpdate] = useState<number>(Date.now());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
 
@@ -176,6 +177,7 @@ const MainLayout: React.FC = () => {
             const data = JSON.parse(event.data);
             const msgType = (data.type || '').toUpperCase();
             if (msgType === 'TELEMETRY_UPDATE') {
+              setLastLedgerUpdate(Date.now());
               if (data.metrics) {
                 setMetrics(prev => ({
                   ...prev,
@@ -202,6 +204,8 @@ const MainLayout: React.FC = () => {
                 // If viewing 1h, 1d, or 1month, re-fetch for active range so it never reverts to 1m
                 fetchMetrics(timeRangeRef.current);
               }
+            } else if (msgType === 'REQUEST_LOGGED' || msgType === 'LEDGER_CLEARED') {
+              setLastLedgerUpdate(Date.now());
             } else if (msgType === 'ACCOUNT_SWITCHED') {
               if (data.quota && Array.isArray(data.quota) && data.quota.length > 0) {
                 setActiveAccount(prev => prev ? { ...prev, email: data.email || prev.email, quota_summary: data.quota } : null);
@@ -441,11 +445,16 @@ const MainLayout: React.FC = () => {
               }}
               onSyncQuota={handleSyncQuota}
               isSyncing={isSyncing}
+              lastLedgerUpdate={lastLedgerUpdate}
             />
           )}
 
           {currentRoute === 'benchmarks' && (
-            <ModelBenchmarkPage activeAccount={activeAccount} />
+            <ModelBenchmarkPage
+              activeAccount={activeAccount}
+              lastLedgerUpdate={lastLedgerUpdate}
+              isWsConnected={isWsConnected}
+            />
           )}
 
           {currentRoute === 'accounts' && (

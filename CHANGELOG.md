@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **WebSocket Range Isolation:** Eliminated race condition where background `TELEMETRY_UPDATE` WebSocket frames hardcoded to minute intervals would prematurely overwrite and desynchronize user-selected `1h`, `1d`, or `1month` charts.
 - **SQLite WAL-Backed Time Series:** Extended telemetry resolution to aggregate historical requests directly from `pg_request_logs`, ensuring hourly, daily, and 30-day monthly trends remain persistent across server restarts.
 
+#### 6. Real-Time Usage Page & Concise Sidebar Navigation
+- **Renamed to "Usage":** Streamlined the sidebar navigation title from "Model Benchmark & Usage" to a cleaner, more concise **"Usage"**.
+- **Real-Time WebSocket Ingestion:** Implemented immediate event dispatch (`REQUEST_LOGGED` and `LEDGER_CLEARED`) from backend chat completion pipelines to active WebSocket clients.
+- **Dynamic Usage Dashboard Sync:** The Usage page (`ModelBenchmarkPage`) and Dashboard benchmark preview widget now automatically re-calculate token rankings, throughput, and latency metrics in real time upon every inbound request hit.
+- **Live Status Visual Pill:** Added a glowing `LIVE REALTIME` / `POLLING SYNC` badge in the header confirming persistent stream connectivity without disrupting user table pagination or search filters.
+
 ---
 
 ## [1.1.2] - 2026-10-18

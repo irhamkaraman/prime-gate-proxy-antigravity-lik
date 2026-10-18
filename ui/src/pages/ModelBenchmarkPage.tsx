@@ -24,9 +24,15 @@ import {
 
 interface ModelBenchmarkPageProps {
   activeAccount: Account | null;
+  lastLedgerUpdate?: number;
+  isWsConnected?: boolean;
 }
 
-export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({ activeAccount }) => {
+export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({
+  activeAccount,
+  lastLedgerUpdate,
+  isWsConnected = false,
+}) => {
   const { showToast } = useToast();
   const { openModal, closeModal } = useModal();
 
@@ -76,12 +82,33 @@ export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({ activeAc
     setIsRefreshing(false);
   }, [fetchBenchmarks, fetchLogs]);
 
+  // Initial load
   useEffect(() => {
     setIsLoading(true);
     Promise.all([fetchBenchmarks(), fetchLogs()]).finally(() => {
       setIsLoading(false);
     });
   }, [fetchBenchmarks, fetchLogs]);
+
+  // Real-time sync on WebSocket event push
+  useEffect(() => {
+    if (!lastLedgerUpdate) return;
+    fetchBenchmarks();
+    if (page === 0 && !searchQuery) {
+      fetchLogs();
+    }
+  }, [lastLedgerUpdate, fetchBenchmarks, fetchLogs, page, searchQuery]);
+
+  // Fallback heartbeat polling every 3 seconds to guarantee 100% sync
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchBenchmarks();
+      if (page === 0 && !searchQuery) {
+        fetchLogs();
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [fetchBenchmarks, fetchLogs, page, searchQuery]);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -191,6 +218,40 @@ export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({ activeAc
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 20,
+              background: isWsConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+              border: `1px solid ${isWsConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+            }}
+            title={isWsConnected ? 'Connected to live WebSocket stream' : 'Syncing via periodic background polling'}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: isWsConnected ? '#10b981' : '#f59e0b',
+                boxShadow: isWsConnected ? '0 0 8px #10b981' : 'none',
+              }}
+            />
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: isWsConnected ? '#10b981' : '#f59e0b',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {isWsConnected ? 'LIVE REALTIME' : 'POLLING SYNC'}
+            </span>
+          </div>
+
           <button
             onClick={refreshAll}
             disabled={isRefreshing}

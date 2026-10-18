@@ -26,6 +26,7 @@ interface DashboardPageProps {
   onTimeRangeChange: (range: TimeRange) => void;
   onSyncQuota: () => Promise<void>;
   isSyncing: boolean;
+  lastLedgerUpdate?: number;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -36,6 +37,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onTimeRangeChange,
   onSyncQuota,
   isSyncing,
+  lastLedgerUpdate,
 }) => {
   const { showToast } = useToast();
   const { navigate } = useNavigation();
@@ -48,7 +50,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       .then(res => res.json())
       .then(data => setBenchmarks(data))
       .catch(err => console.debug('Failed to load benchmarks on dashboard:', err));
-  }, []);
+  }, [lastLedgerUpdate]);
 
   const gatewayUrl = 'http://127.0.0.1:52111/v1';
   const apiKey = 'prime-gate-proxy';

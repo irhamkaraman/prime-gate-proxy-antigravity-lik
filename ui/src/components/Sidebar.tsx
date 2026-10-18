@@ -45,7 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'benchmarks',
-      label: 'Model Benchmark & Usage',
+      label: 'Usage',
       icon: <BarChart3 size={18} />,
     },
     {

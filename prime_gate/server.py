@@ -776,6 +776,9 @@ async def api_request_logs(
 async def api_clear_request_logs():
     """Clears all request hit logs from database."""
     success = db.clear_request_logs()
+    event_bus.broadcast_sync({
+        "type": "LEDGER_CLEARED"
+    })
     return {"success": success, "message": "All request logs have been cleared."}
 
 async def stream_antigravity_sse(
@@ -1121,7 +1124,17 @@ async def stream_antigravity_sse(
             except Exception as e:
                 logger.error(f"Failed to record request hit to db: {e}")
 
-            # Live broadcast telemetry to WebSocket clients
+            # Live broadcast request logged & telemetry to WebSocket clients
+            try:
+                event_bus.broadcast_sync({
+                    "type": "REQUEST_LOGGED",
+                    "request_id": request_id,
+                    "model": model,
+                    "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                })
+            except Exception:
+                pass
+
             try:
                 metrics_data = telemetry.get_metrics(time_range="minute")
                 s = metrics_data["summary"]
@@ -1330,7 +1343,17 @@ async def chat_completions(request: Request):
                         except Exception as e:
                             logger.error(f"Failed to record request hit to db: {e}")
 
-                        # Live broadcast telemetry to WebSocket clients
+                        # Live broadcast request logged & telemetry to WebSocket clients
+                        try:
+                            event_bus.broadcast_sync({
+                                "type": "REQUEST_LOGGED",
+                                "request_id": request_id,
+                                "model": model,
+                                "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                            })
+                        except Exception:
+                            pass
+
                         try:
                             metrics_data = telemetry.get_metrics(time_range="minute")
                             s = metrics_data["summary"]
