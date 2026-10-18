@@ -1,9 +1,13 @@
 <div align="center">
 
+<img src="docs/images/prime_gate_dual_protocol.svg" alt="Prime Gate Dual Protocol - OpenAI & Anthropic Compatible Gateway for Google Antigravity" width="100%" />
+
+<br/><br/>
+
 # ⚡ Prime Gate Antigravity Proxy
 ### `prime-gate-proxy-antigravity-lik`
 
-**A Production-Grade, Self-Hosted OpenAI-Compatible Proxy Gateway for Google Antigravity.**
+**A Production-Grade, Self-Hosted OpenAI & Anthropic Compatible Proxy Gateway for Google Antigravity.**
 
 [![Version](https://img.shields.io/badge/version-1.2.1-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
@@ -454,10 +458,10 @@ prime-gate-proxy-antigravity-lik/
 │   ├── auth/                  # OAuth & Multi-Account Managers
 │   ├── daemon/                # Windows Headless Background Service
 │   ├── quota/                 # Dynamic Quota & Subscription Tier Resolver
-│   ├── translator/            # OpenAI <-> Antigravity Converters & Schema Cleaner
+│   ├── translator/            # OpenAI & Anthropic <-> Antigravity Converters
 │   ├── cli.py                 # Rich Terminal CLI Interface
 │   ├── config.py              # Ports, Credentials & Runtime Settings
-│   └── server.py              # FastAPI OpenAI-Compatible Endpoints
+│   └── server.py              # FastAPI OpenAI & Anthropic Compatible Endpoints
 ├── scripts/                   # One-Click Windows Batches (install, start, stop)
 ├── ui/                        # Node.js Web UI Dashboard
 │   ├── public/                # Glassmorphic Static Assets (HTML/CSS/JS)
