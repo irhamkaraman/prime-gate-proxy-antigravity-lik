@@ -111,59 +111,66 @@ def normalize_tool_call(
     if fn_name.startswith("default_api:"):
         fn_name = fn_name.split(":", 1)[1]
 
-    # 3. Build declared tool dictionary
+    # 3. Build declared tool dictionary and case-insensitive lookup
     declared_names = {}
+    lower_to_declared = {}
     if declared_tools and isinstance(declared_tools, list):
         for t in declared_tools:
             if isinstance(t, dict):
                 name = t.get("function", {}).get("name") or t.get("name")
                 if name:
                     declared_names[name] = t
+                    lower_to_declared[name.lower()] = name
 
-    # 4. Map tool names ONLY if fn_name is not already declared by client
-    if fn_name not in declared_names:
-        if fn_name in ("shell", "run_command", "exec", "terminal", "execute_command", "bash"):
+    # 4. Map tool names if not already matching declared tool
+    fn_lower = fn_name.lower()
+    if fn_name in declared_names:
+        pass
+    elif fn_lower in lower_to_declared:
+        fn_name = lower_to_declared[fn_lower]
+    else:
+        if fn_lower in ("shell", "run_command", "exec", "terminal", "execute_command", "bash", "command"):
             for cand in ("bash", "shell", "run_command", "exec", "terminal", "execute_command"):
-                if cand in declared_names:
-                    fn_name = cand
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
-        elif fn_name in ("view_file", "read_file", "cat", "readFile", "read", "read_file_content"):
-            for cand in ("read_file", "read", "readFile", "view_file", "read_file_content", "cat"):
-                if cand in declared_names:
-                    fn_name = cand
+        elif fn_lower in ("view_file", "read_file", "cat", "readfile", "read", "read_file_content", "view"):
+            for cand in ("read_file", "read", "readfile", "view_file", "view", "read_file_content", "cat"):
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
-        elif fn_name in ("edit_file", "edit", "replace_file_content", "str_replace_editor", "editFile"):
-            for cand in ("edit_file", "edit", "replace_file_content", "str_replace_editor", "editFile"):
-                if cand in declared_names:
-                    fn_name = cand
+        elif fn_lower in ("edit_file", "edit", "replace_file_content", "str_replace_editor", "editfile", "replace"):
+            for cand in ("edit_file", "edit", "replace_file_content", "str_replace_editor", "editfile", "replace"):
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
-        elif fn_name in ("write_to_file", "write_file", "writeFile", "write", "create_file"):
-            for cand in ("write_file", "write", "writeFile", "create_file", "write_to_file"):
-                if cand in declared_names:
-                    fn_name = cand
+        elif fn_lower in ("write_to_file", "write_file", "writefile", "write", "create_file"):
+            for cand in ("write_file", "write", "writefile", "create_file", "write_to_file"):
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
-        elif fn_name in ("list_dir", "list_files", "ls", "listFiles", "list", "directory_list"):
-            for cand in ("list_dir", "list_files", "list", "listFiles", "ls"):
-                if cand in declared_names:
-                    fn_name = cand
+        elif fn_lower in ("list_dir", "list_files", "ls", "listfiles", "list", "directory_list", "glob", "find"):
+            for cand in ("glob", "list_dir", "list_files", "list", "listfiles", "ls"):
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
 
         # Cross-fallback between edit and write ONLY if one is missing entirely from declared tools
-        if fn_name in ("edit_file", "edit", "replace_file_content") and fn_name not in declared_names:
-            for cand in ("write_file", "write", "writeFile"):
-                if cand in declared_names:
-                    fn_name = cand
+        if fn_lower in ("edit_file", "edit", "replace_file_content") and fn_name not in declared_names:
+            for cand in ("write_file", "write", "writefile"):
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
-        elif fn_name in ("write_to_file", "write_file", "write") and fn_name not in declared_names:
+        elif fn_lower in ("write_to_file", "write_file", "write") and fn_name not in declared_names:
             for cand in ("edit_file", "edit"):
-                if cand in declared_names:
-                    fn_name = cand
+                if cand in lower_to_declared:
+                    fn_name = lower_to_declared[cand]
                     break
 
     # 5. Parameter normalization and schema filtering
     if fn_name in declared_names:
         tool_def = declared_names[fn_name]
-        params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or {}
+        params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or tool_def.get("input_schema") or {}
         props = params.get("properties") if isinstance(params, dict) else None
         required = set(params.get("required") or []) if isinstance(params, dict) else set()
 
@@ -204,6 +211,12 @@ def normalize_tool_call(
                     for alias in ("ReplacementContent", "new_string", "replacement", "new_str", "replace"):
                         if alias != new_prop and alias in parsed_args and new_prop not in parsed_args:
                             parsed_args[new_prop] = parsed_args.pop(alias)
+
+            for mult_prop in ("replace_all", "AllowMultiple", "allow_multiple"):
+                if mult_prop in props:
+                    for alias in ("AllowMultiple", "allow_multiple", "replace_all"):
+                        if alias != mult_prop and alias in parsed_args and mult_prop not in parsed_args:
+                            parsed_args[mult_prop] = parsed_args.pop(alias)
 
             # Safety fallback for required keys to prevent client-side Zod validation failure
             for req_key in required:

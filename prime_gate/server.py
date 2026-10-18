@@ -2357,6 +2357,7 @@ async def anthropic_messages(request: Request):
                     req_payload=req_payload,
                     message_id=message_id,
                     created=created,
+                    declared_tools=body.get("tools"),
                     cache_meta=cache_meta,
                     acquired_email=primary_email
                 ),
@@ -2462,8 +2463,9 @@ async def anthropic_messages(request: Request):
                                 elif p.get("functionCall"):
                                     fn = p["functionCall"]
                                     call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
-                                    fn_name = fn.get("name", "tool")
-                                    fn_args = fn.get("args", {})
+                                    raw_name = fn.get("name", "tool")
+                                    raw_args = fn.get("args", {})
+                                    fn_name, fn_args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
                                     content_blocks.append({
                                         "type": "tool_use",
                                         "id": call_id,
@@ -2473,6 +2475,22 @@ async def anthropic_messages(request: Request):
                                     stop_reason = "tool_use"
                     except Exception:
                         continue
+
+                if "call:" in accumulated_text:
+                    cleaned_txt, text_tcs = extract_text_tool_calls(accumulated_text, body.get("tools"))
+                    if text_tcs:
+                        accumulated_text = cleaned_txt
+                        for tc in text_tcs:
+                            fn = tc["function"]
+                            fn_name = fn["name"]
+                            fn_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
+                            content_blocks.append({
+                                "type": "tool_use",
+                                "id": tc.get("id") or f"toolu_{uuid.uuid4().hex[:12]}",
+                                "name": fn_name,
+                                "input": fn_args if isinstance(fn_args, dict) else {}
+                            })
+                            stop_reason = "tool_use"
 
                 if accumulated_text:
                     content_blocks.insert(0, {"type": "text", "text": accumulated_text})

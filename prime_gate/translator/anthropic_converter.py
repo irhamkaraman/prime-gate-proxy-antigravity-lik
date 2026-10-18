@@ -1,3 +1,4 @@
+import re
 import json
 import uuid
 import time
@@ -16,11 +17,58 @@ from ..db import db
 from ..db.events import event_bus
 from .schema_cleaner import clean_schema_for_antigravity
 from .request_converter import resolve_model_info
+from .response_converter import extract_text_tool_calls, normalize_tool_call
 from ..quota.monitor import QuotaMonitor
 
 logger = logging.getLogger("prime_gate.translator.anthropic_converter")
 
 ANTIGRAVITY_ENDPOINT = "https://daily-cloudcode-pa.sandbox.googleapis.com"
+
+
+def parse_text_tool_call(text: str) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """
+    Detects and parses raw text tool calls emitted by Gemini internal checkpoints,
+    e.g. 'call:default_api:Glob{pattern:*.ps1}' or 'call:Edit{...}'.
+    Returns (tool_name, args_dict) if matched, otherwise None.
+    """
+    clean_text = text.strip()
+    if not clean_text.startswith("call:"):
+        return None
+
+    match = re.match(r"^call:(?:default_api:)?([a-zA-Z0-9_-]+)\s*(\{[\s\S]*\})$", clean_text)
+    if not match:
+        return None
+
+    fn_name = match.group(1)
+    raw_body = match.group(2).strip()
+
+    # 1. Try standard JSON parse
+    try:
+        args = json.loads(raw_body)
+        if isinstance(args, dict):
+            return fn_name, args
+    except Exception:
+        pass
+
+    # 2. Relaxed key:value parser for Google internal syntax (e.g. {pattern:*.ps1})
+    inner = raw_body[1:-1].strip()
+    args: Dict[str, Any] = {}
+    if inner:
+        parts = re.split(r",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", inner)
+        for p in parts:
+            if ":" in p:
+                k, v = p.split(":", 1)
+                k = k.strip().strip("'\"")
+                v = v.strip().strip("'\"")
+                if v.lower() == "true":
+                    args[k] = True
+                elif v.lower() == "false":
+                    args[k] = False
+                elif v.isdigit():
+                    args[k] = int(v)
+                else:
+                    args[k] = v
+    return fn_name, args
 
 
 def format_anthropic_sse_event(event_type: str, data: Dict[str, Any]) -> str:
@@ -545,6 +593,7 @@ async def stream_anthropic_sse(
     req_payload: Dict[str, Any],
     message_id: str,
     created: int,
+    declared_tools: Optional[List[Dict[str, Any]]] = None,
     cache_meta: Optional[Dict[str, Any]] = None,
     acquired_email: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
@@ -690,6 +739,102 @@ async def stream_anthropic_sse(
         in_text_block = False
         in_tool_block = False
         has_emitted_tool = False
+        in_call_block = False
+        call_buffer = ""
+        text_buffer = ""
+
+        def emit_text(t: str):
+            nonlocal in_text_block, in_tool_block, current_block_index, completion_tokens
+            if not t:
+                return []
+            events = []
+            if in_tool_block:
+                events.append(format_anthropic_sse_event("content_block_stop", {"type": "content_block_stop", "index": current_block_index}))
+                in_tool_block = False
+            if not in_text_block:
+                current_block_index += 1
+                events.append(format_anthropic_sse_event("content_block_start", {
+                    "type": "content_block_start",
+                    "index": current_block_index,
+                    "content_block": {"type": "text", "text": ""}
+                }))
+                in_text_block = True
+            events.append(format_anthropic_sse_event("content_block_delta", {
+                "type": "content_block_delta",
+                "index": current_block_index,
+                "delta": {"type": "text_delta", "text": t}
+            }))
+            accumulated_content.append(t)
+            completion_tokens += max(1, len(t) // 4)
+            return events
+
+        def emit_tool(name: str, args: Any, tool_id: Optional[str] = None):
+            nonlocal in_text_block, in_tool_block, current_block_index, has_emitted_tool, completion_tokens
+            events = []
+            call_id = tool_id or f"toolu_{uuid.uuid4().hex[:12]}"
+            has_emitted_tool = True
+            if in_text_block:
+                events.append(format_anthropic_sse_event("content_block_stop", {"type": "content_block_stop", "index": current_block_index}))
+                in_text_block = False
+            if in_tool_block:
+                events.append(format_anthropic_sse_event("content_block_stop", {"type": "content_block_stop", "index": current_block_index}))
+                in_tool_block = False
+            current_block_index += 1
+            events.append(format_anthropic_sse_event("content_block_start", {
+                "type": "content_block_start",
+                "index": current_block_index,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": call_id,
+                    "name": name,
+                    "input": {}
+                }
+            }))
+            args_json = json.dumps(args) if isinstance(args, dict) else str(args)
+            events.append(format_anthropic_sse_event("content_block_delta", {
+                "type": "content_block_delta",
+                "index": current_block_index,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": args_json
+                }
+            }))
+            events.append(format_anthropic_sse_event("content_block_stop", {
+                "type": "content_block_stop",
+                "index": current_block_index
+            }))
+            completion_tokens += max(1, len(args_json) // 4)
+            return events
+
+        def is_braces_balanced(s: str) -> bool:
+            if "{" not in s:
+                return False
+            depth = 0
+            in_str = False
+            quote_char = ''
+            escape = False
+            for ch in s:
+                if escape:
+                    escape = False
+                    continue
+                if ch == '\\':
+                    escape = True
+                    continue
+                if in_str:
+                    if ch == quote_char:
+                        in_str = False
+                    continue
+                if ch in ('"', "'"):
+                    in_str = True
+                    quote_char = ch
+                    continue
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return True
+            return False
 
         try:
             async for line in resp.aiter_lines():
@@ -715,71 +860,107 @@ async def stream_anthropic_sse(
                     parts = content_obj.get("parts", [])
 
                     for part in parts:
-                        # Case A: Regular text output
+                        # Case A: Regular text output or text-based tool call interceptor
                         if "text" in part:
                             txt = part["text"]
-                            if txt:
-                                if not in_text_block:
-                                    if in_tool_block:
-                                        yield format_anthropic_sse_event("content_block_stop", {"type": "content_block_stop", "index": current_block_index})
-                                        in_tool_block = False
-                                    current_block_index += 1
-                                    yield format_anthropic_sse_event("content_block_start", {
-                                        "type": "content_block_start",
-                                        "index": current_block_index,
-                                        "content_block": {"type": "text", "text": ""}
-                                    })
-                                    in_text_block = True
+                            if not txt:
+                                continue
 
-                                yield format_anthropic_sse_event("content_block_delta", {
-                                    "type": "content_block_delta",
-                                    "index": current_block_index,
-                                    "delta": {"type": "text_delta", "text": txt}
-                                })
-                                accumulated_content.append(txt)
-                                completion_tokens += max(1, len(txt) // 4)
+                            if in_call_block:
+                                call_buffer += txt
+                                if is_braces_balanced(call_buffer):
+                                    cleaned, tcs = extract_text_tool_calls(call_buffer, declared_tools)
+                                    if tcs:
+                                        for tc in tcs:
+                                            fn = tc["function"]
+                                            fn_name = fn["name"]
+                                            fn_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
+                                            tc_id = tc.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
+                                            for ev in emit_tool(fn_name, fn_args, tc_id):
+                                                yield ev
+                                        in_call_block = False
+                                        call_buffer = ""
+                                        if cleaned:
+                                            text_buffer += cleaned
+                                    else:
+                                        for ev in emit_text(call_buffer):
+                                            yield ev
+                                        in_call_block = False
+                                        call_buffer = ""
+                            else:
+                                text_buffer += txt
+                                if "call:" in text_buffer:
+                                    idx = text_buffer.find("call:")
+                                    before_call = text_buffer[:idx]
+                                    call_tail = text_buffer[idx:]
+                                    text_buffer = ""
+                                    if before_call:
+                                        for ev in emit_text(before_call):
+                                            yield ev
+                                    in_call_block = True
+                                    call_buffer = call_tail
+                                    if is_braces_balanced(call_buffer):
+                                        cleaned, tcs = extract_text_tool_calls(call_buffer, declared_tools)
+                                        if tcs:
+                                            for tc in tcs:
+                                                fn = tc["function"]
+                                                fn_name = fn["name"]
+                                                fn_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
+                                                tc_id = tc.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
+                                                for ev in emit_tool(fn_name, fn_args, tc_id):
+                                                    yield ev
+                                            in_call_block = False
+                                            call_buffer = ""
+                                            if cleaned:
+                                                text_buffer += cleaned
+                                        else:
+                                            for ev in emit_text(call_buffer):
+                                                yield ev
+                                            in_call_block = False
+                                            call_buffer = ""
+                                else:
+                                    prefix_len = 0
+                                    for pfx in ("call", "cal", "ca", "c"):
+                                        if text_buffer.endswith(pfx):
+                                            prefix_len = len(pfx)
+                                            break
+                                    to_yield = text_buffer[:-prefix_len] if prefix_len > 0 else text_buffer
+                                    text_buffer = text_buffer[-prefix_len:] if prefix_len > 0 else ""
+                                    if to_yield:
+                                        for ev in emit_text(to_yield):
+                                            yield ev
 
                         # Case B: Tool / Function Call
                         elif "functionCall" in part:
                             fn = part["functionCall"]
-                            fn_name = fn.get("name", "tool")
-                            fn_args = fn.get("args", {})
+                            raw_name = fn.get("name", "tool")
+                            raw_args = fn.get("args", {})
+                            fn_name, fn_args = normalize_tool_call(raw_name, raw_args, declared_tools)
                             call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
-                            has_emitted_tool = True
+                            for ev in emit_tool(fn_name, fn_args, call_id):
+                                yield ev
 
-                            if in_text_block:
-                                yield format_anthropic_sse_event("content_block_stop", {"type": "content_block_stop", "index": current_block_index})
-                                in_text_block = False
+            # Flush any remaining buffers
+            if in_call_block and call_buffer:
+                cleaned, tcs = extract_text_tool_calls(call_buffer, declared_tools)
+                if tcs:
+                    for tc in tcs:
+                        fn = tc["function"]
+                        fn_name = fn["name"]
+                        fn_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
+                        tc_id = tc.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
+                        for ev in emit_tool(fn_name, fn_args, tc_id):
+                            yield ev
+                else:
+                    for ev in emit_text(call_buffer):
+                        yield ev
+                in_call_block = False
+                call_buffer = ""
 
-                            current_block_index += 1
-                            in_tool_block = True
-
-                            yield format_anthropic_sse_event("content_block_start", {
-                                "type": "content_block_start",
-                                "index": current_block_index,
-                                "content_block": {
-                                    "type": "tool_use",
-                                    "id": call_id,
-                                    "name": fn_name,
-                                    "input": {}
-                                }
-                            })
-
-                            args_json = json.dumps(fn_args) if isinstance(fn_args, dict) else str(fn_args)
-                            yield format_anthropic_sse_event("content_block_delta", {
-                                "type": "content_block_delta",
-                                "index": current_block_index,
-                                "delta": {
-                                    "type": "input_json_delta",
-                                    "partial_json": args_json
-                                }
-                            })
-                            yield format_anthropic_sse_event("content_block_stop", {
-                                "type": "content_block_stop",
-                                "index": current_block_index
-                            })
-                            in_tool_block = False
-                            completion_tokens += max(1, len(args_json) // 4)
+            if text_buffer:
+                for ev in emit_text(text_buffer):
+                    yield ev
+                text_buffer = ""
 
             # Close any open block
             if in_text_block or in_tool_block:
@@ -787,6 +968,8 @@ async def stream_anthropic_sse(
                     "type": "content_block_stop",
                     "index": current_block_index
                 })
+                in_text_block = False
+                in_tool_block = False
 
             # Record telemetry & cache
             latency_ms = round((time.time() - start_t) * 1000, 1)
