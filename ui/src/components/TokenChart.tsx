@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { TokenVolumePoint } from '../types';
+import { TokenVolumePoint, TimeRange } from '../types';
 
 interface TokenChartProps {
   data: TokenVolumePoint[];
-  timeRange: '1s' | '1m' | '1h' | '1d';
-  onTimeRangeChange: (range: '1s' | '1m' | '1h' | '1d') => void;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
 }
 
 export const TokenChart: React.FC<TokenChartProps> = ({
@@ -117,7 +117,7 @@ export const TokenChart: React.FC<TokenChartProps> = ({
               border: '1px solid rgba(168, 162, 158, 0.15)',
             }}
           >
-            {(['1s', '1m', '1h', '1d'] as const).map(range => (
+            {(['1m', '1h', '1d', '1month'] as const).map(range => (
               <button
                 key={range}
                 onClick={() => onTimeRangeChange(range)}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TelemetryMetrics, Account, TokenVolumePoint, ModelBenchmarksResponse } from '../types';
+import { TelemetryMetrics, Account, TokenVolumePoint, ModelBenchmarksResponse, TimeRange } from '../types';
 import { TokenChart } from '../components/TokenChart';
 import { useToast } from '../context/ToastContext';
 import { useNavigation } from '../context/NavigationContext';
@@ -22,8 +22,8 @@ interface DashboardPageProps {
   metrics: TelemetryMetrics;
   activeAccount: Account | null;
   chartPoints: TokenVolumePoint[];
-  timeRange: '1s' | '1m' | '1h' | '1d';
-  onTimeRangeChange: (range: '1s' | '1m' | '1h' | '1d') => void;
+  timeRange: TimeRange;
+  onTimeRangeChange: (range: TimeRange) => void;
   onSyncQuota: () => Promise<void>;
   isSyncing: boolean;
 }

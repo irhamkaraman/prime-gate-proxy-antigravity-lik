@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### 4. Dashboard Benchmark Preview Widget
 - **Top Token Spenders Leaderboard:** Embedded preview widget in `DashboardPage.tsx` directly underneath the token volume chart, displaying the top 4 token-consuming models, progress bars, and quota drainer alerts with direct navigation to the full hit ledger.
 
+#### 5. Token Chart Filters & Real-Time WebSocket Synchronization
+- **Streamlined Range Selection:** Upgraded time-series filters to `1m`, `1h`, `1d`, and `1month`, deprecating noisy sub-second intervals (`1s`).
+- **WebSocket Range Isolation:** Eliminated race condition where background `TELEMETRY_UPDATE` WebSocket frames hardcoded to minute intervals would prematurely overwrite and desynchronize user-selected `1h`, `1d`, or `1month` charts.
+- **SQLite WAL-Backed Time Series:** Extended telemetry resolution to aggregate historical requests directly from `pg_request_logs`, ensuring hourly, daily, and 30-day monthly trends remain persistent across server restarts.
+
 ---
 
 ## [1.1.2] - 2026-10-18

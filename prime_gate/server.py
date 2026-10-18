@@ -721,15 +721,16 @@ async def api_db_test_corrupt(request: Request):
 
 @app.get("/api/metrics/tokens")
 async def api_token_metrics(range: str = "minute"):
-    """Returns token consumption time-series chart data and KPIs (second, minute, hour, day)."""
-    if range in ["1s", "second", "sec"]:
-        r = "second"
-    elif range in ["1m", "minute", "min"]:
+    """Returns token consumption time-series chart data and KPIs (1m, 1h, 1d, 1month)."""
+    r_lower = range.lower()
+    if r_lower in ["1m", "minute", "min", "1min"]:
         r = "minute"
-    elif range in ["1h", "hour", "hr"]:
+    elif r_lower in ["1h", "hour", "hr", "1hour"]:
         r = "hour"
-    elif range in ["1d", "day"]:
+    elif r_lower in ["1d", "day", "1day", "daily"]:
         r = "day"
+    elif r_lower in ["1month", "month", "30d", "monthly"]:
+        r = "month"
     else:
         r = "minute"
 
@@ -1143,7 +1144,8 @@ async def stream_antigravity_sse(
                             "tokens": s.get("total_tokens_all_time", 0)
                         }
                     },
-                    "chart_data": metrics_data.get("chart_data")
+                    "chart_data": metrics_data.get("chart_data"),
+                    "chart_range": "1m"
                 })
             except Exception:
                 pass
@@ -1351,7 +1353,8 @@ async def chat_completions(request: Request):
                                         "tokens": s.get("total_tokens_all_time", 0)
                                     }
                                 },
-                                "chart_data": metrics_data.get("chart_data")
+                                "chart_data": metrics_data.get("chart_data"),
+                                "chart_range": "1m"
                             })
                         except Exception:
                             pass

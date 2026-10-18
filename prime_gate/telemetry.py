@@ -145,7 +145,7 @@ class TokenTelemetryCollector:
     def get_metrics(self, time_range: str = "minute") -> Dict[str, Any]:
         """
         Returns structured chart series and KPI summary for the selected time range.
-        Options: 'second', 'minute', 'hour', 'day'
+        Options: 'minute' (1m), 'hour' (1h), 'day' (1d), 'month' (1month)
         """
         now = time.time()
         labels: List[str] = []
@@ -154,50 +154,162 @@ class TokenTelemetryCollector:
         reasoning_series: List[int] = []
         total_series: List[int] = []
 
-        if time_range == "second":
-            # Last 60 seconds
-            current_sec = int(now)
-            for s in range(current_sec - 59, current_sec + 1):
-                t_str = time.strftime("%H:%M:%S", time.localtime(s))
-                b = self.second_buckets.get(s, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
-                labels.append(t_str)
-                prompt_series.append(b["prompt"])
-                completion_series.append(b["completion"])
-                reasoning_series.append(b["reasoning"])
-                total_series.append(b["total"])
+        # Normalize time_range identifier
+        tr_norm = time_range.lower()
+        if tr_norm in ["1m", "minute", "min", "1min"]:
+            target_range = "minute"
+        elif tr_norm in ["1h", "hour", "hr", "1hour"]:
+            target_range = "hour"
+        elif tr_norm in ["1d", "day", "1day", "daily"]:
+            target_range = "day"
+        elif tr_norm in ["1month", "month", "30d", "monthly"]:
+            target_range = "month"
+        else:
+            target_range = "minute"
 
-        elif time_range == "minute":
-            # Last 30 minutes
+        # Pull historical hits from database to ensure no gaps across restarts
+        db_records: List[Any] = []
+        try:
+            conn = db._get_connection()
+            if target_range == "minute":
+                min_ts = now - 1800
+            elif target_range == "hour":
+                min_ts = now - 86400
+            elif target_range == "day":
+                min_ts = now - (14 * 86400)
+            else:  # month
+                min_ts = now - (30 * 86400)
+
+            cursor = conn.execute(
+                "SELECT timestamp, prompt_tokens, completion_tokens, reasoning_tokens, total_tokens FROM pg_request_logs WHERE timestamp >= ?",
+                (min_ts,)
+            )
+            db_records = cursor.fetchall()
+        except Exception as e:
+            logger.debug(f"Could not load request logs for telemetry aggregation: {e}")
+
+        if target_range == "minute":
+            # Last 30 minutes in 1-minute intervals
+            slot_map: Dict[int, Dict[str, int]] = {}
+            for r in db_records:
+                s = int(r["timestamp"] // 60) * 60
+                if s not in slot_map:
+                    slot_map[s] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
+                slot_map[s]["prompt"] += r["prompt_tokens"]
+                slot_map[s]["completion"] += r["completion_tokens"]
+                slot_map[s]["reasoning"] += r["reasoning_tokens"]
+                slot_map[s]["total"] += r["total_tokens"]
+
+            for s, b in self.minute_buckets.items():
+                if s not in slot_map:
+                    slot_map[s] = dict(b)
+                else:
+                    slot_map[s]["prompt"] = max(slot_map[s]["prompt"], b.get("prompt", 0))
+                    slot_map[s]["completion"] = max(slot_map[s]["completion"], b.get("completion", 0))
+                    slot_map[s]["reasoning"] = max(slot_map[s]["reasoning"], b.get("reasoning", 0))
+                    slot_map[s]["total"] = max(slot_map[s]["total"], b.get("total", 0))
+
             current_min = int(now // 60) * 60
             for m in range(current_min - (29 * 60), current_min + 60, 60):
                 t_str = time.strftime("%H:%M", time.localtime(m))
-                b = self.minute_buckets.get(m, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
+                b = slot_map.get(m, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                 labels.append(t_str)
                 prompt_series.append(b["prompt"])
                 completion_series.append(b["completion"])
                 reasoning_series.append(b["reasoning"])
                 total_series.append(b["total"])
 
-        elif time_range == "hour":
-            # Last 24 hours
+        elif target_range == "hour":
+            # Last 24 hours in 1-hour intervals
+            hour_map: Dict[int, Dict[str, int]] = {}
+            for r in db_records:
+                h = int(r["timestamp"] // 3600) * 3600
+                if h not in hour_map:
+                    hour_map[h] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
+                hour_map[h]["prompt"] += r["prompt_tokens"]
+                hour_map[h]["completion"] += r["completion_tokens"]
+                hour_map[h]["reasoning"] += r["reasoning_tokens"]
+                hour_map[h]["total"] += r["total_tokens"]
+
+            for h, b in self.hour_buckets.items():
+                if h not in hour_map:
+                    hour_map[h] = dict(b)
+                else:
+                    hour_map[h]["prompt"] = max(hour_map[h]["prompt"], b.get("prompt", 0))
+                    hour_map[h]["completion"] = max(hour_map[h]["completion"], b.get("completion", 0))
+                    hour_map[h]["reasoning"] = max(hour_map[h]["reasoning"], b.get("reasoning", 0))
+                    hour_map[h]["total"] = max(hour_map[h]["total"], b.get("total", 0))
+
             current_hour = int(now // 3600) * 3600
             for h in range(current_hour - (23 * 3600), current_hour + 3600, 3600):
                 t_str = time.strftime("%H:00", time.localtime(h))
-                b = self.hour_buckets.get(h, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
+                b = hour_map.get(h, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                 labels.append(t_str)
                 prompt_series.append(b["prompt"])
                 completion_series.append(b["completion"])
                 reasoning_series.append(b["reasoning"])
                 total_series.append(b["total"])
 
-        else:  # 'day'
-            # Last 14 days
+        elif target_range == "day":
+            # Last 14 days in 1-day intervals
+            day_map: Dict[str, Dict[str, int]] = {}
+            for r in db_records:
+                dk = time.strftime("%Y-%m-%d", time.localtime(r["timestamp"]))
+                if dk not in day_map:
+                    day_map[dk] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
+                day_map[dk]["prompt"] += r["prompt_tokens"]
+                day_map[dk]["completion"] += r["completion_tokens"]
+                day_map[dk]["reasoning"] += r["reasoning_tokens"]
+                day_map[dk]["total"] += r["total_tokens"]
+
+            for dk, b in self.day_buckets.items():
+                if dk not in day_map:
+                    day_map[dk] = dict(b)
+                else:
+                    day_map[dk]["prompt"] = max(day_map[dk]["prompt"], b.get("prompt", 0))
+                    day_map[dk]["completion"] = max(day_map[dk]["completion"], b.get("completion", 0))
+                    day_map[dk]["reasoning"] = max(day_map[dk]["reasoning"], b.get("reasoning", 0))
+                    day_map[dk]["total"] = max(day_map[dk]["total"], b.get("total", 0))
+
             current_day = int(now)
             for d in range(13, -1, -1):
                 day_ts = current_day - (d * 86400)
                 d_key = time.strftime("%Y-%m-%d", time.localtime(day_ts))
                 d_label = time.strftime("%b %d", time.localtime(day_ts))
-                b = self.day_buckets.get(d_key, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
+                b = day_map.get(d_key, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
+                labels.append(d_label)
+                prompt_series.append(b["prompt"])
+                completion_series.append(b["completion"])
+                reasoning_series.append(b["reasoning"])
+                total_series.append(b["total"])
+
+        else:  # 'month' (1month / 30 days)
+            # Last 30 days in 1-day intervals
+            month_map: Dict[str, Dict[str, int]] = {}
+            for r in db_records:
+                dk = time.strftime("%Y-%m-%d", time.localtime(r["timestamp"]))
+                if dk not in month_map:
+                    month_map[dk] = {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0}
+                month_map[dk]["prompt"] += r["prompt_tokens"]
+                month_map[dk]["completion"] += r["completion_tokens"]
+                month_map[dk]["reasoning"] += r["reasoning_tokens"]
+                month_map[dk]["total"] += r["total_tokens"]
+
+            for dk, b in self.day_buckets.items():
+                if dk not in month_map:
+                    month_map[dk] = dict(b)
+                else:
+                    month_map[dk]["prompt"] = max(month_map[dk]["prompt"], b.get("prompt", 0))
+                    month_map[dk]["completion"] = max(month_map[dk]["completion"], b.get("completion", 0))
+                    month_map[dk]["reasoning"] = max(month_map[dk]["reasoning"], b.get("reasoning", 0))
+                    month_map[dk]["total"] = max(month_map[dk]["total"], b.get("total", 0))
+
+            current_day = int(now)
+            for d in range(29, -1, -1):
+                day_ts = current_day - (d * 86400)
+                d_key = time.strftime("%Y-%m-%d", time.localtime(day_ts))
+                d_label = time.strftime("%b %d", time.localtime(day_ts))
+                b = month_map.get(d_key, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                 labels.append(d_label)
                 prompt_series.append(b["prompt"])
                 completion_series.append(b["completion"])

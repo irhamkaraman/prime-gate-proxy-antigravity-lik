@@ -14,7 +14,7 @@ import { PromptSandboxPage } from './pages/PromptSandboxPage';
 import { SentinelPage } from './pages/SentinelPage';
 import { DocumentationPage } from './pages/DocumentationPage';
 
-import { Account, TelemetryMetrics, TokenVolumePoint } from './types';
+import { Account, TelemetryMetrics, TokenVolumePoint, TimeRange } from './types';
 import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download } from 'lucide-react';
 
 const initialMetrics: TelemetryMetrics = {
@@ -45,11 +45,16 @@ const MainLayout: React.FC = () => {
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [metrics, setMetrics] = useState<TelemetryMetrics>(initialMetrics);
   const [chartPoints, setChartPoints] = useState<TokenVolumePoint[]>([]);
-  const [timeRange, setTimeRange] = useState<'1s' | '1m' | '1h' | '1d'>('1m');
+  const [timeRange, setTimeRange] = useState<TimeRange>('1m');
+  const timeRangeRef = useRef<TimeRange>('1m');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    timeRangeRef.current = timeRange;
+  }, [timeRange]);
 
   // Fetch accounts list and real-time active account quota
   const fetchAccounts = useCallback(async () => {
@@ -84,7 +89,7 @@ const MainLayout: React.FC = () => {
   }, []);
 
   // Fetch telemetry metrics and real-time time-series chart data
-  const fetchMetrics = useCallback(async (rangeToFetch: '1s' | '1m' | '1h' | '1d' = '1m') => {
+  const fetchMetrics = useCallback(async (rangeToFetch: TimeRange = '1m') => {
     try {
       const res = await fetch(`/api/metrics/tokens?range=${rangeToFetch}`);
       if (res.ok) {
@@ -180,23 +185,29 @@ const MainLayout: React.FC = () => {
                   latency_ms: data.metrics.latency_ms ?? prev.latency_ms,
                 }));
               }
-              if (data.chart_data && Array.isArray(data.chart_data.labels)) {
-                const pts: TokenVolumePoint[] = data.chart_data.labels.map((lbl: string, idx: number) => ({
-                  timestamp: String(idx),
-                  timeLabel: lbl,
-                  prompt: data.chart_data.prompt_tokens[idx] || 0,
-                  reasoning: data.chart_data.reasoning_tokens[idx] || 0,
-                  completion: data.chart_data.completion_tokens[idx] || 0,
-                  total: data.chart_data.total_tokens[idx] || 0,
-                }));
-                setChartPoints(pts);
+              // Only apply real-time chart points directly if client is currently on 1m!
+              if (timeRangeRef.current === '1m') {
+                if (data.chart_data && Array.isArray(data.chart_data.labels)) {
+                  const pts: TokenVolumePoint[] = data.chart_data.labels.map((lbl: string, idx: number) => ({
+                    timestamp: String(idx),
+                    timeLabel: lbl,
+                    prompt: data.chart_data.prompt_tokens[idx] || 0,
+                    reasoning: data.chart_data.reasoning_tokens[idx] || 0,
+                    completion: data.chart_data.completion_tokens[idx] || 0,
+                    total: data.chart_data.total_tokens[idx] || 0,
+                  }));
+                  setChartPoints(pts);
+                }
+              } else {
+                // If viewing 1h, 1d, or 1month, re-fetch for active range so it never reverts to 1m
+                fetchMetrics(timeRangeRef.current);
               }
             } else if (msgType === 'ACCOUNT_SWITCHED') {
               if (data.quota && Array.isArray(data.quota) && data.quota.length > 0) {
                 setActiveAccount(prev => prev ? { ...prev, email: data.email || prev.email, quota_summary: data.quota } : null);
               }
               fetchAccounts();
-              fetchMetrics(timeRange);
+              fetchMetrics(timeRangeRef.current);
             } else if (msgType === 'QUOTA_UPDATE' || msgType === 'QUOTA_UPDATED' || msgType === 'ACCOUNT_CONNECTED' || msgType === 'ACCOUNT_REMOVED') {
               fetchAccounts();
             }
@@ -425,6 +436,7 @@ const MainLayout: React.FC = () => {
               timeRange={timeRange}
               onTimeRangeChange={(newRange) => {
                 setTimeRange(newRange);
+                timeRangeRef.current = newRange;
                 fetchMetrics(newRange);
               }}
               onSyncQuota={handleSyncQuota}
