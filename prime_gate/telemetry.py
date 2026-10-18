@@ -68,6 +68,24 @@ class TokenTelemetryCollector:
         except Exception as e:
             logger.warning(f"Failed to persist telemetry to binary DB: {e}")
 
+    def record_request(
+        self,
+        model: str = "default",
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        reasoning_tokens: int = 0,
+        latency_ms: float = 0.0,
+        **kwargs
+    ):
+        """Backward-compatible alias for record_usage."""
+        return self.record_usage(
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            reasoning_tokens=reasoning_tokens,
+            latency_ms=latency_ms
+        )
+
     def record_usage(
         self,
         model: str,

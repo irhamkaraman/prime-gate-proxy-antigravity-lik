@@ -6,6 +6,7 @@ import { Play, Square, Sparkles, Copy, Check, Terminal, Cpu } from 'lucide-react
 export const PromptSandboxPage: React.FC = () => {
   const { showToast } = useToast();
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [apiProtocol, setApiProtocol] = useState<'openai' | 'anthropic'>('openai');
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
   const [systemPrompt, setSystemPrompt] = useState<string>('You are an expert AI software engineer. Provide clear, precise, and practical code solutions.');
   const [userPrompt, setUserPrompt] = useState<string>('Write a Python function to compute the SHA-256 hash of a file efficiently using chunks.');
@@ -62,31 +63,53 @@ export const PromptSandboxPage: React.FC = () => {
     abortControllerRef.current = new AbortController();
 
     try {
-      const messages = [];
-      if (systemPrompt.trim()) {
-        messages.push({ role: 'system', content: systemPrompt.trim() });
-      }
-      messages.push({ role: 'user', content: userPrompt.trim() });
+      let endpointUrl = '/v1/chat/completions';
+      let headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer prime-gate-proxy',
+      };
+      let requestBody: Record<string, any> = {};
 
-      const response = await fetch('/v1/chat/completions', {
-        method: 'POST',
-        headers: {
+      if (apiProtocol === 'anthropic') {
+        endpointUrl = '/v1/messages';
+        headers = {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer prime-gate-proxy',
-        },
-        body: JSON.stringify({
+          'x-api-key': 'prime-gate-proxy',
+          'anthropic-version': '2023-06-01',
+        };
+        requestBody = {
+          model: selectedModel,
+          system: systemPrompt.trim() ? systemPrompt.trim() : undefined,
+          messages: [{ role: 'user', content: userPrompt.trim() }],
+          temperature,
+          max_tokens: maxTokens,
+          stream: true,
+        };
+      } else {
+        const messages = [];
+        if (systemPrompt.trim()) {
+          messages.push({ role: 'system', content: systemPrompt.trim() });
+        }
+        messages.push({ role: 'user', content: userPrompt.trim() });
+        requestBody = {
           model: selectedModel,
           messages,
           temperature,
           max_tokens: maxTokens,
           stream: true,
-        }),
+        };
+      }
+
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
         signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `HTTP ${response.status}: Inference error`);
+        throw new Error(errorData.error?.message || errorData.detail || `HTTP ${response.status}: Inference error`);
       }
 
       if (!response.body) {
@@ -116,15 +139,31 @@ export const PromptSandboxPage: React.FC = () => {
           if (trimmed.startsWith('data: ')) {
             try {
               const parsed = JSON.parse(trimmed.slice(6));
-              const delta = parsed.choices?.[0]?.delta?.content || '';
-              if (delta) {
-                if (firstTokenTime === null) {
-                  firstTokenTime = Date.now();
-                  setTtftMs(firstTokenTime - startTime);
+
+              // Case A: Anthropic SSE Protocol
+              if (apiProtocol === 'anthropic') {
+                if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+                  const delta = parsed.delta.text;
+                  if (firstTokenTime === null) {
+                    firstTokenTime = Date.now();
+                    setTtftMs(firstTokenTime - startTime);
+                  }
+                  accumulatedText += delta;
+                  setOutput(accumulatedText);
+                  setTokenEstimate(Math.round(accumulatedText.length / 4));
                 }
-                accumulatedText += delta;
-                setOutput(accumulatedText);
-                setTokenEstimate(Math.round(accumulatedText.length / 4));
+              } else {
+                // Case B: OpenAI SSE Protocol
+                const delta = parsed.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  if (firstTokenTime === null) {
+                    firstTokenTime = Date.now();
+                    setTtftMs(firstTokenTime - startTime);
+                  }
+                  accumulatedText += delta;
+                  setOutput(accumulatedText);
+                  setTokenEstimate(Math.round(accumulatedText.length / 4));
+                }
               }
             } catch (err) {
               // Ignore partial JSON
@@ -134,7 +173,7 @@ export const PromptSandboxPage: React.FC = () => {
       }
 
       setTotalTimeMs(Date.now() - startTime);
-      showToast('Generation complete', 'success');
+      showToast(`Generation complete (${apiProtocol.toUpperCase()} protocol)`, 'success');
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
         showToast((err as Error).message || 'Generation failed', 'error');
@@ -178,6 +217,60 @@ export const PromptSandboxPage: React.FC = () => {
             <Terminal size={18} color="#f59e0b" />
             <span>Parameters & Config</span>
           </h2>
+
+          {/* Protocol Endpoint Selector */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#a8a29e', marginBottom: 6, display: 'block' }}>
+              API Protocol & Endpoint
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setApiProtocol('openai')}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: apiProtocol === 'openai' ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.08)',
+                  background: apiProtocol === 'openai' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255,255,255,0.03)',
+                  color: apiProtocol === 'openai' ? '#34d399' : '#a8a29e',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 2,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>OpenAI Protocol</span>
+                <span style={{ fontSize: 10, opacity: 0.7, fontFamily: 'var(--font-mono)' }}>/v1/chat/completions</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setApiProtocol('anthropic')}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: apiProtocol === 'anthropic' ? '1px solid #f59e0b' : '1px solid rgba(255,255,255,0.08)',
+                  background: apiProtocol === 'anthropic' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.03)',
+                  color: apiProtocol === 'anthropic' ? '#fbbf24' : '#a8a29e',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 2,
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>Anthropic Protocol</span>
+                <span style={{ fontSize: 10, opacity: 0.7, fontFamily: 'var(--font-mono)' }}>/v1/messages</span>
+              </button>
+            </div>
+          </div>
 
           {/* Model Selector */}
           <div>
@@ -332,6 +425,12 @@ export const PromptSandboxPage: React.FC = () => {
               <h3 style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
                 Streaming Output ({selectedModel})
               </h3>
+              <span
+                className={apiProtocol === 'anthropic' ? 'badge badge-amber' : 'badge badge-emerald'}
+                style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
+              >
+                {apiProtocol === 'anthropic' ? 'Anthropic /v1/messages' : 'OpenAI /v1/chat/completions'}
+              </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

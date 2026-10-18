@@ -45,6 +45,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [currency, setCurrency] = useState<'USD' | 'IDR'>('IDR');
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedAnthropicUrl, setCopiedAnthropicUrl] = useState(false);
 
   useEffect(() => {
     fetch('/api/analytics/models')
@@ -54,18 +55,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   }, [lastLedgerUpdate]);
 
   const gatewayUrl = 'http://127.0.0.1:52111/v1';
+  const anthropicGatewayUrl = 'http://127.0.0.1:52111';
   const apiKey = 'prime-gate-proxy';
 
-  const copyToClipboard = (text: string, type: 'url' | 'key') => {
+  const copyToClipboard = (text: string, type: 'url' | 'anthropic_url' | 'key') => {
     navigator.clipboard.writeText(text).then(() => {
       if (type === 'url') {
         setCopiedUrl(true);
         setTimeout(() => setCopiedUrl(false), 2000);
+      } else if (type === 'anthropic_url') {
+        setCopiedAnthropicUrl(true);
+        setTimeout(() => setCopiedAnthropicUrl(false), 2000);
       } else {
         setCopiedKey(true);
         setTimeout(() => setCopiedKey(false), 2000);
       }
-      showToast(`${type === 'url' ? 'Endpoint URL' : 'API Key'} copied to clipboard!`, 'success');
+      showToast(`${type.includes('url') ? 'Endpoint URL' : 'API Key'} copied to clipboard!`, 'success');
     });
   };
 
@@ -476,52 +481,90 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
         </div>
 
-        {/* OpenAI Client Gateway Card */}
+        {/* Dual-Protocol Client Gateway Card */}
         <div className="glass-card" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
-                OpenAI Client Gateway
+                Dual-Protocol Client Gateway
               </h2>
-              <span className="badge badge-emerald">Ready</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <span className="badge badge-emerald" style={{ fontSize: 10 }}>OpenAI</span>
+                <span className="badge badge-amber" style={{ fontSize: 10 }}>Anthropic</span>
+              </div>
             </div>
             <p style={{ fontSize: 13, color: '#a8a29e', lineHeight: 1.5 }}>
-              Drop-in OpenAI base URL compatible with OpenCode, Cursor, Continue, SillyTavern, and Cline.
+              Native drop-in endpoints for Cursor, OpenCode, Cline, Roo Code, Claude Code CLI, and Continue.dev.
             </p>
 
-            {/* URL Display */}
-            <div style={{ marginTop: 20 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>
-                Base URL
-              </label>
+            {/* OpenAI URL Display */}
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#10b981', textTransform: 'uppercase' }}>
+                  OpenAI Base URL (/v1/chat/completions)
+                </label>
+              </div>
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   background: 'rgba(0, 0, 0, 0.4)',
-                  border: '1px solid rgba(168, 162, 158, 0.2)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
                   borderRadius: 8,
-                  padding: '10px 14px',
-                  marginTop: 6,
+                  padding: '8px 12px',
+                  marginTop: 4,
                 }}
               >
-                <code style={{ fontSize: 13, color: '#f59e0b', fontFamily: 'var(--font-mono)' }}>
+                <code style={{ fontSize: 12, color: '#34d399', fontFamily: 'var(--font-mono)' }}>
                   {gatewayUrl}
                 </code>
                 <button
                   onClick={() => copyToClipboard(gatewayUrl, 'url')}
                   className="btn btn-secondary btn-sm"
-                  style={{ padding: '4px 8px' }}
+                  style={{ padding: '3px 8px' }}
                 >
-                  {copiedUrl ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                  {copiedUrl ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
                   <span>{copiedUrl ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
             </div>
 
+            {/* Anthropic URL Display */}
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', textTransform: 'uppercase' }}>
+                  Anthropic Base URL (/v1/messages)
+                </label>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  marginTop: 4,
+                }}
+              >
+                <code style={{ fontSize: 12, color: '#fbbf24', fontFamily: 'var(--font-mono)' }}>
+                  {anthropicGatewayUrl}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(anthropicGatewayUrl, 'anthropic_url')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '3px 8px' }}
+                >
+                  {copiedAnthropicUrl ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+                  <span>{copiedAnthropicUrl ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* API Key Display */}
-            <div style={{ marginTop: 16 }}>
+            <div style={{ marginTop: 12 }}>
               <label style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>
                 Auth API Key
               </label>
@@ -533,19 +576,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   background: 'rgba(0, 0, 0, 0.4)',
                   border: '1px solid rgba(168, 162, 158, 0.2)',
                   borderRadius: 8,
-                  padding: '10px 14px',
-                  marginTop: 6,
+                  padding: '8px 12px',
+                  marginTop: 4,
                 }}
               >
-                <code style={{ fontSize: 13, color: '#d6d3d1', fontFamily: 'var(--font-mono)' }}>
+                <code style={{ fontSize: 12, color: '#d6d3d1', fontFamily: 'var(--font-mono)' }}>
                   {apiKey}
                 </code>
                 <button
                   onClick={() => copyToClipboard(apiKey, 'key')}
                   className="btn btn-secondary btn-sm"
-                  style={{ padding: '4px 8px' }}
+                  style={{ padding: '3px 8px' }}
                 >
-                  {copiedKey ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                  {copiedKey ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
                   <span>{copiedKey ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
@@ -558,14 +601,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              paddingTop: 16,
-              marginTop: 20,
+              paddingTop: 14,
+              marginTop: 16,
               fontSize: 12,
               color: '#78716c',
             }}
           >
-            <span>Protocols: <strong style={{ color: '#d6d3d1' }}>REST &bull; SSE</strong></span>
-            <span>Provider: <strong style={{ color: '#f59e0b' }}>prime-gate-proxy</strong></span>
+            <span>Protocols: <strong style={{ color: '#d6d3d1' }}>OpenAI (/v1) &bull; Anthropic (/v1/messages)</strong></span>
+            <span>Version: <strong style={{ color: '#f59e0b' }}>v1.2.1</strong></span>
           </div>
         </div>
       </div>

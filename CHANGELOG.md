@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2026-10-18
+
+### 🌐 Universal Bridge: Native Anthropic Messages API Compatibility (`/v1/messages`)
+
+#### 1. Native Anthropic Messages API (`POST /v1/messages`)
+- **Full Protocol Translation:** Complete bidirectional translation layer between Anthropic Messages API and Google Antigravity, allowing tools like **Claude Code CLI, Cline, Roo Code, Cursor (Claude mode), Continue.dev, LibreChat, OpenCode (Anthropic provider), and Aider** to connect directly to Prime Gate (`http://localhost:52111`) without external proxies.
+- **Strict 7-Event SSE Streaming State Machine:** Fully compliant implementation of Anthropic streaming events:
+  - `message_start` (initial metadata & input usage)
+  - `content_block_start` (opening text or tool_use blocks)
+  - `content_block_delta` (`text_delta` streaming and `input_json_delta` tool parameter streaming)
+  - `content_block_stop` (closing block)
+  - `message_delta` (`stop_reason` and output usage token counts)
+  - `message_stop` (clean stream completion)
+- **Non-Streaming JSON Support:** Compliant response formatting with `id`, `type: "message"`, `role: "assistant"`, structured `content` blocks, `stop_reason` (`end_turn` / `tool_use`), and exact token `usage`.
+- **Pre-flight Token Counting Endpoint (`POST /v1/messages/count_tokens`):** Dedicated endpoint for calculating input prompt tokens before model generation, required by Cline, Roo Code, and Claude Code for context window budgeting.
+- **Dual-Mode Models Endpoint (`GET /v1/models`):** Dynamically serves either OpenAI-standard `{"object": "list", "data": [...]}` or Anthropic-format `{"data": [{"type": "model", ...}]}` based on incoming client headers (`anthropic-version`) or query parameters.
+- **Dynamic Model Name Resolution:** Seamlessly routes Anthropic model names (`claude-3-5-sonnet-20241022`, `claude-3-5-sonnet-latest`, `claude-3-7-sonnet-20250219`, `claude-3-opus`, `claude-sonnet-4-6`) to equivalent live Antigravity models.
+- **Universal Enterprise Integration:** Anthropic requests transparently inherit the entire Prime Gate enterprise stack:
+  - **Compiled Binary DB Caching** (including `cache_control: {"type": "ephemeral"}` emulation with `cache_read_input_tokens` reporting)
+  - **Smart Agent Context Compactor** (auto-prunes voluminous tool outputs)
+  - **AI Runaway Loop Sentinel** (detects and halts tool call loops)
+  - **Mid-Flight Account Failover** (transparent rotation on HTTP 429)
+  - **WebSocket Live Telemetry** (real-time token throughput broadcast)
+
+#### 2. Dashboard, Prompt Sandbox & Documentation Enhancements
+- **Prompt Sandbox Protocol Switcher:** Added a tactile toggle in the Web UI Prompt Sandbox allowing developers to run live test prompts against either **OpenAI Protocol (`/v1/chat/completions`)** or **Anthropic Protocol (`/v1/messages`)** with real-time SSE stream decoding.
+- **Dual-Protocol Client Gateway Cards:** Main Dashboard updated with instant copy actions for both OpenAI Base URL (`http://127.0.0.1:52111/v1`) and Anthropic Base URL (`http://127.0.0.1:52111`).
+- **Comprehensive Documentation Page:** Complete guides, IDE setup parameters (Cline, Cursor, Roo Code, Claude Code), and ready-to-run SDK code snippets for Python `anthropic`, Node.js `@anthropic-ai/sdk`, and cURL.
+- **Action Button UX Refinement:** Button text on engine cards now explicitly reflects the verb/action to perform (`Turn Off Cache`, `Disable Tool Bypass`, `Turn Off Compactor`, `Deactivate Sentinel`).
+
+---
+
 ## [1.2.0] - 2026-10-18
 
 ### 🚀 Enterprise Engine: Context Compactor, Mid-Flight Failover, Runaway Loop Sentinel & Economic Value Simulator

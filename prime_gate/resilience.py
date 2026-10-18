@@ -72,7 +72,8 @@ class AccountFailoverPool:
         cls,
         accounts: List[Dict[str, Any]],
         preferred_account: Optional[Dict[str, Any]] = None,
-        quota_cache: Optional[Dict[str, Any]] = None
+        quota_cache: Optional[Dict[str, Any]] = None,
+        **kwargs
     ) -> List[Dict[str, Any]]:
         """
         Returns a prioritized list of accounts for request execution.
@@ -80,6 +81,8 @@ class AccountFailoverPool:
         at the front. Quota remaining fraction is used to break ties among healthy accounts.
         Cooldown accounts are placed at the back, ordered by earliest recovery time.
         """
+        if not preferred_account and "active_account" in kwargs:
+            preferred_account = kwargs["active_account"]
         if not accounts:
             return []
 

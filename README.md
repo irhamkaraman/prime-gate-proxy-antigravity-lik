@@ -5,7 +5,7 @@
 
 **A Production-Grade, Self-Hosted OpenAI-Compatible Proxy Gateway for Google Antigravity.**
 
-[![Version](https://img.shields.io/badge/version-1.2.0-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.1-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -23,9 +23,9 @@
 
 ## 📖 Overview
 
-**Prime Gate** is an enterprise-ready, lightweight API bridge that wraps Google's internal Cloud AI Companion / Antigravity service into a **100% OpenAI-compliant REST & SSE API** (`/v1/models`, `/v1/chat/completions`).
+**Prime Gate** is an enterprise-ready, dual-protocol API bridge that wraps Google's internal Cloud AI Companion / Antigravity service into both **100% OpenAI-compliant** (`/v1/chat/completions`) and **native Anthropic Messages API compliant** (`/v1/messages`) REST & SSE endpoints.
 
-It allows you to use your Google Antigravity quotas—including **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)**, and **Gemini 3.8 Flash**—directly inside any standard AI coding tool, such as **OpenCode**, **Cursor**, **Continue.dev**, **Aider**, **Cline**, and **SillyTavern**.
+It allows you to use your Google Antigravity quotas—including **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)**, and **Gemini 3.8 Flash**—directly inside any standard AI coding tool, such as **Claude Code CLI**, **Cline**, **Roo Code**, **OpenCode**, **Cursor**, **Continue.dev**, **Aider**, and **SillyTavern**.
 
 ---
 
@@ -33,13 +33,14 @@ It allows you to use your Google Antigravity quotas—including **Claude Sonnet 
 
 ```mermaid
 graph LR
-    Client["AI Client (OpenCode / Cursor / SillyTavern)"] 
-    -->|"OpenAI REST & SSE (/v1)"| PyCore["Python Core Gateway (FastAPI :52111)"]
+    Client["AI Client (Cursor / Cline / OpenCode / Claude Code)"] 
+    -->|"OpenAI (/v1) & Anthropic (/v1/messages)"| PyCore["Python Core Gateway (FastAPI :52111)"]
     
     subgraph "Prime Gate System"
         PyCore -->|"Token Refresh / PKCE"| Auth["Auth & Accounts Manager"]
         PyCore -->|"Quota & Tier Resolver"| Quota["Quota Monitor"]
-        PyCore -->|"Recursive Schema Sanitizer"| Sanitizer["Schema Cleaner"]
+        PyCore -->|"Bidirectional Protocols"| Translator["Anthropic & OpenAI Translators"]
+        PyCore -->|"Compactor & Loop Guard"| Enterprise["Enterprise Engine"]
         UI["Node.js Web UI (:52110)"] <-->|"Status & Proxy"| PyCore
     end
 
@@ -47,29 +48,33 @@ graph LR
 ```
 
 ### 🎯 Core Capabilities:
-1. **100% OpenAI Specification Compliant:**
-   Seamless drop-in replacement for standard OpenAI client configurations.
-2. **Real-time Reasoning / Thinking Stream:**
+1. **Dual-Protocol Compliant (OpenAI & Anthropic Native):**
+   Full drop-in support for both OpenAI (`/v1/chat/completions`) and Anthropic Messages API (`/v1/messages`, `/v1/messages/count_tokens`).
+2. **Native Anthropic Protocol Translation:**
+   Seamlessly connects **Claude Code CLI, Cline, Roo Code, Cursor (Claude mode), Continue.dev, and LibreChat** directly to Prime Gate without any third-party proxy adapters.
+3. **Strict 7-Event Anthropic Streaming State Machine:**
+   Implements full Anthropic SSE streaming: `message_start`, `content_block_start`, `content_block_delta` (`text_delta` & `input_json_delta`), `content_block_stop`, `message_delta`, and `message_stop`.
+4. **Pre-flight Token Counting Endpoint (`POST /v1/messages/count_tokens`):**
+   Enables autonomous coding agents (Cline, Roo Code, Claude Code) to accurately budget context windows before sending inferences.
+5. **Real-time Reasoning / Thinking Stream:**
    Natively streams deep thinking blocks via `choices[0].delta.reasoning_content` for Claude 4.6 Thinking and Gemini 3.8.
-3. **Zero 400 Bad Request (Recursive Schema Sanitizer):**
+6. **Zero 400 Bad Request (Recursive Schema Sanitizer):**
    Eliminates Google Antigravity's strict schema errors (`exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`) for 100% stable Tool Calling & Function Execution.
-4. **Intelligent Quota & Tier Detection:**
+7. **Intelligent Quota & Tier Detection:**
    Distinguishes between **`Google AI Pro (Trial Tier)`** and **`Google AI Pro (Paid Tier)`**, automatically presenting only valid model catalogs.
-5. **Modern React & TypeScript SPA Dashboard with Dedicated Page Routes:**
-   Built with Vite and strict TypeScript, featuring dedicated page routes (`/dashboard`, `/accounts`, `/sandbox`, `/sentinel`, `/docs`), instant HMR, sourcemap debugging, real-time token telemetry (per-second, per-minute, per-hour, per-day segmented radar chart), dedicated Account Manager with live quota meters, interactive Prompt Sandbox, and Database Sentinel diagnostics. Zero browser alert popups—everything uses accessible modal dialogs and smooth toast notifications.
-6. **Rich Terminal CLI Suite:**
+8. **Modern React & TypeScript SPA Dashboard with Dedicated Page Routes:**
+   Built with Vite and strict TypeScript, featuring dedicated page routes (`/dashboard`, `/accounts`, `/sandbox`, `/caching`, `/sentinel`, `/docs`), instant HMR, sourcemap debugging, real-time token telemetry, interactive Prompt Sandbox with OpenAI/Anthropic protocol toggle, and Database Sentinel diagnostics.
+9. **Rich Terminal CLI Suite:**
    Modern terminal interface featuring `--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, and headless Windows background `daemon` management.
-7. **Compiled C Binary Database (Zero Plaintext JSON):**
-   Replaces human-readable JSON storage with a high-performance compiled C binary engine (SQLite WAL + Sealed BLOBs). Sensitive tokens, credentials, models, and quotas are binary-masked with strict 32-bit CRC32 checksum validation.
-8. **Real-Time WebSocket & Database Sentinel Watchdog:**
-   Pipes live server logs and database mutations directly to dashboard over bidirectional WebSocket (`/ws/live`). An autonomous Sentinel Watchdog continuously audits binary block integrity and fires instant critical alerts and telemetry upon any corruption detection.
-9. **Smart Agent Context Compactor:**
-   Automatically prunes verbose tool output history older than 3 active turns while preserving system instructions and recent context, reducing 30k–100k agent prompts by 50% to 70%.
-10. **Mid-Flight Transparent Account Failover:**
+10. **Compiled C Binary Database (Zero Plaintext JSON):**
+    Replaces human-readable JSON storage with a high-performance compiled C binary engine (SQLite WAL + Sealed BLOBs). Sensitive tokens, credentials, models, and quotas are binary-masked with strict 32-bit CRC32 checksum validation.
+11. **Smart Agent Context Compactor:**
+    Automatically prunes verbose tool output history older than 3 active turns while preserving system instructions and recent context, reducing 30k–100k agent prompts by 50% to 70%.
+12. **Mid-Flight Transparent Account Failover:**
     Catches upstream Google Antigravity HTTP 429 (`RESOURCE_EXHAUSTED`) / 503 errors and rotates to the next healthiest account before emitting the first stream token—zero client drops.
-11. **AI Agent Runaway Loop Killer & Sentinel Guard:**
+13. **AI Agent Runaway Loop Killer & Sentinel Guard:**
     Detects infinite repetitive tool calls ($\ge 3$ consecutive identical calls) and injects corrective system instructions to stop execution loops and halt quota drain.
-12. **Economic Value Delivered Simulator:**
+14. **Economic Value Delivered Simulator:**
     Calculates equivalent commercial API savings (GPT-4o / Claude 3.5 Sonnet benchmark) in both USD and IDR directly on the live dashboard and caching views.
 
 

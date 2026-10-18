@@ -25,6 +25,57 @@ export const DocumentationPage: React.FC = () => {
     "stream": true
   }'`;
 
+  const curlAnthropicSnippet = `curl http://127.0.0.1:52111/v1/messages \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: prime-gate-proxy" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": "Explain binary search in one concise paragraph."}
+    ],
+    "stream": true
+  }'`;
+
+  const anthropicPythonSnippet = `import anthropic
+
+client = anthropic.Anthropic(
+    base_url="http://127.0.0.1:52111",
+    api_key="prime-gate-proxy"
+)
+
+response = client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello from Anthropic Python SDK!"}]
+)
+
+print(response.content[0].text)`;
+
+  const anthropicTsSnippet = `import Anthropic from "@anthropic-ai/sdk";
+
+const client = new Anthropic({
+  baseURL: "http://127.0.0.1:52111",
+  apiKey: "prime-gate-proxy"
+});
+
+async function main() {
+  const stream = await client.messages.stream({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: "Hello from Anthropic TypeScript SDK!" }]
+  });
+
+  for await (const event of stream) {
+    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      process.stdout.write(event.delta.text);
+    }
+  }
+}
+
+main();`;
+
   const pythonSnippet = `import openai
 
 client = openai.OpenAI(
@@ -64,6 +115,9 @@ async function main() {
 main();`;
 
   const healthSnippet = `curl -s http://127.0.0.1:52111/v1/health | jq .`;
+  const tokenCountSnippet = `curl http://127.0.0.1:52111/v1/messages/count_tokens \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"claude-3-5-sonnet","messages":[{"role":"user","content":"Hello"}]}'`;
 
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 1080 }}>
@@ -91,23 +145,42 @@ main();`;
         </p>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-          <div style={{ background: '#090807', padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>OpenAI Base URL</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#f59e0b', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+          {/* OpenAI Config */}
+          <div style={{ background: '#090807', padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', textTransform: 'uppercase' }}>OpenAI Protocol</div>
+              <span className="badge badge-emerald" style={{ fontSize: 10 }}>/v1/chat/completions</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#78716c', marginTop: 8 }}>Base URL:</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b', fontFamily: 'var(--font-mono)' }}>
               http://127.0.0.1:52111/v1
             </div>
+            <div style={{ fontSize: 11, color: '#78716c', marginTop: 6 }}>Compatible with:</div>
+            <div style={{ fontSize: 12, color: '#d6d3d1' }}>Cursor, OpenCode, Continue.dev, OpenAI SDKs</div>
           </div>
+
+          {/* Anthropic Config */}
+          <div style={{ background: '#090807', padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>Anthropic Protocol</div>
+              <span className="badge badge-amber" style={{ fontSize: 10 }}>/v1/messages</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#78716c', marginTop: 8 }}>Base URL:</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b', fontFamily: 'var(--font-mono)' }}>
+              http://127.0.0.1:52111
+            </div>
+            <div style={{ fontSize: 11, color: '#78716c', marginTop: 6 }}>Compatible with:</div>
+            <div style={{ fontSize: 12, color: '#d6d3d1' }}>Cline, Roo Code, Claude Code CLI, Anthropic SDKs</div>
+          </div>
+
+          {/* Common Settings */}
           <div style={{ background: '#090807', padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>API Key</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#d6d3d1', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>API Key & Version</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#d6d3d1', fontFamily: 'var(--font-mono)', marginTop: 8 }}>
               prime-gate-proxy
             </div>
-          </div>
-          <div style={{ background: '#090807', padding: '14px 18px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>Recommended Models</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#34d399', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
-              gemini-3.8-flash, gemini-3.8-pro
-            </div>
+            <div style={{ fontSize: 11, color: '#78716c', marginTop: 6 }}>Anthropic Version:</div>
+            <div style={{ fontSize: 12, color: '#38bdf8', fontFamily: 'var(--font-mono)' }}>2023-06-01</div>
           </div>
         </div>
       </div>
@@ -154,10 +227,76 @@ main();`;
           <span>Code Examples</span>
         </h3>
 
+        {/* Anthropic Python Snippet */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b' }}>Anthropic Python SDK (anthropic)</span>
+              <span className="badge badge-amber" style={{ fontSize: 10 }}>/v1/messages</span>
+            </div>
+            <button
+              onClick={() => copyCode('anthropic-python', anthropicPythonSnippet)}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: '4px 8px' }}
+            >
+              {copiedId === 'anthropic-python' ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+              <span>{copiedId === 'anthropic-python' ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <pre style={{ background: '#090807', padding: 16, borderRadius: 8, overflowX: 'auto', fontSize: 12, color: '#d6d3d1', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <code>{anthropicPythonSnippet}</code>
+          </pre>
+        </div>
+
+        {/* Anthropic TypeScript Snippet */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b' }}>Anthropic TypeScript SDK (@anthropic-ai/sdk)</span>
+              <span className="badge badge-amber" style={{ fontSize: 10 }}>/v1/messages</span>
+            </div>
+            <button
+              onClick={() => copyCode('anthropic-ts', anthropicTsSnippet)}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: '4px 8px' }}
+            >
+              {copiedId === 'anthropic-ts' ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+              <span>{copiedId === 'anthropic-ts' ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <pre style={{ background: '#090807', padding: 16, borderRadius: 8, overflowX: 'auto', fontSize: 12, color: '#d6d3d1', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <code>{anthropicTsSnippet}</code>
+          </pre>
+        </div>
+
+        {/* Anthropic cURL Snippet */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#f59e0b' }}>cURL (Anthropic Messages API)</span>
+              <span className="badge badge-amber" style={{ fontSize: 10 }}>/v1/messages</span>
+            </div>
+            <button
+              onClick={() => copyCode('anthropic-curl', curlAnthropicSnippet)}
+              className="btn btn-secondary btn-sm"
+              style={{ padding: '4px 8px' }}
+            >
+              {copiedId === 'anthropic-curl' ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+              <span>{copiedId === 'anthropic-curl' ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
+          <pre style={{ background: '#090807', padding: 16, borderRadius: 8, overflowX: 'auto', fontSize: 12, color: '#d6d3d1', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <code>{curlAnthropicSnippet}</code>
+          </pre>
+        </div>
+
         {/* Python Snippet */}
         <div style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#e7e5e4' }}>Python SDK (openai)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#e7e5e4' }}>Python SDK (openai)</span>
+              <span className="badge badge-emerald" style={{ fontSize: 10 }}>/v1/chat/completions</span>
+            </div>
             <button
               onClick={() => copyCode('python', pythonSnippet)}
               className="btn btn-secondary btn-sm"

@@ -26,7 +26,14 @@ from .translator import (
     format_sse_chunk,
     format_non_stream_response,
     extract_text_tool_calls,
-    normalize_tool_call
+    normalize_tool_call,
+    transform_anthropic_to_antigravity,
+    anthropic_to_openai_messages,
+    format_anthropic_non_stream_response,
+    format_anthropic_sse_event,
+    stream_anthropic_sse,
+    stream_cached_anthropic_sse,
+    estimate_anthropic_tokens,
 )
 from .db import db, event_bus, WebSocketLogHandler
 from .db.sentinel import sentinel
@@ -132,6 +139,8 @@ async def root_index():
             "health": "/v1/health",
             "models": "/v1/models",
             "chat_completions": "/v1/chat/completions",
+            "messages": "/v1/messages",
+            "count_tokens": "/v1/messages/count_tokens",
             "status": "/api/status"
         }
     }
@@ -219,14 +228,37 @@ async def v1_health_check(
 
 @app.get("/v1/models")
 @app.get("/models")
-async def list_models(refresh: bool = False):
-    """OpenAI standard models list endpoint dynamically resolved from Antigravity."""
+async def list_models(request: Request, refresh: bool = False, format: Optional[str] = None):
+    """Dynamically resolved models list endpoint supporting both OpenAI and Anthropic schemas."""
     active_acc = account_mgr.get_active_account()
     if active_acc:
         models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=refresh)
     else:
         models = QuotaMonitor.get_available_models(None)
     now = int(time.time())
+
+    # Detect if client requested Anthropic format
+    is_anthropic = (
+        format == "anthropic" or
+        bool(request.headers.get("anthropic-version"))
+    )
+
+    if is_anthropic:
+        anthropic_data = [
+            {
+                "type": "model",
+                "id": m["id"],
+                "display_name": m.get("name", m["id"]),
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+            }
+            for m in models
+        ]
+        return {
+            "data": anthropic_data,
+            "has_more": False,
+            "first_id": anthropic_data[0]["id"] if anthropic_data else None,
+            "last_id": anthropic_data[-1]["id"] if anthropic_data else None
+        }
 
     data = [
         {
@@ -1767,6 +1799,394 @@ async def chat_completions(request: Request):
 
     raise HTTPException(status_code=502, detail=f"All account attempts failed: {last_error}")
 
+
+# =====================================================================
+# Native Anthropic Messages API Compatibility Layer (/v1/messages)
+# =====================================================================
+
+@app.post("/v1/messages/count_tokens")
+@app.post("/messages/count_tokens")
+async def count_tokens(request: Request):
+    """Calculates input tokens before generation (used by Cline, Claude Code CLI, etc.)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    tokens = estimate_anthropic_tokens(body)
+    return {"input_tokens": tokens}
+
+
+@app.post("/v1/messages")
+@app.post("/messages")
+async def anthropic_messages(request: Request):
+    """
+    Native Anthropic Messages API compatible generation endpoint:
+    - Transparent translation to Google Antigravity
+    - Full support for system prompt, multi-turn messages, image input, and tools
+    - Non-streaming (JSON) and streaming (7-event Anthropic SSE state machine)
+    - Full integration with Compiled Binary DB Cache, Context Compactor & Loop Guard
+    """
+    accounts = account_mgr.load_accounts()
+    if not accounts:
+        raise HTTPException(
+            status_code=500,
+            detail="No Google Antigravity accounts configured. Run `prime-gate auth login` or `prime-gate auth import`."
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    cache_cfg = db.get_cache_config()
+    anthropic_ver = request.headers.get("anthropic-version", "2023-06-01")
+
+    # 1. Normalize to internal messages for Compactor, Loop Guard, and Cache key
+    internal_msgs = anthropic_to_openai_messages(body)
+
+    # 2. Smart Agent Context Compactor
+    if cache_cfg.get("compactor_enabled", True) and internal_msgs:
+        compacted_msgs, compactor_stats = ContextCompactor.compact_messages(
+            messages=internal_msgs,
+            keep_recent_user_turns=cache_cfg.get("compactor_window", 3),
+            max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40)
+        )
+        if compactor_stats.get("compacted"):
+            logger.info(
+                f"[COMPACTOR (ANTHROPIC)] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
+                f"saved ~{compactor_stats['chars_saved']} chars."
+            )
+
+    # 3. AI Agent Runaway Loop Guard
+    if cache_cfg.get("loop_guard_enabled", True) and internal_msgs:
+        intervened_msgs, loop_detected, loop_signature = AgentLoopGuard.check_and_intervene(
+            messages=internal_msgs,
+            max_repeats=cache_cfg.get("loop_guard_max_repeat", 3)
+        )
+        if loop_detected:
+            logger.warning(f"[LOOP GUARD (ANTHROPIC)] Runaway loop intercepted for '{loop_signature}'.")
+            try:
+                event_bus.broadcast_sync({
+                    "type": "LOOP_GUARD_INTERVENTION",
+                    "tool": loop_signature
+                })
+            except Exception:
+                pass
+
+    active_acc = account_mgr.get_active_account()
+    model, req_payload = transform_anthropic_to_antigravity(body, account=active_acc)
+    stream = bool(body.get("stream", False))
+    message_id = "msg_" + uuid.uuid4().hex[:24]
+    created = int(time.time())
+
+    # 4. Smart Cache Evaluation Layer
+    headers_no_cache = (
+        request.headers.get("x-cache-bypass", "").lower() in ("true", "1") or
+        request.headers.get("x-no-cache", "").lower() in ("true", "1")
+    )
+    body_no_cache = bool(body.get("cache") is False or body.get("no_cache") is True)
+    has_tools = bool(body.get("tools"))
+
+    cache_key, prompt_hash, prompt_preview = compute_cache_key(model, internal_msgs)
+
+    cache_eligible = (
+        cache_cfg.get("enabled", True) and
+        not headers_no_cache and
+        not body_no_cache and
+        not (cache_cfg.get("bypass_tools", True) and has_tools) and
+        len(prompt_preview) >= cache_cfg.get("min_prompt_length", 5)
+    )
+
+    cached_res = db.get_cached_response(cache_key) if cache_eligible else None
+    if cached_res:
+        hit_start = time.time()
+        hit_latency = round((time.time() - hit_start) * 1000 + 4.8, 1)
+        tokens_saved = cached_res.get("total_tokens", 0)
+        p_tok = cached_res.get("prompt_tokens", 0)
+        c_tok = cached_res.get("completion_tokens", 0)
+
+        acc_email = active_acc.get("email") if active_acc else "smart-cache"
+        quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if active_acc else None
+
+        try:
+            db.record_request_hit(
+                request_id=message_id,
+                timestamp=created,
+                account_email=acc_email,
+                model=model,
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok,
+                reasoning_tokens=0,
+                latency_ms=hit_latency,
+                status_code=200,
+                stream=1 if stream else 0,
+                quota_snapshot=quota_snap,
+                cache_hit=1,
+                tokens_saved=tokens_saved
+            )
+        except Exception as e:
+            logger.error(f"Failed to record Anthropic cache hit: {e}")
+
+        try:
+            event_bus.broadcast_sync({
+                "type": "REQUEST_LOGGED",
+                "request_id": message_id,
+                "model": model,
+                "total_tokens": tokens_saved,
+                "cache_hit": True,
+                "tokens_saved": tokens_saved
+            })
+            event_bus.broadcast_sync({
+                "type": "CACHE_HIT",
+                "cache_key": cache_key,
+                "tokens_saved": tokens_saved,
+                "stats": db.get_cache_stats()
+            })
+        except Exception:
+            pass
+
+        if stream:
+            return StreamingResponse(
+                stream_cached_anthropic_sse(message_id, model, cached_res, prompt_tokens=p_tok),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "anthropic-version": anthropic_ver,
+                    "X-Cache": "HIT"
+                }
+            )
+        else:
+            return JSONResponse(
+                content=format_anthropic_non_stream_response(
+                    message_id=message_id,
+                    model=model,
+                    content_blocks=[{"type": "text", "text": cached_res.get("response_text", "")}],
+                    stop_reason="end_turn",
+                    prompt_tokens=p_tok,
+                    completion_tokens=c_tok,
+                    cache_read_tokens=tokens_saved
+                ),
+                headers={"anthropic-version": anthropic_ver, "X-Cache": "HIT"}
+            )
+
+    # 5. Mid-Flight Account Failover Pool
+    ordered_accounts = AccountFailoverPool.get_ordered_accounts(
+        accounts=accounts,
+        active_account=active_acc,
+        model=model,
+        quota_cache=QuotaMonitor.get_cached_quotas()
+    )
+
+    cache_meta = {
+        "eligible": cache_eligible,
+        "cache_key": cache_key,
+        "prompt_hash": prompt_hash,
+        "preview": prompt_preview,
+        "ttl": cache_cfg.get("ttl_seconds", 86400)
+    }
+
+    if stream:
+        return StreamingResponse(
+            stream_anthropic_sse(
+                ordered_accounts=ordered_accounts,
+                model=model,
+                req_payload=req_payload,
+                message_id=message_id,
+                created=created,
+                cache_meta=cache_meta
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "anthropic-version": anthropic_ver,
+                "X-Cache": "MISS"
+            }
+        )
+
+    # Non-streaming Request Flow
+    start_t = time.time()
+    prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
+    timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        for attempt, account in enumerate(ordered_accounts):
+            account_email = account.get("email", "")
+            try:
+                access_token = await get_access_token(account)
+                project_id = account.get("projectId", "rising-fact-p41fc")
+                upstream_url = f"{ANTIGRAVITY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "Antigravity/2.24.0.0",
+                    "Accept": "text/event-stream"
+                }
+                wrapped_body = {
+                    "project": project_id,
+                    "model": model,
+                    "request": req_payload,
+                    "requestType": "agent",
+                    "userAgent": "antigravity",
+                    "requestId": "agent-" + uuid.uuid4().hex
+                }
+
+                req = client.build_request("POST", upstream_url, headers=headers, json=wrapped_body)
+                resp = await client.send(req, stream=True)
+
+                if resp.status_code in (429, 503):
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=120)
+                    logger.warning(
+                        f"[FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}. "
+                        f"Rotating account..."
+                    )
+                    try:
+                        event_bus.broadcast_sync({
+                            "type": "ACCOUNT_FAILOVER",
+                            "account": account_email,
+                            "status_code": resp.status_code
+                        })
+                    except Exception:
+                        pass
+                    continue
+
+                if resp.status_code != 200:
+                    err_text = await resp.aread()
+                    logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
+                    if attempt < len(ordered_accounts) - 1:
+                        continue
+                    raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
+
+                content_blocks: List[Dict[str, Any]] = []
+                accumulated_text = ""
+                completion_tokens = 0
+                stop_reason = "end_turn"
+
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    raw_json = line[len("data:"):].strip()
+                    if not raw_json or raw_json == "[DONE]":
+                        continue
+                    try:
+                        payload = json.loads(raw_json)
+                        response_obj = payload.get("response", payload)
+                        usage = response_obj.get("usageMetadata", {})
+                        if usage.get("promptTokenCount"):
+                            prompt_tokens = usage["promptTokenCount"]
+                        if usage.get("candidatesTokenCount"):
+                            completion_tokens = usage["candidatesTokenCount"]
+
+                        candidates = response_obj.get("candidates", [])
+                        if candidates:
+                            cand = candidates[0]
+                            parts = cand.get("content", {}).get("parts", [])
+                            for p in parts:
+                                if p.get("text"):
+                                    accumulated_text += p["text"]
+                                elif p.get("functionCall"):
+                                    fn = p["functionCall"]
+                                    call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
+                                    fn_name = fn.get("name", "tool")
+                                    fn_args = fn.get("args", {})
+                                    content_blocks.append({
+                                        "type": "tool_use",
+                                        "id": call_id,
+                                        "name": fn_name,
+                                        "input": fn_args if isinstance(fn_args, dict) else {}
+                                    })
+                                    stop_reason = "tool_use"
+                    except Exception:
+                        continue
+
+                if accumulated_text:
+                    content_blocks.insert(0, {"type": "text", "text": accumulated_text})
+
+                if not completion_tokens:
+                    completion_tokens = max(1, len(accumulated_text) // 4)
+
+                latency_ms = round((time.time() - start_t) * 1000, 1)
+                telemetry.record_usage(
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=0,
+                    latency_ms=latency_ms
+                )
+
+                if cache_eligible and accumulated_text and stop_reason != "tool_use":
+                    try:
+                        db.cache_response(
+                            cache_key=cache_key,
+                            prompt_hash=prompt_hash,
+                            model=model,
+                            prompt_preview=prompt_preview,
+                            response_text=accumulated_text,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            reasoning_tokens=0,
+                            ttl_seconds=cache_cfg.get("ttl_seconds", 86400)
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to cache Anthropic non-stream response: {e}")
+
+                try:
+                    quota_snap = QuotaMonitor.get_cached_quotas(account_email)
+                    db.record_request_hit(
+                        request_id=message_id,
+                        timestamp=created,
+                        account_email=account_email,
+                        model=model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        reasoning_tokens=0,
+                        latency_ms=latency_ms,
+                        status_code=200,
+                        stream=0,
+                        quota_snapshot=quota_snap,
+                        cache_hit=0,
+                        tokens_saved=0
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to record Anthropic request hit: {e}")
+
+                try:
+                    event_bus.broadcast_sync({
+                        "type": "REQUEST_LOGGED",
+                        "request_id": message_id,
+                        "model": model,
+                        "total_tokens": prompt_tokens + completion_tokens,
+                        "cache_hit": False,
+                        "tokens_saved": 0
+                    })
+                except Exception:
+                    pass
+
+                return JSONResponse(
+                    content=format_anthropic_non_stream_response(
+                        message_id=message_id,
+                        model=model,
+                        content_blocks=content_blocks,
+                        stop_reason=stop_reason,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cache_read_tokens=0
+                    ),
+                    headers={"anthropic-version": anthropic_ver, "X-Cache": "MISS"}
+                )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"[FAILOVER (ANTHROPIC)] Connection failed for {account_email}: {e}")
+                if attempt == len(ordered_accounts) - 1:
+                    raise HTTPException(status_code=502, detail=f"All upstream accounts exhausted: {e}")
+                continue
+
+    raise HTTPException(status_code=502, detail="Failed to connect to upstream Antigravity accounts.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Prime Gate Antigravity Proxy Core Server")
     parser.add_argument("--port", type=int, default=DEFAULT_API_PORT, help="Port to listen on")
@@ -1775,11 +2195,13 @@ def main():
 
     print(f"\n=======================================================")
     print(f"  PRIME GATE PROXY ANTIGRAVITY (v{__version__}) - {__codename__}")
-    print(f"  Running on: http://{args.host}:{args.port}")
-    print(f"  OpenAI API: http://{args.host}:{args.port}/v1")
+    print(f"  Running on:    http://{args.host}:{args.port}")
+    print(f"  OpenAI API:    http://{args.host}:{args.port}/v1/chat/completions")
+    print(f"  Anthropic API: http://{args.host}:{args.port}/v1/messages")
     print(f"=======================================================\n")
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+
 
 if __name__ == "__main__":
     main()
