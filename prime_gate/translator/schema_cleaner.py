@@ -8,7 +8,7 @@ UNSUPPORTED_CONSTRAINTS = [
 UNSUPPORTED_KEYWORDS = [
     *UNSUPPORTED_CONSTRAINTS,
     "$schema", "$defs", "definitions", "const", "$ref", "additionalProperties",
-    "propertyNames", "title", "$id", "$comment"
+    "propertyNames", "title", "$id", "$comment", "prefixItems"
 ]
 
 EMPTY_PLACEHOLDER_NAME = "placeholder"
@@ -161,6 +161,21 @@ def add_empty_schema_placeholder(schema: Any) -> Any:
             res[k] = add_empty_schema_placeholder(v)
     return res
 
+def fix_array_items(schema: Any) -> Any:
+    if isinstance(schema, list):
+        return [fix_array_items(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    res = dict(schema)
+    if res.get("type") == "array":
+        items = res.get("items")
+        if not items or not isinstance(items, dict) or not items.get("type"):
+            res["items"] = {"type": "string"}
+    for k, v in list(res.items()):
+        if isinstance(v, (dict, list)):
+            res[k] = fix_array_items(v)
+    return res
+
 def clean_schema_for_antigravity(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Complete sanitization pipeline for OpenAPI JSON schemas."""
     if not schema or not isinstance(schema, dict):
@@ -180,4 +195,5 @@ def clean_schema_for_antigravity(schema: Optional[Dict[str, Any]]) -> Dict[str, 
     s = remove_unsupported_keywords(s)
     s = cleanup_required_fields(s)
     s = add_empty_schema_placeholder(s)
+    s = fix_array_items(s)
     return s

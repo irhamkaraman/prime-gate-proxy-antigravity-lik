@@ -123,6 +123,28 @@ class TestAnthropicCompatibility(unittest.TestCase):
         self.assertEqual(contents[2]["role"], "user")
         self.assertEqual(contents[2]["parts"][0]["functionResponse"]["name"], "get_weather")
 
+    def test_schema_cleaner_array_and_prefix_items(self):
+        from prime_gate.translator.schema_cleaner import clean_schema_for_antigravity
+        dirty_schema = {
+            "type": "object",
+            "properties": {
+                "filters": {
+                    "type": "array",
+                    "items": {
+                        "type": "array",
+                        "prefixItems": [{"type": "string"}]
+                    }
+                }
+            }
+        }
+        cleaned = clean_schema_for_antigravity(dirty_schema)
+        props = cleaned["properties"]["filters"]
+        self.assertEqual(props["type"], "array")
+        self.assertIn("items", props)
+        self.assertNotIn("prefixItems", props["items"])
+        self.assertEqual(props["items"]["type"], "array")
+        self.assertEqual(props["items"]["items"]["type"], "string")
+
     def test_anthropic_to_openai_messages_normalization(self):
         body = {
             "system": "System instructions here.",
