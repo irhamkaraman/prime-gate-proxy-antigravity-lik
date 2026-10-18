@@ -4,6 +4,6 @@ Production-grade, OpenAI-compatible proxy gateway for Google Antigravity.
 Created with love for high-performance AI workflows.
 """
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 __codename__ = "Phoenix"
 __author__ = "irhamkaraman"

@@ -3,7 +3,8 @@ from .request_converter import transform_openai_to_antigravity, resolve_model_na
 from .response_converter import (
     format_sse_chunk,
     format_non_stream_response,
-    extract_text_tool_calls
+    extract_text_tool_calls,
+    normalize_tool_call
 )
 
 __all__ = [
@@ -14,5 +15,6 @@ __all__ = [
     "format_sse_chunk",
     "format_non_stream_response",
     "extract_text_tool_calls",
+    "normalize_tool_call",
 ]
 

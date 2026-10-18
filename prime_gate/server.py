@@ -24,7 +24,8 @@ from .translator import (
     transform_openai_to_antigravity,
     format_sse_chunk,
     format_non_stream_response,
-    extract_text_tool_calls
+    extract_text_tool_calls,
+    normalize_tool_call
 )
 from .db import db, event_bus, WebSocketLogHandler
 from .db.sentinel import sentinel
@@ -861,49 +862,8 @@ async def stream_antigravity_sse(
                             fn_call = part["functionCall"]
                             call_id = fn_call.get("id") or ("call_" + uuid.uuid4().hex[:8])
                             raw_name = fn_call.get("name", "")
-                            if raw_name.startswith("default_api:"):
-                                raw_name = raw_name.split(":", 1)[1]
-                            fn_name = raw_name
-
-                            if fn_name in ("shell", "run_command", "exec", "terminal"):
-                                for cand in ("bash", "shell", "run_command", "exec", "terminal", "execute_command"):
-                                    if cand in declared_names:
-                                        fn_name = cand
-                                        break
-                            elif fn_name in ("view_file", "read_file", "cat", "readFile", "read"):
-                                for cand in ("read_file", "read", "readFile", "view_file", "cat"):
-                                    if cand in declared_names:
-                                        fn_name = cand
-                                        break
-                            elif fn_name in ("write_to_file", "write_file", "edit_file", "writeFile", "write", "edit"):
-                                for cand in ("write_file", "write", "writeFile", "edit_file", "edit", "write_to_file"):
-                                    if cand in declared_names:
-                                        fn_name = cand
-                                        break
-                            elif fn_name in ("list_dir", "list_files", "ls", "listFiles", "list"):
-                                for cand in ("list_dir", "list_files", "list", "listFiles", "ls"):
-                                    if cand in declared_names:
-                                        fn_name = cand
-                                        break
-
-                            args = fn_call.get("args", {})
-                            if isinstance(args, str):
-                                try:
-                                    args = json.loads(args)
-                                except Exception:
-                                    args = {}
-                            if fn_name in declared_names:
-                                tool_def = declared_names[fn_name]
-                                params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or {}
-                                props = params.get("properties") if isinstance(params, dict) else None
-                                if props and isinstance(props, dict):
-                                    if "cmd" in props and "command" in args and "cmd" not in args:
-                                        args["cmd"] = args.pop("command")
-                                    elif "command" in props and "cmd" in args and "command" not in args:
-                                        args["command"] = args.pop("cmd")
-                                    filtered = {k: v for k, v in args.items() if k in props}
-                                    if filtered:
-                                        args = filtered
+                            raw_args = fn_call.get("args", {})
+                            fn_name, args = normalize_tool_call(raw_name, raw_args, declared_tools)
 
                             yield format_sse_chunk(
                                 completion_id, created, model,
@@ -1285,12 +1245,15 @@ async def chat_completions(request: Request):
                                         elif p.get("functionCall"):
                                             fn = p["functionCall"]
                                             call_id = fn.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                                            raw_name = fn.get("name", "")
+                                            raw_args = fn.get("args", {})
+                                            fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
                                             tool_calls.append({
                                                 "id": call_id,
                                                 "type": "function",
                                                 "function": {
-                                                    "name": fn.get("name"),
-                                                    "arguments": json.dumps(fn.get("args", {}))
+                                                    "name": fn_name,
+                                                    "arguments": json.dumps(args)
                                                 }
                                             })
                             except Exception:

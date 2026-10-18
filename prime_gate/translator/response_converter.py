@@ -79,6 +79,147 @@ def parse_antigravity_args(raw: str) -> Dict[str, Any]:
             
     return args
 
+def normalize_tool_call(
+    raw_fn_name: str,
+    raw_args: Any,
+    declared_tools: Optional[List[Dict[str, Any]]] = None
+) -> Tuple[str, Dict[str, Any]]:
+    """
+    Standardize tool names and parameter dictionaries across different AI agents
+    (OpenCode, Continue, Cursor, Claude Code, Aider, etc.) and Google Antigravity backends.
+
+    1. Resolves tool name aliases without overriding an already-matching declared tool.
+    2. Maps common parameter aliases (path, content, command, old/new string).
+    3. Guarantees required properties (like content: "") to prevent Zod schema crashes.
+    4. Strips extraneous metadata that causes strict schema validators to reject calls.
+    """
+    # 1. Parse raw_args safely
+    if isinstance(raw_args, str):
+        try:
+            parsed_args = json.loads(raw_args)
+            if not isinstance(parsed_args, dict):
+                parsed_args = {}
+        except Exception:
+            parsed_args = parse_antigravity_args(raw_args)
+    elif isinstance(raw_args, dict):
+        parsed_args = dict(raw_args)
+    else:
+        parsed_args = {}
+
+    # 2. Sanitize function name
+    fn_name = (raw_fn_name or "").strip()
+    if fn_name.startswith("default_api:"):
+        fn_name = fn_name.split(":", 1)[1]
+
+    # 3. Build declared tool dictionary
+    declared_names = {}
+    if declared_tools and isinstance(declared_tools, list):
+        for t in declared_tools:
+            if isinstance(t, dict):
+                name = t.get("function", {}).get("name") or t.get("name")
+                if name:
+                    declared_names[name] = t
+
+    # 4. Map tool names ONLY if fn_name is not already declared by client
+    if fn_name not in declared_names:
+        if fn_name in ("shell", "run_command", "exec", "terminal", "execute_command", "bash"):
+            for cand in ("bash", "shell", "run_command", "exec", "terminal", "execute_command"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("view_file", "read_file", "cat", "readFile", "read", "read_file_content"):
+            for cand in ("read_file", "read", "readFile", "view_file", "read_file_content", "cat"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("edit_file", "edit", "replace_file_content", "str_replace_editor", "editFile"):
+            for cand in ("edit_file", "edit", "replace_file_content", "str_replace_editor", "editFile"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("write_to_file", "write_file", "writeFile", "write", "create_file"):
+            for cand in ("write_file", "write", "writeFile", "create_file", "write_to_file"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("list_dir", "list_files", "ls", "listFiles", "list", "directory_list"):
+            for cand in ("list_dir", "list_files", "list", "listFiles", "ls"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+
+        # Cross-fallback between edit and write ONLY if one is missing entirely from declared tools
+        if fn_name in ("edit_file", "edit", "replace_file_content") and fn_name not in declared_names:
+            for cand in ("write_file", "write", "writeFile"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+        elif fn_name in ("write_to_file", "write_file", "write") and fn_name not in declared_names:
+            for cand in ("edit_file", "edit"):
+                if cand in declared_names:
+                    fn_name = cand
+                    break
+
+    # 5. Parameter normalization and schema filtering
+    if fn_name in declared_names:
+        tool_def = declared_names[fn_name]
+        params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or {}
+        props = params.get("properties") if isinstance(params, dict) else None
+        required = set(params.get("required") or []) if isinstance(params, dict) else set()
+
+        if props and isinstance(props, dict):
+            # Command normalization
+            if "cmd" in props:
+                for alias in ("command", "CommandLine", "script", "input"):
+                    if alias in parsed_args and "cmd" not in parsed_args:
+                        parsed_args["cmd"] = parsed_args.pop(alias)
+            if "command" in props:
+                for alias in ("cmd", "CommandLine", "script", "input"):
+                    if alias in parsed_args and "command" not in parsed_args:
+                        parsed_args["command"] = parsed_args.pop(alias)
+
+            # Path normalization
+            for path_prop in ("path", "filePath", "file_path", "TargetFile", "target_file", "filepath", "file", "filename"):
+                if path_prop in props:
+                    for alias in ("AbsolutePath", "filePath", "file_path", "TargetFile", "target_file", "filepath", "path", "file", "filename"):
+                        if alias != path_prop and alias in parsed_args and path_prop not in parsed_args:
+                            parsed_args[path_prop] = parsed_args.pop(alias)
+
+            # Content normalization
+            for content_prop in ("content", "contents", "CodeContent", "code", "text", "data", "body", "file_text", "new_content"):
+                if content_prop in props:
+                    for alias in ("CodeContent", "content", "contents", "code", "text", "data", "body", "file_text", "new_content", "ReplacementContent"):
+                        if alias != content_prop and alias in parsed_args and content_prop not in parsed_args:
+                            parsed_args[content_prop] = parsed_args.pop(alias)
+
+            # Edit normalization (diff / surgical search & replace)
+            for old_prop in ("old_string", "pattern", "old_str", "search", "find", "target", "TargetContent"):
+                if old_prop in props:
+                    for alias in ("TargetContent", "old_string", "pattern", "old_str", "search", "find", "target"):
+                        if alias != old_prop and alias in parsed_args and old_prop not in parsed_args:
+                            parsed_args[old_prop] = parsed_args.pop(alias)
+
+            for new_prop in ("new_string", "replacement", "new_str", "replace", "ReplacementContent"):
+                if new_prop in props:
+                    for alias in ("ReplacementContent", "new_string", "replacement", "new_str", "replace"):
+                        if alias != new_prop and alias in parsed_args and new_prop not in parsed_args:
+                            parsed_args[new_prop] = parsed_args.pop(alias)
+
+            # Safety fallback for required keys to prevent client-side Zod validation failure
+            for req_key in required:
+                if req_key not in parsed_args:
+                    if req_key in ("content", "contents", "CodeContent", "text", "data", "body"):
+                        parsed_args[req_key] = ""
+                    elif req_key in ("overwrite", "Overwrite"):
+                        parsed_args[req_key] = True
+
+            # Filter unrecognized properties (like toolAction, toolSummary, timeout, Instruction, Description)
+            filtered_args = {k: v for k, v in parsed_args.items() if k in props}
+            if filtered_args:
+                parsed_args = filtered_args
+
+    return fn_name, parsed_args
+
 def extract_text_tool_calls(
     text: str,
     declared_tools: Optional[List[Dict[str, Any]]] = None
@@ -91,14 +232,6 @@ def extract_text_tool_calls(
     """
     if not text or "call:" not in text:
         return text, []
-
-    declared_names = {}
-    if declared_tools and isinstance(declared_tools, list):
-        for t in declared_tools:
-            if isinstance(t, dict):
-                fn_name = t.get("function", {}).get("name") or t.get("name")
-                if fn_name:
-                    declared_names[fn_name] = t
 
     header_pattern = re.compile(r'call:(?:[a-zA-Z0-9_\-]+:)?([a-zA-Z0-9_\-]+)\s*\{')
     pos = 0
@@ -154,57 +287,8 @@ def extract_text_tool_calls(
         raw_args = text[brace_start:brace_end + 1]
         pos = brace_end + 1
 
-        # Tool name mapping
-        fn_name = raw_name
-        if fn_name in ("shell", "run_command", "exec", "terminal"):
-            for cand in ("bash", "shell", "run_command", "exec", "terminal", "execute_command"):
-                if cand in declared_names:
-                    fn_name = cand
-                    break
-        elif fn_name in ("view_file", "read_file", "cat", "readFile", "read"):
-            for cand in ("read_file", "read", "readFile", "view_file", "cat"):
-                if cand in declared_names:
-                    fn_name = cand
-                    break
-        elif fn_name in ("write_to_file", "write_file", "edit_file", "writeFile", "write", "edit"):
-            for cand in ("write_file", "write", "writeFile", "edit_file", "edit", "write_to_file"):
-                if cand in declared_names:
-                    fn_name = cand
-                    break
-        elif fn_name in ("list_dir", "list_files", "ls", "listFiles", "list"):
-            for cand in ("list_dir", "list_files", "list", "listFiles", "ls"):
-                if cand in declared_names:
-                    fn_name = cand
-                    break
-
-        parsed_args = parse_antigravity_args(raw_args)
-
-        # Filter args against declared properties if known
-        if fn_name in declared_names:
-            tool_def = declared_names[fn_name]
-            params = tool_def.get("function", {}).get("parameters") or tool_def.get("parameters") or {}
-            props = params.get("properties") if isinstance(params, dict) else None
-            if props and isinstance(props, dict):
-                # Normalize common parameter aliases
-                if "cmd" in props and "command" in parsed_args and "cmd" not in parsed_args:
-                    parsed_args["cmd"] = parsed_args.pop("command")
-                elif "command" in props and "cmd" in parsed_args and "command" not in parsed_args:
-                    parsed_args["command"] = parsed_args.pop("cmd")
-
-                if "path" in props:
-                    for alias in ("AbsolutePath", "filePath", "file_path", "TargetFile", "target_file"):
-                        if alias in parsed_args and "path" not in parsed_args:
-                            parsed_args["path"] = parsed_args.pop(alias)
-
-                if "content" in props:
-                    for alias in ("CodeContent", "code", "text"):
-                        if alias in parsed_args and "content" not in parsed_args:
-                            parsed_args["content"] = parsed_args.pop(alias)
-
-                # Filter out unrecognized properties (like timeout) so strict schema validators don't crash
-                filtered_args = {k: v for k, v in parsed_args.items() if k in props}
-                if filtered_args:
-                    parsed_args = filtered_args
+        # Normalize tool name and args against declared tools
+        fn_name, parsed_args = normalize_tool_call(raw_name, raw_args, declared_tools)
 
         tool_calls.append({
             "index": call_idx,

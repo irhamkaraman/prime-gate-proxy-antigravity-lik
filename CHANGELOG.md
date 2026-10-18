@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.4] - 2026-10-18
+
+### 🐛 Critical Agent Loop Fix: Full Tool Call & Parameter Normalization
+
+#### 1. Eliminated Autonomous Agent Infinite Tool Call Loops
+- **Root Cause Resolution:** Fixed an issue where agents (OpenCode, Continue, Cursor, Claude Code) entering tool calling sequences (such as `edit gitignore`) became trapped in infinite execution loops failing with `Invalid arguments for tool "write": - content: Missing key`.
+- **Tool Name Collision Guard:** Previously, tool mapping heuristics aggressively checked candidate tool names in fixed order (`write_file`, `write`, `edit_file`, `edit`), causing surgical `edit` tool calls from the model to be forcibly renamed to `write` whenever the client declared both tools. `normalize_tool_call()` now enforces that if `fn_name` is already in the client's declared tools, it is strictly preserved without remapping.
+- **Dedicated Surgical Edit vs Whole-File Write Mappings:** Separated `edit` (surgical diff replacement: `old_string`, `new_string`, `pattern`, `replacement`, `TargetContent`, `ReplacementContent`) from `write` (complete file creation/overwriting: `path`, `content`, `TargetFile`, `CodeContent`), preventing tool signature mismatches across diverse agent frameworks.
+
+#### 2. Universal Parameter Alias Mapping & Strict Schema Validation
+- **Path & Content Aliasing:** Standardized bidirectional parameter alias translation across Antigravity native names (`TargetFile`, `CodeContent`, `AbsolutePath`, `filePath`, `file_path`, `code`, `text`, `contents`, `data`, `body`) and OpenAI standard parameters (`path`, `content`).
+- **Required Property Fallback:** Automatically sets safe defaults (such as `content: ""` for empty file creations or initial touches) whenever client-side Zod validation schemas declare `content` as strictly required, preventing client exceptions.
+- **Extraneous Metadata Filtering:** Transparently strips internal model metadata (`toolAction`, `toolSummary`, `timeout`, `Instruction`, `Description`) so strict schema validators do not reject tool invocations.
+- **Unified Engine Integration:** Consolidated parameter normalization into `normalize_tool_call()`, applied identically across SSE streaming chunks (`stream_antigravity_sse`), non-streaming completions (`/v1/chat/completions`), and text-block function call extractions (`extract_text_tool_calls`).
+
+---
+
 ## [1.1.3] - 2026-10-18
 
 ### 🚀 Model Benchmarks & Persistent Request Hit Ledger
