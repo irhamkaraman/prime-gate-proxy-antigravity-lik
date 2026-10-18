@@ -21,6 +21,7 @@ import {
   Eye,
   Sliders,
   Database,
+  Cpu,
 } from 'lucide-react';
 
 interface CachingUsagePageProps {
@@ -275,136 +276,25 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
 
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Top Sub-Bar: Clean Engine Status & Actions Toolbar (No duplicate title) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* Status Badge */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 14px',
-              borderRadius: 20,
-              background: config.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-              border: `1px solid ${config.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-            }}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: config.enabled ? '#10b981' : '#f59e0b',
-                boxShadow: config.enabled ? '0 0 8px #10b981' : 'none',
-              }}
-            />
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: config.enabled ? '#34d399' : '#fbbf24',
-                fontFamily: 'var(--font-mono)',
-                letterSpacing: '0.03em',
-              }}
-            >
-              {config.enabled ? 'SMART CACHE ACTIVE' : 'CACHE ENGINE PAUSED'}
-            </span>
-          </div>
+      {/* Top Action Triggers */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+        <button
+          onClick={refreshAll}
+          disabled={isRefreshing}
+          className="btn btn-secondary btn-sm"
+        >
+          <RefreshCw size={14} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+          <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+        </button>
 
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              borderRadius: 20,
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              fontSize: 11,
-              color: '#a8a29e',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            <Database size={12} color="#38bdf8" />
-            <span>SQLite WAL Mode &bull; CRC32 Verified</span>
-          </div>
-
-          {config.bypass_tools && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                padding: '6px 12px',
-                borderRadius: 20,
-                background: 'rgba(56, 189, 248, 0.1)',
-                border: '1px solid rgba(56, 189, 248, 0.25)',
-                fontSize: 11,
-                color: '#38bdf8',
-                fontWeight: 600,
-              }}
-            >
-              <Shield size={12} />
-              <span>Agent Safety Guard Active</span>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          {/* WebSocket Status Indicator */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 12px',
-              borderRadius: 20,
-              background: isWsConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-              border: `1px solid ${isWsConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
-            }}
-            title={isWsConnected ? 'Connected to live WebSocket stream' : 'Syncing via periodic background polling'}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: isWsConnected ? '#10b981' : '#f59e0b',
-                boxShadow: isWsConnected ? '0 0 8px #10b981' : 'none',
-              }}
-            />
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: isWsConnected ? '#10b981' : '#f59e0b',
-                fontFamily: 'var(--font-mono)',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {isWsConnected ? 'LIVE REALTIME' : 'POLLING SYNC'}
-            </span>
-          </div>
-
-          <button
-            onClick={refreshAll}
-            disabled={isRefreshing}
-            className="btn btn-secondary btn-sm"
-          >
-            <RefreshCw size={14} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
-            <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
-
-          <button
-            onClick={handleClearCacheModal}
-            className="btn btn-secondary btn-sm"
-            style={{ color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.3)' }}
-          >
-            <Trash2 size={14} />
-            <span>Purge Cache</span>
-          </button>
-        </div>
+        <button
+          onClick={handleClearCacheModal}
+          className="btn btn-secondary btn-sm"
+          style={{ color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.3)' }}
+        >
+          <Trash2 size={14} />
+          <span>Purge Cache</span>
+        </button>
       </div>
 
       {/* 4 Summary Analytics KPI Cards */}
@@ -416,7 +306,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
         }}
       >
         {/* Card 1: Total Tokens Saved */}
-        <div className="glass-card" style={{ padding: '20px 24px', borderLeft: '4px solid #10b981' }}>
+        <div className="glass-card" style={{ padding: '20px 24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Total Tokens Saved</span>
             <div
@@ -561,170 +451,278 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
             gap: 16,
           }}
         >
-          {/* Toggle 1: Smart Cache Enabled */}
+          {/* Card 1: Smart Cache Enabled */}
           <div
             style={{
               display: 'flex',
-              alignItems: 'flex-start',
+              flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '16px 18px',
-              borderRadius: 10,
+              padding: '18px 20px',
+              borderRadius: 12,
               background: 'rgba(0, 0, 0, 0.3)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
             }}
           >
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
-                Enable Smart Semantic Cache
-              </div>
-              <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4, lineHeight: 1.4 }}>
-                When enabled, requests with identical model and messages receive instantaneous cached responses.
-              </div>
-            </div>
-            <button
-              onClick={() => handleSaveConfig({ enabled: !config.enabled })}
-              disabled={isSavingConfig}
-              className={`btn btn-sm ${config.enabled ? 'btn-primary' : 'btn-secondary'}`}
-              style={{
-                marginLeft: 16,
-                padding: '6px 14px',
-                minWidth: 84,
-                background: config.enabled ? '#10b981' : undefined,
-                borderColor: config.enabled ? '#10b981' : undefined,
-                color: '#ffffff',
-                fontWeight: 600,
-              }}
-            >
-              {config.enabled ? 'Enabled' : 'Disabled'}
-            </button>
-          </div>
-
-          {/* Toggle 2: Agent Safety Boundary (Bypass on Tools) */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              padding: '16px 18px',
-              borderRadius: 10,
-              background: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
-                  Bypass on Dynamic Tools (Agent Safe)
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Zap size={16} color={config.enabled ? '#34d399' : '#78716c'} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                    Smart Semantic Cache
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: config.enabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                    color: config.enabled ? '#34d399' : '#78716c',
+                    border: `1px solid ${config.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                  }}
+                >
+                  {config.enabled ? 'ACTIVE' : 'OFF'}
                 </span>
-                <span className="badge badge-amber" style={{ fontSize: 10 }}>Recommended</span>
               </div>
-              <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4, lineHeight: 1.4 }}>
-                Prevents stale state when AI coding agents execute file operations, terminal commands, or live tools.
-              </div>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
+                When enabled, requests with identical model and messages receive instantaneous cached responses without consuming quota.
+              </p>
             </div>
-            <button
-              onClick={() => handleSaveConfig({ bypass_tools: !config.bypass_tools })}
-              disabled={isSavingConfig}
-              className={`btn btn-sm ${config.bypass_tools ? 'btn-primary' : 'btn-secondary'}`}
-              style={{
-                marginLeft: 16,
-                padding: '6px 14px',
-                minWidth: 84,
-                background: config.bypass_tools ? '#38bdf8' : undefined,
-                borderColor: config.bypass_tools ? '#38bdf8' : undefined,
-                color: '#ffffff',
-                fontWeight: 600,
-              }}
-            >
-              {config.bypass_tools ? 'Active' : 'Off'}
-            </button>
+
+            <div style={{ marginTop: 18 }}>
+              <button
+                onClick={() => handleSaveConfig({ enabled: !config.enabled })}
+                disabled={isSavingConfig}
+                className={`btn btn-sm ${config.enabled ? 'btn-primary' : 'btn-secondary'}`}
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '7px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: config.enabled ? '#10b981' : undefined,
+                  borderColor: config.enabled ? '#10b981' : undefined,
+                  color: '#ffffff',
+                }}
+              >
+                {config.enabled ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
           </div>
 
-          {/* Setting 3: Min Prompt Length */}
+          {/* Card 2: Agent Safety Boundary (Bypass on Tools) */}
           <div
             style={{
               display: 'flex',
-              alignItems: 'flex-start',
+              flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '16px 18px',
-              borderRadius: 10,
+              padding: '18px 20px',
+              borderRadius: 12,
               background: 'rgba(0, 0, 0, 0.3)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
             }}
           >
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
-                Minimum Prompt Length
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Shield size={16} color={config.bypass_tools ? '#38bdf8' : '#78716c'} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                    Bypass Dynamic Tools
+                  </span>
+                </div>
+                <span className="badge badge-amber" style={{ fontSize: 10, padding: '2px 6px' }}>Recommended</span>
               </div>
-              <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4, lineHeight: 1.4 }}>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
+                Prevents stale state when AI coding agents execute file operations, terminal commands, or live dynamic tools.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <button
+                onClick={() => handleSaveConfig({ bypass_tools: !config.bypass_tools })}
+                disabled={isSavingConfig}
+                className={`btn btn-sm ${config.bypass_tools ? 'btn-primary' : 'btn-secondary'}`}
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '7px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: config.bypass_tools ? '#38bdf8' : undefined,
+                  borderColor: config.bypass_tools ? '#38bdf8' : undefined,
+                  color: '#ffffff',
+                }}
+              >
+                {config.bypass_tools ? 'Active (Safe)' : 'Off'}
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3: Min Prompt Length */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '18px 20px',
+              borderRadius: 12,
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Cpu size={16} color="#a78bfa" />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                    Minimum Prompt Length
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    color: '#c4b5fd',
+                  }}
+                >
+                  {config.min_prompt_length} chars
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
                 Short greetings or single-word inputs under this character count will skip cache storage.
-              </div>
+              </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
-              {[5, 10, 25].map(len => (
-                <button
-                  key={len}
-                  onClick={() => handleSaveConfig({ min_prompt_length: len })}
-                  className={`btn btn-sm ${config.min_prompt_length === len ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: 11,
-                    fontFamily: 'var(--font-mono)',
-                    background: config.min_prompt_length === len ? '#a78bfa' : undefined,
-                    borderColor: config.min_prompt_length === len ? '#a78bfa' : undefined,
-                  }}
-                >
-                  {len}c
-                </button>
-              ))}
+
+            <div style={{ marginTop: 18 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: 3,
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                }}
+              >
+                {[
+                  { len: 5, label: '5 chars' },
+                  { len: 10, label: '10 chars' },
+                  { len: 25, label: '25 chars' },
+                ].map(item => {
+                  const isActive = config.min_prompt_length === item.len;
+                  return (
+                    <button
+                      key={item.len}
+                      onClick={() => handleSaveConfig({ min_prompt_length: item.len })}
+                      disabled={isSavingConfig}
+                      style={{
+                        padding: '6px 0',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                        fontFamily: 'var(--font-mono)',
+                        textAlign: 'center',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: isActive ? '#a78bfa' : 'transparent',
+                        color: isActive ? '#ffffff' : '#a8a29e',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {/* Setting 4: Cache Retention TTL */}
+          {/* Card 4: Cache Retention TTL */}
           <div
             style={{
               display: 'flex',
-              alignItems: 'flex-start',
+              flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '16px 18px',
-              borderRadius: 10,
+              padding: '18px 20px',
+              borderRadius: 12,
               background: 'rgba(0, 0, 0, 0.3)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
             }}
           >
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
-                Cache Retention (TTL)
-              </div>
-              <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4, lineHeight: 1.4 }}>
-                Entries older than this period can be scheduled for auto-pruning.
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
-              {[
-                { label: '7d', sec: 604800 },
-                { label: '14d', sec: 1209600 },
-                { label: '30d', sec: 2592000 },
-              ].map(item => (
-                <button
-                  key={item.label}
-                  onClick={() => handleSaveConfig({ ttl_seconds: item.sec })}
-                  className={`btn btn-sm ${config.ttl_seconds === item.sec ? 'btn-primary' : 'btn-secondary'}`}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Clock size={16} color="#f59e0b" />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                    Cache Retention (TTL)
+                  </span>
+                </div>
+                <span
                   style={{
-                    padding: '4px 10px',
                     fontSize: 11,
                     fontFamily: 'var(--font-mono)',
-                    background: config.ttl_seconds === item.sec ? '#f59e0b' : undefined,
-                    borderColor: config.ttl_seconds === item.sec ? '#f59e0b' : undefined,
+                    fontWeight: 700,
+                    color: '#fbbf24',
                   }}
                 >
-                  {item.label}
-                </button>
-              ))}
+                  {config.ttl_seconds === 604800 ? '7 Days' : config.ttl_seconds === 1209600 ? '14 Days' : '30 Days'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
+                Entries older than this period can be scheduled for auto-pruning to preserve disk space.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 18 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 6,
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  padding: 3,
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                }}
+              >
+                {[
+                  { sec: 604800, label: '7 Days' },
+                  { sec: 1209600, label: '14 Days' },
+                  { sec: 2592000, label: '30 Days' },
+                ].map(item => {
+                  const isActive = config.ttl_seconds === item.sec;
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => handleSaveConfig({ ttl_seconds: item.sec })}
+                      disabled={isSavingConfig}
+                      style={{
+                        padding: '6px 0',
+                        fontSize: 11,
+                        fontWeight: isActive ? 700 : 500,
+                        fontFamily: 'var(--font-mono)',
+                        textAlign: 'center',
+                        borderRadius: 6,
+                        border: 'none',
+                        background: isActive ? '#f59e0b' : 'transparent',
+                        color: isActive ? '#ffffff' : '#a8a29e',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
