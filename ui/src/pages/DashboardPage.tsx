@@ -101,7 +101,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Throughput Speed</span>
-            <div className="pulse-dot" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
@@ -127,7 +126,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Tokens Consumed Today</span>
-            <span className="badge badge-amber">24h Rolling</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
@@ -233,7 +231,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Average Latency (TTFT)</span>
-            <span className="badge badge-emerald">Optimal</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
@@ -259,7 +256,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Cumulative Handled</span>
-            <span className="badge badge-neutral">All-time</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
             <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>

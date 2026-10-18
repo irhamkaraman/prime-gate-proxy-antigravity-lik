@@ -122,8 +122,9 @@ class ContextCompactor:
             msg_copy = copy.deepcopy(msg)
             role = msg_copy.get("role", "")
             
-            # System prompt and messages within the active window are preserved 100%
-            if role == "system" or idx >= cutoff_index:
+            # System prompt, early conversation prefix anchor (idx <= 1), and messages within active window are preserved 100%
+            # This ensures upstream Google Antigravity prefix cache byte boundary is never broken.
+            if role == "system" or idx <= 1 or idx >= cutoff_index:
                 compacted.append(msg_copy)
                 continue
 

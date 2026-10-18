@@ -44,7 +44,11 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
   const [entriesData, setEntriesData] = useState<CacheEntriesResponse | null>(null);
   const [config, setConfig] = useState<CacheConfig>({
     enabled: true,
-    bypass_tools: true,
+    bypass_tools: false,
+    semantic_enabled: true,
+    semantic_threshold: 0.93,
+    cache_mode: 'hybrid',
+    turn_based_keying: true,
     min_prompt_length: 5,
     ttl_seconds: 604800,
   });
@@ -373,8 +377,16 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               {(stats?.total_hits || 0).toLocaleString()} total cache hits
             </div>
           </div>
-          <div style={{ fontSize: 11, color: '#78716c', marginTop: 8 }}>
-            Intercepted before reaching Google Antigravity
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 11, fontFamily: 'var(--font-mono)', flexWrap: 'wrap' }}>
+            <span style={{ color: '#34d399', background: 'rgba(16, 185, 129, 0.1)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              Exact: {stats?.exact_hits ?? 0}
+            </span>
+            <span style={{ color: '#c4b5fd', background: 'rgba(167, 139, 250, 0.1)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(167, 139, 250, 0.2)' }}>
+              Semantic: {stats?.semantic_hits ?? 0}
+            </span>
+            <span style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+              Upstream: {stats?.upstream_hits ?? 0}
+            </span>
           </div>
         </div>
 
@@ -576,16 +588,16 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               padding: '20px',
               borderRadius: 14,
               background: 'rgba(0, 0, 0, 0.35)',
-              border: `1px solid ${config.bypass_tools ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+              border: `1px solid ${!config.bypass_tools ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
               minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Shield size={16} color={config.bypass_tools ? '#38bdf8' : '#78716c'} />
+                  <Shield size={16} color={!config.bypass_tools ? '#34d399' : '#f59e0b'} />
                   <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
-                    Bypass Dynamic Tools
+                    Agent Tools Handling
                   </span>
                 </div>
                 <span
@@ -595,53 +607,23 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                     fontWeight: 700,
                     padding: '2px 8px',
                     borderRadius: 12,
-                    background: config.bypass_tools ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                    color: config.bypass_tools ? '#38bdf8' : '#78716c',
-                    border: `1px solid ${config.bypass_tools ? 'rgba(56, 189, 248, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                    background: !config.bypass_tools ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                    color: !config.bypass_tools ? '#34d399' : '#fbbf24',
+                    border: `1px solid ${!config.bypass_tools ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
                   }}
                 >
-                  {config.bypass_tools ? 'ACTIVE (SAFE)' : 'OFF'}
+                  {!config.bypass_tools ? 'SMART (CODING READY)' : 'STRICT BYPASS'}
                 </span>
               </div>
               <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
-                Prevents stale state when AI coding agents execute file operations, terminal commands, or live dynamic tools.
+                {!config.bypass_tools
+                  ? 'Turn-based caching active. Responses with text are cached even when coding tools are declared. Tool executions bypass automatically.'
+                  : 'Strict bypass active. Any request declaring tool functions is immediately bypassed without checking cache.'}
               </p>
             </div>
 
             <div style={{ marginTop: 18 }}>
-              {config.bypass_tools ? (
-                <button
-                  onClick={() => handleSaveConfig({ bypass_tools: false })}
-                  disabled={isSavingConfig}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    padding: '8px 14px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    borderRadius: 8,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    background: 'rgba(244, 63, 94, 0.08)',
-                    border: '1px solid rgba(244, 63, 94, 0.25)',
-                    color: '#f87171',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.16)';
-                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.25)';
-                  }}
-                >
-                  <Power size={13} />
-                  <span>Disable Tool Bypass</span>
-                </button>
-              ) : (
+              {!config.bypass_tools ? (
                 <button
                   onClick={() => handleSaveConfig({ bypass_tools: true })}
                   disabled={isSavingConfig}
@@ -657,14 +639,46 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                     borderRadius: 8,
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
-                    background: '#0284c7',
-                    border: '1px solid #0284c7',
-                    color: '#ffffff',
-                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1px solid rgba(245, 158, 11, 0.25)',
+                    color: '#fbbf24',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(245, 158, 11, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.25)';
                   }}
                 >
                   <Shield size={13} />
-                  <span>Enable Tool Bypass (Safe)</span>
+                  <span>Switch to Strict Bypass</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSaveConfig({ bypass_tools: false })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: '#10b981',
+                    border: '1px solid #10b981',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                  }}
+                >
+                  <Zap size={13} />
+                  <span>Enable Smart Agent Cache (Recommended)</span>
                 </button>
               )}
             </div>
@@ -1127,6 +1141,129 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                 >
                   <ShieldAlert size={13} />
                   <span>Activate Sentinel</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Card 7: FastEmbed Vector Semantic Engine */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: `1px solid ${config.semantic_enabled !== false ? 'rgba(167, 139, 250, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+              minHeight: 230,
+            }}
+          >
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Cpu size={16} color={config.semantic_enabled !== false ? '#c4b5fd' : '#78716c'} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                    Vector Semantic Cache
+                  </span>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: config.semantic_enabled !== false ? 'rgba(167, 139, 250, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                    color: config.semantic_enabled !== false ? '#c4b5fd' : '#78716c',
+                    border: `1px solid ${config.semantic_enabled !== false ? 'rgba(167, 139, 250, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                  }}
+                >
+                  {config.semantic_enabled !== false ? 'ONNX CPU' : 'OFF'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
+                Local BAAI/bge-small-en-v1.5 embeddings for cosine similarity matching. Intercepts paraphrased prompts without exact character matching.
+              </p>
+              
+              {/* Threshold Slider */}
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#a8a29e', marginBottom: 4 }}>
+                  <span>Similarity Threshold:</span>
+                  <span style={{ color: '#c4b5fd', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {Math.round((config.semantic_threshold ?? 0.93) * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.80"
+                  max="0.99"
+                  step="0.01"
+                  value={config.semantic_threshold ?? 0.93}
+                  onChange={e => handleSaveConfig({ semantic_threshold: parseFloat(e.target.value) })}
+                  disabled={isSavingConfig}
+                  style={{ width: '100%', accentColor: '#a78bfa', cursor: 'pointer' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              {config.semantic_enabled !== false ? (
+                <button
+                  onClick={() => handleSaveConfig({ semantic_enabled: false })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    color: '#f87171',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.25)';
+                  }}
+                >
+                  <Power size={13} />
+                  <span>Turn Off Semantic Matching</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSaveConfig({ semantic_enabled: true })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: '#a78bfa',
+                    border: '1px solid #a78bfa',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(167, 139, 250, 0.25)',
+                  }}
+                >
+                  <Cpu size={13} />
+                  <span>Enable Semantic Matching</span>
                 </button>
               )}
             </div>

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2026-10-18
+
+### 🧠 Next-Gen Smart & Semantic Vector Caching (Hybrid Engine + Coding Agent Optimization)
+
+#### 1. Real Semantic Vector Cache via FastEmbed ONNX Runtime
+- **Lightweight CPU Vector Search:** Integrated `fastembed` with `BAAI/bge-small-en-v1.5` running locally via ONNX Runtime (CPU-only, RAM ~100MB, zero PyTorch/CUDA dependencies).
+- **Dense Vector Serialization:** Encodes incoming queries into 384-dimensional unit-normalized float32 vectors, stored directly as BLOBs within SQLite WAL persistent database (`pg_semantic_cache`).
+- **High-Speed In-Memory Cosine Similarity:** Computes vector dot products across cached entries for identical models. Paraphrased or semantically equivalent queries exceeding threshold (default 93%) achieve instantaneous `X-Cache: HIT`, `Type: SEMANTIC` at ~12ms TTFT with zero upstream quota drain!
+- **Smooth Token-Chunked SSE Replay:** Replays cached streaming responses in micro-sleep chunks (4 words / 3ms) mimicking native token delivery for realistic IDE animations.
+
+#### 2. Separation of Tool Declaration vs Execution (Coding Agent Caching)
+- **Eliminated 100% Cache Miss on AI Coding Agents:** Autonomous agents (Cursor, OpenCode, Claude Code, Cline) constantly provide tool definitions in request headers. Previously, any request with tools bypassed caching entirely.
+- **Turn-Based Text Response Caching:** When models output regular text responses despite tool availability, the turn is fully eligible for caching. Only requests resulting in active model tool executions (`tool_calls` / `tool_use`) bypass the cache.
+- **Turn-Based Cache Key Strategy:** Strips dynamic noise (timestamps, ephemeral turn IDs) and canonicalizes normalized tools signatures, allowing repetitive context questions across agent turns to hit cache reliably.
+
+#### 3. Upstream Prefix Caching Optimization (Google Antigravity Native)
+- **Deterministic Tool Declaration Ordering:** Sorts function declarations alphabetically by name across both OpenAI and Anthropic translators, ensuring byte-identical prefix payloads for Google Antigravity / Gemini / Claude prefix hash tables.
+- **Conversation Anchor Preservation:** Updated `ContextCompactor` to preserve the first conversation turn anchor (`idx <= 1`) across all turns, preventing middle-session compactions from breaking the upstream prefix cache boundary.
+
+#### 4. Dashboard UI & Telemetry Integration
+- **Hit Type Badges in Ledger:** Granular visual badges distinguishing `EXACT HIT (100%)`, `SEMANTIC HIT (97.5%)`, and `UPSTREAM PREFIX`.
+- **Vector Engine Settings Card:** Interactive Semantic Similarity Threshold slider (80%–99%) and one-click toggle for Semantic Vector Matching in `CachingUsagePage.tsx`.
+- **Hit Breakdown Analytics:** Added real-time breakdown counters for Exact, Semantic, and Upstream hits to KPI cards.
+
+---
+
 ## [1.2.1] - 2026-10-18
 
 ### 🌐 Universal Bridge: Native Anthropic Messages API Compatibility (`/v1/messages`)

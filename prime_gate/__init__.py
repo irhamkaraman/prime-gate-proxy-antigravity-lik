@@ -4,6 +4,6 @@ Production-grade, OpenAI & Anthropic compatible proxy gateway for Google Antigra
 Created with love for high-performance AI workflows.
 """
 
-__version__ = "1.2.1"
-__codename__ = "Universal Bridge"
+__version__ = "1.2.2"
+__codename__ = "Semantic Vector Core"
 __author__ = "irhamkaraman"

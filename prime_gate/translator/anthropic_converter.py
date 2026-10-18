@@ -1,6 +1,7 @@
 import json
 import uuid
 import time
+import asyncio
 import logging
 import hashlib
 from typing import Dict, Any, Tuple, List, Optional, AsyncGenerator
@@ -279,6 +280,8 @@ def transform_anthropic_to_antigravity(
                 "parameters": cleaned_params
             })
         if declarations:
+            # Deterministic sorting by function name ensures consistent upstream byte prefix caching
+            declarations.sort(key=lambda d: d.get("name", ""))
             tools_list.append({"functionDeclarations": declarations})
 
     # Tool choice
@@ -429,13 +432,21 @@ async def stream_cached_anthropic_sse(
         "content_block": {"type": "text", "text": ""}
     })
 
-    # 3. content_block_delta
+    # 3. content_block_delta (stream in smooth token chunks)
     if response_text:
-        yield format_anthropic_sse_event("content_block_delta", {
-            "type": "content_block_delta",
-            "index": 0,
-            "delta": {"type": "text_delta", "text": response_text}
-        })
+        words = response_text.split(" ")
+        chunk_size = 4
+        for i in range(0, len(words), chunk_size):
+            chunk = " ".join(words[i:i + chunk_size])
+            if i + chunk_size < len(words):
+                chunk += " "
+            yield format_anthropic_sse_event("content_block_delta", {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": chunk}
+            })
+            if len(words) > 8:
+                await asyncio.sleep(0.003)
 
     # 4. content_block_stop
     yield format_anthropic_sse_event("content_block_stop", {
@@ -692,16 +703,25 @@ async def stream_anthropic_sse(
             full_text = "".join(accumulated_content)
             if cache_meta and cache_meta.get("eligible") and full_text and not has_emitted_tool:
                 try:
-                    db.cache_response(
-                        cache_key=cache_meta["cache_key"],
-                        prompt_hash=cache_meta["prompt_hash"],
-                        model=model,
-                        prompt_preview=cache_meta["preview"],
+                    emb_bytes = None
+                    last_q = cache_meta.get("last_user_query")
+                    if last_q:
+                        from ..cache.semantic import SemanticVectorEngine
+                        q_vec = SemanticVectorEngine.embed_text(last_q)
+                        if q_vec is not None:
+                            emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
+
+                    db.store_cached_response(
+                        cache_key=cache_meta.get("cache_key") or cache_meta.get("key"),
+                        prompt_hash=cache_meta.get("prompt_hash") or cache_meta.get("hash"),
+                        prompt_preview=cache_meta.get("preview") or cache_meta.get("prompt_preview"),
                         response_text=full_text,
+                        model=model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         reasoning_tokens=0,
-                        ttl_seconds=cache_meta.get("ttl", 86400)
+                        embedding=emb_bytes,
+                        tools_signature=cache_meta.get("tools_sig")
                     )
                 except Exception as e:
                     logger.warning(f"Failed to cache Anthropic response: {e}")

@@ -702,22 +702,58 @@ export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({
                       <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                         {log.cache_hit ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <span
-                              style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3,
-                                padding: '2px 6px',
-                                borderRadius: 4,
-                                background: 'rgba(16, 185, 129, 0.15)',
-                                border: '1px solid rgba(16, 185, 129, 0.3)',
-                                color: '#34d399',
-                              }}
-                            >
-                              <Zap size={10} /> CACHE HIT
-                            </span>
+                            {log.cache_hit_type === 2 ? (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  background: 'rgba(167, 139, 250, 0.15)',
+                                  border: '1px solid rgba(167, 139, 250, 0.3)',
+                                  color: '#c4b5fd',
+                                }}
+                              >
+                                <Zap size={10} /> SEMANTIC HIT {log.similarity_score ? `(${(log.similarity_score * 100).toFixed(1)}%)` : ''}
+                              </span>
+                            ) : log.cache_hit_type === 3 ? (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  background: 'rgba(56, 189, 248, 0.15)',
+                                  border: '1px solid rgba(56, 189, 248, 0.3)',
+                                  color: '#38bdf8',
+                                }}
+                              >
+                                <Zap size={10} /> UPSTREAM PREFIX
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  background: 'rgba(16, 185, 129, 0.15)',
+                                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                                  color: '#34d399',
+                                }}
+                              >
+                                <Zap size={10} /> EXACT HIT
+                              </span>
+                            )}
                             <span style={{ color: '#10b981', fontWeight: 600 }}>
                               +{(log.tokens_saved || log.total_tokens).toLocaleString()} saved
                             </span>

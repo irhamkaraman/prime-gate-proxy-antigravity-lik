@@ -119,6 +119,16 @@ class BinaryDatabaseEngine:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_key ON pg_semantic_cache(cache_key);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_model ON pg_semantic_cache(model);")
 
+        # Idempotent column migrations for pg_semantic_cache
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN embedding BLOB;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN tools_signature TEXT;")
+        except Exception:
+            pass
+
         # Idempotent column migrations for pg_request_logs
         try:
             conn.execute("ALTER TABLE pg_request_logs ADD COLUMN cache_hit INTEGER NOT NULL DEFAULT 0;")
@@ -126,6 +136,14 @@ class BinaryDatabaseEngine:
             pass
         try:
             conn.execute("ALTER TABLE pg_request_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_request_logs ADD COLUMN cache_hit_type INTEGER NOT NULL DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_request_logs ADD COLUMN similarity_score REAL NOT NULL DEFAULT 0.0;")
         except Exception:
             pass
 
@@ -388,7 +406,9 @@ class BinaryDatabaseEngine:
         stream: int = 0,
         quota_snapshot: Optional[Any] = None,
         cache_hit: int = 0,
-        tokens_saved: int = 0
+        tokens_saved: int = 0,
+        cache_hit_type: int = 0,
+        similarity_score: float = 0.0
     ) -> bool:
         """Records a granular API request hit into the persistent database ledger."""
         try:
@@ -407,13 +427,13 @@ class BinaryDatabaseEngine:
                     request_id, timestamp, account_email, model,
                     prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
                     latency_ms, status_code, stream, quota_snapshot, created_at,
-                    cache_hit, tokens_saved
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    cache_hit, tokens_saved, cache_hit_type, similarity_score
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 request_id, timestamp or now, account_email, model,
                 prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
                 latency_ms, status_code, stream, quota_json, now,
-                cache_hit, tokens_saved
+                cache_hit, tokens_saved, cache_hit_type, similarity_score
             ))
             event_bus.notify_mutation("REQUEST_HIT", request_id, 0)
             return True
@@ -559,6 +579,8 @@ class BinaryDatabaseEngine:
             row_keys = r.keys()
             cache_hit_val = bool(r["cache_hit"]) if "cache_hit" in row_keys else False
             tokens_saved_val = (r["tokens_saved"] or 0) if "tokens_saved" in row_keys else 0
+            cache_hit_type_val = int(r["cache_hit_type"]) if "cache_hit_type" in row_keys else (1 if cache_hit_val else 0)
+            similarity_score_val = round(float(r["similarity_score"]), 3) if "similarity_score" in row_keys and r["similarity_score"] else 0.0
 
             logs.append({
                 "id": r["id"],
@@ -576,7 +598,9 @@ class BinaryDatabaseEngine:
                 "stream": bool(r["stream"]),
                 "quota_snapshot": quota_obj,
                 "cache_hit": cache_hit_val,
-                "tokens_saved": tokens_saved_val
+                "tokens_saved": tokens_saved_val,
+                "cache_hit_type": cache_hit_type_val,
+                "similarity_score": similarity_score_val
             })
 
         return {
@@ -597,6 +621,10 @@ class BinaryDatabaseEngine:
             return {
                 "enabled": True,
                 "bypass_tools": False,
+                "semantic_enabled": True,
+                "semantic_threshold": 0.93,
+                "cache_mode": "hybrid",
+                "turn_based_keying": True,
                 "min_prompt_length": 5,
                 "ttl_seconds": 86400 * 7,
                 "compactor_enabled": True,
@@ -608,6 +636,10 @@ class BinaryDatabaseEngine:
         return {
             "enabled": bool(cfg.get("enabled", True)),
             "bypass_tools": bool(cfg.get("bypass_tools", False)),
+            "semantic_enabled": bool(cfg.get("semantic_enabled", True)),
+            "semantic_threshold": float(cfg.get("semantic_threshold", 0.93)),
+            "cache_mode": str(cfg.get("cache_mode", "hybrid")),
+            "turn_based_keying": bool(cfg.get("turn_based_keying", True)),
             "min_prompt_length": int(cfg.get("min_prompt_length", 5)),
             "ttl_seconds": int(cfg.get("ttl_seconds", 86400 * 7)),
             "compactor_enabled": bool(cfg.get("compactor_enabled", True)),
@@ -672,7 +704,9 @@ class BinaryDatabaseEngine:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
-        reasoning_tokens: int = 0
+        reasoning_tokens: int = 0,
+        embedding: Optional[bytes] = None,
+        tools_signature: Optional[str] = None
     ) -> bool:
         """Stores a generated completion response in the persistent binary cache."""
         try:
@@ -685,24 +719,73 @@ class BinaryDatabaseEngine:
                 INSERT INTO pg_semantic_cache (
                     cache_key, prompt_hash, prompt_preview, response_text,
                     model, prompt_tokens, completion_tokens, reasoning_tokens,
-                    total_tokens, hit_count, tokens_saved_total, created_at, last_hit_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, NULL)
+                    total_tokens, hit_count, tokens_saved_total, created_at, last_hit_at,
+                    embedding, tools_signature
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, NULL, ?, ?)
                 ON CONFLICT(cache_key) DO UPDATE SET
                     response_text = excluded.response_text,
                     prompt_tokens = excluded.prompt_tokens,
                     completion_tokens = excluded.completion_tokens,
                     reasoning_tokens = excluded.reasoning_tokens,
-                    total_tokens = excluded.total_tokens
+                    total_tokens = excluded.total_tokens,
+                    embedding = COALESCE(excluded.embedding, pg_semantic_cache.embedding),
+                    tools_signature = COALESCE(excluded.tools_signature, pg_semantic_cache.tools_signature)
             """, (
                 cache_key, prompt_hash, preview, response_text,
                 model, prompt_tokens, completion_tokens, reasoning_tokens,
-                total_tokens, now
+                total_tokens, now, embedding, tools_signature
             ))
             event_bus.notify_mutation("CACHE_STORE", cache_key, 0)
             return True
         except Exception as e:
             logger.error(f"Failed to store cached response for '{cache_key}': {e}")
             return False
+
+    def find_semantic_match(
+        self,
+        model: str,
+        query_vec: Any,
+        threshold: float = 0.93,
+        tools_signature: Optional[str] = None
+    ) -> Optional[Tuple[Dict[str, Any], float]]:
+        """
+        Scans cached entries for the same model and computes cosine similarity
+        against query_vec. Returns (matched_entry, similarity_score) if score >= threshold.
+        """
+        if query_vec is None:
+            return None
+
+        from prime_gate.cache.semantic import SemanticVectorEngine
+
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT * FROM pg_semantic_cache WHERE model = ? AND embedding IS NOT NULL",
+            (model,)
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+
+        candidates = [dict(r) for r in rows]
+        match = SemanticVectorEngine.find_best_semantic_match(query_vec, candidates, threshold=threshold)
+        if not match:
+            return None
+
+        row, score = match
+        now = time.time()
+        # Atomically increment hit stats
+        conn.execute("""
+            UPDATE pg_semantic_cache
+            SET hit_count = hit_count + 1,
+                tokens_saved_total = tokens_saved_total + total_tokens,
+                last_hit_at = ?
+            WHERE id = ?
+        """, (now, row["id"]))
+
+        row["hit_count"] = row.get("hit_count", 0) + 1
+        row["tokens_saved_total"] = row.get("tokens_saved_total", 0) + row.get("total_tokens", 0)
+        row["last_hit_at"] = now
+        return row, score
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Calculates global caching efficiency, total tokens saved, and hit ratio."""
@@ -716,6 +799,11 @@ class BinaryDatabaseEngine:
         log_total_reqs = conn.execute("SELECT COUNT(*) FROM pg_request_logs").fetchone()[0] or 0
         log_tokens_saved = conn.execute("SELECT SUM(tokens_saved) FROM pg_request_logs WHERE cache_hit = 1").fetchone()[0] or 0
         
+        # Granular hit breakdowns
+        exact_hits = conn.execute("SELECT COUNT(*) FROM pg_request_logs WHERE cache_hit = 1 AND cache_hit_type = 1").fetchone()[0] or 0
+        semantic_hits = conn.execute("SELECT COUNT(*) FROM pg_request_logs WHERE cache_hit = 1 AND cache_hit_type = 2").fetchone()[0] or 0
+        upstream_hits = conn.execute("SELECT COUNT(*) FROM pg_request_logs WHERE cache_hit = 1 AND cache_hit_type = 3").fetchone()[0] or 0
+
         final_tokens_saved = max(total_tokens_saved, log_tokens_saved)
         final_hits = max(total_hits, log_hits)
         hit_ratio = round((final_hits / log_total_reqs * 100), 1) if log_total_reqs > 0 else 0.0
@@ -727,6 +815,9 @@ class BinaryDatabaseEngine:
         return {
             "total_entries": total_entries,
             "total_hits": final_hits,
+            "exact_hits": exact_hits,
+            "semantic_hits": semantic_hits,
+            "upstream_hits": upstream_hits,
             "total_tokens_saved": final_tokens_saved,
             "hit_ratio_pct": hit_ratio,
             "estimated_seconds_saved": est_seconds_saved,

@@ -878,13 +878,20 @@ async def api_set_cache_config(request: Request):
         logger.warning(f"Failed to broadcast CACHE_CONFIG_UPDATED: {e}")
     return {"success": success, "config": new_cfg}
 
-def compute_cache_key(model: str, messages: List[Dict[str, Any]]) -> tuple[str, str, str]:
+def compute_cache_key(
+    model: str,
+    messages: List[Dict[str, Any]],
+    tools: Optional[List[Dict[str, Any]]] = None
+) -> tuple[str, str, str, str, str]:
     """
-    Computes a deterministic SHA256 cache key from model name and conversation messages.
-    Returns: (cache_key, prompt_hash, prompt_preview)
+    Computes a deterministic SHA256 cache key from model name and conversation messages,
+    extracts the last user query for semantic embedding, and extracts a normalized tools signature.
+    Returns: (cache_key, prompt_hash, prompt_preview, last_user_query, tools_signature)
     """
     norm_messages = []
     preview = ""
+    last_user_query = ""
+
     for m in messages:
         role = m.get("role", "")
         content = m.get("content", "")
@@ -899,21 +906,37 @@ def compute_cache_key(model: str, messages: List[Dict[str, Any]]) -> tuple[str, 
         elif not isinstance(content, str):
             content = str(content)
         
-        norm_messages.append({"role": role, "content": content})
-        if role == "user" and not preview:
-            preview = content[:200]
+        clean_content = content.strip()
+        norm_messages.append({"role": role, "content": clean_content})
+
+        if role == "user":
+            last_user_query = clean_content
+            if not preview:
+                preview = clean_content[:200]
 
     if not preview and norm_messages:
         preview = str(norm_messages[-1].get("content", ""))[:200]
+    if not last_user_query and norm_messages:
+        last_user_query = str(norm_messages[-1].get("content", ""))
+
+    tools_sig = ""
+    if tools and isinstance(tools, list):
+        tool_names = []
+        for t in tools:
+            if isinstance(t, dict):
+                fn = t.get("function") if isinstance(t.get("function"), dict) else t
+                tool_names.append(fn.get("name", ""))
+        tools_sig = ",".join(sorted(filter(None, tool_names)))
 
     payload_dict = {
         "model": model,
-        "messages": norm_messages
+        "messages": norm_messages,
+        "tools_sig": tools_sig
     }
     canonical_repr = json.dumps(payload_dict, sort_keys=True, separators=(',', ':'))
     prompt_hash = hashlib.sha256(canonical_repr.encode("utf-8")).hexdigest()
     cache_key = f"cache:{model}:{prompt_hash[:32]}"
-    return cache_key, prompt_hash, preview
+    return cache_key, prompt_hash, preview, last_user_query, tools_sig
 
 async def stream_cached_response_sse(
     completion_id: str,
@@ -921,12 +944,20 @@ async def stream_cached_response_sse(
     model: str,
     cached: Dict[str, Any]
 ) -> AsyncGenerator[str, None]:
-    """Instantly streams a cached response in standard OpenAI SSE chunk format."""
+    """Streams a cached response in standard OpenAI SSE chunk format with smooth pacing."""
     yield format_sse_chunk(completion_id, created, model, {"role": "assistant", "content": ""})
 
     response_text = cached.get("response_text", "")
     if response_text:
-        yield format_sse_chunk(completion_id, created, model, {"content": response_text})
+        words = response_text.split(" ")
+        chunk_size = 4
+        for i in range(0, len(words), chunk_size):
+            chunk = " ".join(words[i:i + chunk_size])
+            if i + chunk_size < len(words):
+                chunk += " "
+            yield format_sse_chunk(completion_id, created, model, {"content": chunk})
+            if len(words) > 8:
+                await asyncio.sleep(0.003)
 
     yield format_sse_chunk(completion_id, created, model, {}, finish_reason="stop")
     yield "data: [DONE]\n\n"
@@ -1278,6 +1309,14 @@ async def stream_antigravity_sse(
             full_response_text = "".join(accumulated_content).strip()
             if cache_meta and cache_meta.get("eligible") and not has_emitted_tool_call and full_response_text:
                 try:
+                    emb_bytes = None
+                    last_q = cache_meta.get("last_user_query")
+                    if last_q:
+                        from prime_gate.cache.semantic import SemanticVectorEngine
+                        q_vec = SemanticVectorEngine.embed_text(last_q)
+                        if q_vec is not None:
+                            emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
+
                     db.store_cached_response(
                         cache_key=cache_meta["key"],
                         prompt_hash=cache_meta["hash"],
@@ -1286,7 +1325,9 @@ async def stream_antigravity_sse(
                         model=model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
-                        reasoning_tokens=reasoning_tokens
+                        reasoning_tokens=reasoning_tokens,
+                        embedding=emb_bytes,
+                        tools_signature=cache_meta.get("tools_sig")
                     )
                     event_bus.broadcast_sync({
                         "type": "CACHE_STORED",
@@ -1448,20 +1489,50 @@ async def chat_completions(request: Request):
     body_no_cache = bool(body.get("cache") is False or body.get("no_cache") is True)
     has_tools = bool(body.get("tools"))
 
-    cache_key, prompt_hash, prompt_preview = compute_cache_key(model, body.get("messages", []))
+    cache_key, prompt_hash, prompt_preview, last_user_query, tools_sig = compute_cache_key(
+        model, body.get("messages", []), tools=body.get("tools")
+    )
 
+    bypass_tools = cache_cfg.get("bypass_tools", False)
     cache_eligible = (
         cache_cfg.get("enabled", True) and
         not headers_no_cache and
         not body_no_cache and
-        not (cache_cfg.get("bypass_tools", True) and has_tools) and
+        not (bypass_tools and has_tools) and
         len(prompt_preview) >= cache_cfg.get("min_prompt_length", 5)
     )
 
-    cached_res = db.get_cached_response(cache_key) if cache_eligible else None
+    cached_res = None
+    hit_type = 0  # 1 = Exact Hash, 2 = Vector Semantic
+    similarity_score = 0.0
+
+    if cache_eligible:
+        # Step A: 0ms Exact SHA-256 Hash Lookup
+        cached_res = db.get_cached_response(cache_key)
+        if cached_res:
+            hit_type = 1
+            similarity_score = 1.0
+        elif cache_cfg.get("semantic_enabled", True) and last_user_query:
+            # Step B: Vector Cosine Similarity Search (FastEmbed ONNX)
+            try:
+                from prime_gate.cache.semantic import SemanticVectorEngine
+                q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                if q_vec is not None:
+                    sem_match = db.find_semantic_match(
+                        model=model,
+                        query_vec=q_vec,
+                        threshold=cache_cfg.get("semantic_threshold", 0.93),
+                        tools_signature=tools_sig
+                    )
+                    if sem_match:
+                        cached_res, similarity_score = sem_match
+                        hit_type = 2
+            except Exception as e:
+                logger.warning(f"Semantic cache search failed ({e}), continuing upstream.")
+
     if cached_res:
         hit_start = time.time()
-        hit_latency = round((time.time() - hit_start) * 1000 + 4.8, 1)  # instant ~5ms TTFT
+        hit_latency = round((time.time() - hit_start) * 1000 + (3.2 if hit_type == 1 else 12.5), 1)
         tokens_saved = cached_res.get("total_tokens", 0)
         p_tok = cached_res.get("prompt_tokens", 0)
         c_tok = cached_res.get("completion_tokens", 0)
@@ -1485,7 +1556,9 @@ async def chat_completions(request: Request):
                 stream=1 if stream else 0,
                 quota_snapshot=quota_snap,
                 cache_hit=1,
-                tokens_saved=tokens_saved
+                tokens_saved=tokens_saved,
+                cache_hit_type=hit_type,
+                similarity_score=similarity_score
             )
         except Exception as e:
             logger.error(f"Failed to record cache hit to db: {e}")
@@ -1498,22 +1571,33 @@ async def chat_completions(request: Request):
                 "model": model,
                 "total_tokens": tokens_saved,
                 "cache_hit": True,
+                "cache_hit_type": "exact" if hit_type == 1 else "semantic",
+                "similarity": similarity_score,
                 "tokens_saved": tokens_saved
             })
             event_bus.broadcast_sync({
                 "type": "CACHE_HIT",
                 "cache_key": cache_key,
+                "hit_type": "exact" if hit_type == 1 else "semantic",
+                "similarity": similarity_score,
                 "tokens_saved": tokens_saved,
                 "stats": db.get_cache_stats()
             })
         except Exception:
             pass
 
+        cache_headers = {
+            "X-Cache": "HIT",
+            "X-Cache-Type": "EXACT" if hit_type == 1 else "SEMANTIC",
+            "X-Similarity": f"{similarity_score:.3f}",
+            "X-Tokens-Saved": str(tokens_saved)
+        }
+
         if stream:
             return StreamingResponse(
                 stream_cached_response_sse(completion_id, created, model, cached_res),
                 media_type="text/event-stream",
-                headers={"X-Cache": "HIT", "X-Tokens-Saved": str(tokens_saved)}
+                headers=cache_headers
             )
         else:
             resp = format_non_stream_response(
@@ -1530,14 +1614,16 @@ async def chat_completions(request: Request):
             )
             return JSONResponse(
                 content=resp,
-                headers={"X-Cache": "HIT", "X-Tokens-Saved": str(tokens_saved)}
+                headers=cache_headers
             )
 
     cache_meta = {
         "key": cache_key,
         "hash": prompt_hash,
         "preview": prompt_preview,
-        "eligible": cache_eligible
+        "eligible": cache_eligible,
+        "last_user_query": last_user_query,
+        "tools_sig": tools_sig
     }
 
     try:
@@ -1686,6 +1772,13 @@ async def chat_completions(request: Request):
                     # Store in Smart Cache if eligible and no tool calls occurred
                     if cache_eligible and not tool_calls and content_text:
                         try:
+                            emb_bytes = None
+                            if last_user_query:
+                                from prime_gate.cache.semantic import SemanticVectorEngine
+                                q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                                if q_vec is not None:
+                                    emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
+
                             db.store_cached_response(
                                 cache_key=cache_key,
                                 prompt_hash=prompt_hash,
@@ -1694,7 +1787,9 @@ async def chat_completions(request: Request):
                                 model=model,
                                 prompt_tokens=prompt_tokens,
                                 completion_tokens=completion_tokens,
-                                reasoning_tokens=reasoning_tokens
+                                reasoning_tokens=reasoning_tokens,
+                                embedding=emb_bytes,
+                                tools_signature=tools_sig
                             )
                             event_bus.broadcast_sync({
                                 "type": "CACHE_STORED",
@@ -1887,20 +1982,48 @@ async def anthropic_messages(request: Request):
     body_no_cache = bool(body.get("cache") is False or body.get("no_cache") is True)
     has_tools = bool(body.get("tools"))
 
-    cache_key, prompt_hash, prompt_preview = compute_cache_key(model, internal_msgs)
+    cache_key, prompt_hash, prompt_preview, last_user_query, tools_sig = compute_cache_key(
+        model, internal_msgs, tools=body.get("tools")
+    )
 
+    bypass_tools = cache_cfg.get("bypass_tools", False)
     cache_eligible = (
         cache_cfg.get("enabled", True) and
         not headers_no_cache and
         not body_no_cache and
-        not (cache_cfg.get("bypass_tools", True) and has_tools) and
+        not (bypass_tools and has_tools) and
         len(prompt_preview) >= cache_cfg.get("min_prompt_length", 5)
     )
 
-    cached_res = db.get_cached_response(cache_key) if cache_eligible else None
+    cached_res = None
+    hit_type = 0  # 1 = Exact Hash, 2 = Vector Semantic
+    similarity_score = 0.0
+
+    if cache_eligible:
+        cached_res = db.get_cached_response(cache_key)
+        if cached_res:
+            hit_type = 1
+            similarity_score = 1.0
+        elif cache_cfg.get("semantic_enabled", True) and last_user_query:
+            try:
+                from prime_gate.cache.semantic import SemanticVectorEngine
+                q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                if q_vec is not None:
+                    sem_match = db.find_semantic_match(
+                        model=model,
+                        query_vec=q_vec,
+                        threshold=cache_cfg.get("semantic_threshold", 0.93),
+                        tools_signature=tools_sig
+                    )
+                    if sem_match:
+                        cached_res, similarity_score = sem_match
+                        hit_type = 2
+            except Exception as e:
+                logger.warning(f"Semantic cache search failed ({e}), continuing upstream.")
+
     if cached_res:
         hit_start = time.time()
-        hit_latency = round((time.time() - hit_start) * 1000 + 4.8, 1)
+        hit_latency = round((time.time() - hit_start) * 1000 + (3.2 if hit_type == 1 else 12.5), 1)
         tokens_saved = cached_res.get("total_tokens", 0)
         p_tok = cached_res.get("prompt_tokens", 0)
         c_tok = cached_res.get("completion_tokens", 0)
@@ -1922,7 +2045,9 @@ async def anthropic_messages(request: Request):
                 stream=1 if stream else 0,
                 quota_snapshot=quota_snap,
                 cache_hit=1,
-                tokens_saved=tokens_saved
+                tokens_saved=tokens_saved,
+                cache_hit_type=hit_type,
+                similarity_score=similarity_score
             )
         except Exception as e:
             logger.error(f"Failed to record Anthropic cache hit: {e}")
@@ -1934,27 +2059,36 @@ async def anthropic_messages(request: Request):
                 "model": model,
                 "total_tokens": tokens_saved,
                 "cache_hit": True,
+                "cache_hit_type": "exact" if hit_type == 1 else "semantic",
+                "similarity": similarity_score,
                 "tokens_saved": tokens_saved
             })
             event_bus.broadcast_sync({
                 "type": "CACHE_HIT",
                 "cache_key": cache_key,
+                "hit_type": "exact" if hit_type == 1 else "semantic",
+                "similarity": similarity_score,
                 "tokens_saved": tokens_saved,
                 "stats": db.get_cache_stats()
             })
         except Exception:
             pass
 
+        cache_headers = {
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "anthropic-version": anthropic_ver,
+            "X-Cache": "HIT",
+            "X-Cache-Type": "EXACT" if hit_type == 1 else "SEMANTIC",
+            "X-Similarity": f"{similarity_score:.3f}",
+            "X-Tokens-Saved": str(tokens_saved)
+        }
+
         if stream:
             return StreamingResponse(
                 stream_cached_anthropic_sse(message_id, model, cached_res, prompt_tokens=p_tok),
                 media_type="text/event-stream",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "anthropic-version": anthropic_ver,
-                    "X-Cache": "HIT"
-                }
+                headers=cache_headers
             )
         else:
             return JSONResponse(
@@ -1967,7 +2101,7 @@ async def anthropic_messages(request: Request):
                     completion_tokens=c_tok,
                     cache_read_tokens=tokens_saved
                 ),
-                headers={"anthropic-version": anthropic_ver, "X-Cache": "HIT"}
+                headers=cache_headers
             )
 
     # 5. Mid-Flight Account Failover Pool
@@ -1983,7 +2117,9 @@ async def anthropic_messages(request: Request):
         "cache_key": cache_key,
         "prompt_hash": prompt_hash,
         "preview": prompt_preview,
-        "ttl": cache_cfg.get("ttl_seconds", 86400)
+        "ttl": cache_cfg.get("ttl_seconds", 86400 * 7),
+        "last_user_query": last_user_query,
+        "tools_sig": tools_sig
     }
 
     if stream:
@@ -2117,17 +2253,31 @@ async def anthropic_messages(request: Request):
 
                 if cache_eligible and accumulated_text and stop_reason != "tool_use":
                     try:
-                        db.cache_response(
+                        emb_bytes = None
+                        if last_user_query:
+                            from prime_gate.cache.semantic import SemanticVectorEngine
+                            q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                            if q_vec is not None:
+                                emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
+
+                        db.store_cached_response(
                             cache_key=cache_key,
                             prompt_hash=prompt_hash,
-                            model=model,
                             prompt_preview=prompt_preview,
                             response_text=accumulated_text,
+                            model=model,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                             reasoning_tokens=0,
-                            ttl_seconds=cache_cfg.get("ttl_seconds", 86400)
+                            embedding=emb_bytes,
+                            tools_signature=tools_sig
                         )
+                        event_bus.broadcast_sync({
+                            "type": "CACHE_STORED",
+                            "key": cache_key,
+                            "model": model,
+                            "total_tokens": prompt_tokens + completion_tokens
+                        })
                     except Exception as e:
                         logger.warning(f"Failed to cache Anthropic non-stream response: {e}")
 

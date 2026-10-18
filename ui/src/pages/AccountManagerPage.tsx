@@ -233,22 +233,6 @@ export const AccountManagerPage: React.FC<AccountManagerPageProps> = ({
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 10,
-                        background: isActive ? '#f59e0b' : 'rgba(255, 255, 255, 0.08)',
-                        color: isActive ? '#090807' : '#d6d3d1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: 16,
-                      }}
-                    >
-                      {acc.email.charAt(0).toUpperCase()}
-                    </div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: '#fafaf9' }}>
@@ -301,7 +285,6 @@ export const AccountManagerPage: React.FC<AccountManagerPageProps> = ({
               <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
                 Available Antigravity Models ({models.length})
               </h2>
-              <span className="badge badge-emerald">OpenAI /v1 Compatible</span>
             </div>
             <p style={{ fontSize: 13, color: '#a8a29e', marginTop: 4 }}>
               Live model catalog from binary database with reasoning limits, thinking budgets, and input modalities.

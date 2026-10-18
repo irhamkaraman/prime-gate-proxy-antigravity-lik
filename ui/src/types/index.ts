@@ -51,6 +51,8 @@ export interface RequestLogEntry {
   stream: boolean;
   cache_hit?: boolean;
   tokens_saved?: number;
+  cache_hit_type?: number;
+  similarity_score?: number;
   quota_snapshot?: Array<{
     family: string;
     label: string;
@@ -71,6 +73,10 @@ export interface CacheConfig {
   bypass_tools: boolean;
   min_prompt_length: number;
   ttl_seconds: number;
+  semantic_enabled?: boolean;
+  semantic_threshold?: number;
+  cache_mode?: 'exact' | 'semantic' | 'hybrid' | string;
+  turn_based_keying?: boolean;
   compactor_enabled?: boolean;
   compactor_window?: number;
   compactor_max_tool_lines?: number;
@@ -81,6 +87,9 @@ export interface CacheConfig {
 export interface CacheStats {
   total_entries: number;
   total_hits: number;
+  exact_hits?: number;
+  semantic_hits?: number;
+  upstream_hits?: number;
   total_tokens_saved: number;
   hit_ratio_pct: number;
   estimated_seconds_saved: number;

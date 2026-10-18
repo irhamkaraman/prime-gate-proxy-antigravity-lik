@@ -318,6 +318,8 @@ def transform_openai_to_antigravity(
                     "parameters": clean_schema_for_antigravity(fn.get("parameters"))
                 })
         if declarations:
+            # Deterministic sorting by function name ensures consistent upstream byte prefix caching
+            declarations.sort(key=lambda d: d.get("name", ""))
             tools.append({"functionDeclarations": declarations})
 
     # Generation config

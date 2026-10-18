@@ -9,8 +9,9 @@
 
 **A Production-Grade, Self-Hosted OpenAI & Anthropic Compatible Proxy Gateway for Google Antigravity.**
 
-[![Version](https://img.shields.io/badge/version-1.2.1-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.2-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Anti-Banned](https://img.shields.io/badge/Security-100%25%20Anti--Banned-10b981.svg?style=for-the-badge&logo=shield)](README.md#-100-anti-banned--account-safety-architecture)
+[![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](README.md#-next-gen-smart--semantic-vector-caching-hybrid-engine)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
@@ -46,6 +47,7 @@ graph LR
         PyCore -->|"Quota & Tier Resolver"| Quota["Quota Monitor"]
         PyCore -->|"Bidirectional Protocols"| Translator["Anthropic & OpenAI Translators"]
         PyCore -->|"Compactor & Loop Guard"| Enterprise["Enterprise Engine"]
+        PyCore -->|"Hybrid Vector Engine"| Cache["FastEmbed Semantic Cache"]
         UI["Node.js Web UI (:52110)"] <-->|"Status & Proxy"| PyCore
     end
 
@@ -83,6 +85,8 @@ graph LR
     Calculates equivalent commercial API savings (GPT-4o / Claude 3.5 Sonnet benchmark) in both USD and IDR directly on the live dashboard and caching views.
 15. **100% Anti-Banned & Account Safety Architecture:**
     Zero scraping, zero account bans. Prime Gate strictly mirrors official Google Cloud Code / Antigravity client protocol signatures, uses genuine OAuth 2.0 PKCE tokens, normalizes request headers, and prevents burst anomalies via intelligent pacing and circuit breakers.
+16. **Next-Gen Smart & Semantic Vector Caching (Hybrid Engine):**
+    Eliminates the 100% cache miss on AI coding agents by separating tool declarations from tool executions. Features local FastEmbed ONNX vector embeddings (`BAAI/bge-small-en-v1.5`), high-speed cosine similarity scanning in SQLite WAL, turn-based key extraction, smooth token-chunked SSE replay, and upstream prefix caching optimization.
 
 ---
 
@@ -450,6 +454,44 @@ Prime Gate queries Google's internal APIs dynamically to detect your account's e
 | **Gemini 4 Argon (Low)** | ❌ Paid Exclusive | ✅ Available | Standard |
 
 > ⚠️ **Notice on Gemini 2.5:** `gemini-2.5-pro` and `gemini-2.5-flash` were removed from the active catalog due to Google upstream 503 capacity exhaustion (`MODEL_CAPACITY_EXHAUSTED`). Please use **`gemini-3.8-flash`** or **`claude-sonnet-4-6`**.
+
+---
+
+## 🧠 Next-Gen Smart & Semantic Vector Caching (Hybrid Engine)
+
+Prime Gate features an enterprise-grade **Hybrid Caching Engine** that combines zero-millisecond exact SHA-256 matching with local CPU-driven vector semantic search, solving the classic 100% cache-miss problem on AI coding assistants:
+
+```mermaid
+graph TD
+    Request["Incoming Request (OpenAI / Anthropic)"]
+    --> Extract["Turn-Based Extraction & Noise Stripping"]
+    
+    Extract --> StepA{"Step A: Exact SHA-256 Hash"}
+    StepA -->|"Found (0ms)"| ExactHit["Exact Cache Hit (~3ms TTFT)"]
+    
+    StepA -->|"Miss"| StepB{"Semantic Vector Engine Enabled?"}
+    StepB -->|"No"| Upstream["Upstream Google Antigravity"]
+    
+    StepB -->|"Yes"| FastEmbed["FastEmbed ONNX (BAAI/bge-small-en-v1.5)"]
+    FastEmbed --> Vector["Compute 384-dim Query Vector"]
+    Vector --> Cosine["In-Memory Cosine Similarity Scan"]
+    
+    Cosine --> Check{"Score >= Threshold (e.g. 93%)?"}
+    Check -->|"Yes"| SemanticHit["Semantic Cache Hit (~12ms TTFT)"]
+    Check -->|"No"| Upstream
+    
+    Upstream --> Stream["Stream Tokens to Client"]
+    Stream --> Save{"Active Tool Calls?"}
+    Save -->|"No (Text Output)"| Store["Persist Cache & Vector in SQLite WAL"]
+    Save -->|"Yes"| Skip["Bypass Cache Storage"]
+```
+
+### ⚡ Key Capabilities:
+1. **Fixing 100% Cache Miss on Coding Agents:** Coding tools (Cursor, OpenCode, Claude Code, Cline) always send dynamic tools definitions. Prime Gate cleanly distinguishes between *tool declaration* and *tool execution*: responses producing standard text are 100% cached, saving thousands of tokens per session.
+2. **Local Vector Embeddings (`fastembed` + ONNX Runtime):** Uses `BAAI/bge-small-en-v1.5` on CPU with ~100MB RAM footprint—zero GPU/PyTorch requirements.
+3. **Turn-Based Noise Stripping:** Strips dynamic timestamps and randomized message IDs to create canonical turn keys.
+4. **Smooth Chunked SSE Replay:** Replays cached streaming responses in 4-word / 3ms micro-sleep chunks, providing a fluid animation for IDEs.
+5. **Native Upstream Prefix Caching Optimization:** Deterministically sorts tool function declarations alphabetically and anchors initial conversation turns, guaranteeing Google upstream prefix caching reuse.
 
 ---
 

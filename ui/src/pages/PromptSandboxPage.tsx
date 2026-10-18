@@ -206,7 +206,7 @@ export const PromptSandboxPage: React.FC = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(340px, 420px) 1fr',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
           gap: 24,
           alignItems: 'start',
         }}
@@ -419,33 +419,44 @@ export const PromptSandboxPage: React.FC = () => {
         {/* Right Column: Streaming Output Window */}
         <div className="glass-card" style={{ padding: '24px 28px', minHeight: 520, display: 'flex', flexDirection: 'column' }}>
           {/* Output Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: 16, marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Cpu size={18} color="#10b981" />
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+              paddingBottom: 16,
+              marginBottom: 16,
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <Cpu size={18} color="#10b981" style={{ flexShrink: 0 }} />
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', wordBreak: 'break-word' }}>
                 Streaming Output ({selectedModel})
               </h3>
               <span
                 className={apiProtocol === 'anthropic' ? 'badge badge-amber' : 'badge badge-emerald'}
-                style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                style={{ fontSize: 11, fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}
               >
                 {apiProtocol === 'anthropic' ? 'Anthropic /v1/messages' : 'OpenAI /v1/chat/completions'}
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {ttftMs !== null && (
-                <span className="badge badge-neutral" style={{ fontFamily: 'var(--font-mono)' }}>
+                <span className="badge badge-neutral" style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                   TTFT: {ttftMs}ms
                 </span>
               )}
               {totalTimeMs !== null && (
-                <span className="badge badge-emerald" style={{ fontFamily: 'var(--font-mono)' }}>
+                <span className="badge badge-emerald" style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                   Total: {totalTimeMs}ms
                 </span>
               )}
               {tokenEstimate > 0 && (
-                <span className="badge badge-amber" style={{ fontFamily: 'var(--font-mono)' }}>
+                <span className="badge badge-amber" style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
                   ~{tokenEstimate} tokens
                 </span>
               )}
@@ -453,7 +464,7 @@ export const PromptSandboxPage: React.FC = () => {
                 <button
                   onClick={handleCopyOutput}
                   className="btn btn-secondary btn-sm"
-                  style={{ padding: '5px 10px' }}
+                  style={{ padding: '5px 10px', whiteSpace: 'nowrap' }}
                 >
                   {copied ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
                   <span>{copied ? 'Copied' : 'Copy'}</span>
