@@ -1187,7 +1187,7 @@ async def stream_antigravity_sse(
                 resp = await client.send(req, stream=True)
 
                 if resp.status_code in (429, 503):
-                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
                     logger.warning(
                         f"[MID-FLIGHT FAILOVER] Upstream HTTP {resp.status_code} on {account_email}. "
                         f"Rotating to next available account transparently..."
@@ -1860,7 +1860,7 @@ async def chat_completions(request: Request):
             async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
                     if resp.status_code in (429, 503):
-                        AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
+                        AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
                         logger.warning(f"[FAILOVER] Account {account_email} quota exceeded ({resp.status_code}). Rotating to next...")
                         try:
                             event_bus.broadcast_sync({
@@ -2354,7 +2354,7 @@ async def anthropic_messages(request: Request):
 
                 if resp.status_code in (429, 503):
                     err_text = await resp.aread()
-                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
                     logger.warning(
                         f"[FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}: "
                         f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating account..."
@@ -2367,7 +2367,10 @@ async def anthropic_messages(request: Request):
                         })
                     except Exception:
                         pass
-                    await asyncio.sleep(0.4)
+                    if attempt == len(ordered_accounts) - 1:
+                        await asyncio.sleep(1.2)
+                    else:
+                        await asyncio.sleep(0.4)
                     continue
 
                 if resp.status_code != 200:

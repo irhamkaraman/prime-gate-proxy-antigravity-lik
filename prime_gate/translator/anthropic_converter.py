@@ -545,7 +545,7 @@ async def stream_anthropic_sse(
 
                 if resp.status_code in (429, 503):
                     err_text = await resp.aread()
-                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
                     logger.warning(
                         f"[MID-FLIGHT FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}: "
                         f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating to next available account transparently..."
@@ -559,7 +559,10 @@ async def stream_anthropic_sse(
                     except Exception:
                         pass
                     await resp.aclose()
-                    await asyncio.sleep(0.4)
+                    if attempt == len(ordered_accounts) - 1:
+                        await asyncio.sleep(1.2)
+                    else:
+                        await asyncio.sleep(0.4)
                     continue
 
                 if resp.status_code != 200:
