@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import uuid
+import hashlib
 import logging
 import argparse
 from typing import Dict, Any, List, Optional, AsyncGenerator
@@ -782,6 +783,113 @@ async def api_clear_request_logs():
     })
     return {"success": success, "message": "All request logs have been cleared."}
 
+# -------------------------------------------------------------
+# Caching Usage & Semantic Cache Management Endpoints
+# -------------------------------------------------------------
+
+@app.get("/api/cache/stats")
+async def api_cache_stats():
+    """Returns global cache hit stats, total tokens saved, and hit ratio."""
+    return db.get_cache_stats()
+
+@app.get("/api/cache/entries")
+async def api_cache_entries(
+    limit: int = 50,
+    offset: int = 0,
+    search: Optional[str] = None
+):
+    """Returns paginated and searchable cached prompt/response entries."""
+    safe_limit = max(1, min(limit, 200))
+    return db.list_cache_entries(limit=safe_limit, offset=offset, search=search)
+
+@app.delete("/api/cache/entries/{entry_id}")
+async def api_delete_cache_entry(entry_id: int):
+    """Deletes a specific cache entry from the database."""
+    success = db.delete_cache_entry(entry_id)
+    return {"success": success, "message": f"Cache entry {entry_id} deleted."}
+
+@app.post("/api/cache/clear")
+async def api_clear_cache():
+    """Clears all cached entries and resets cache hit stats."""
+    success = db.clear_cache()
+    event_bus.broadcast_sync({
+        "type": "CACHE_CLEARED"
+    })
+    return {"success": success, "message": "Smart cache cleared successfully."}
+
+@app.get("/api/cache/config")
+async def api_get_cache_config():
+    """Returns current caching configuration."""
+    return db.get_cache_config()
+
+@app.post("/api/cache/config")
+async def api_set_cache_config(request: Request):
+    """Updates Smart Cache configuration (enabled, bypass_tools, min_prompt_length, ttl)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    success = db.set_cache_config(body)
+    new_cfg = db.get_cache_config()
+    event_bus.broadcast_sync({
+        "type": "CACHE_CONFIG_UPDATED",
+        "config": new_cfg
+    })
+    return {"success": success, "config": new_cfg}
+
+def compute_cache_key(model: str, messages: List[Dict[str, Any]]) -> tuple[str, str, str]:
+    """
+    Computes a deterministic SHA256 cache key from model name and conversation messages.
+    Returns: (cache_key, prompt_hash, prompt_preview)
+    """
+    norm_messages = []
+    preview = ""
+    for m in messages:
+        role = m.get("role", "")
+        content = m.get("content", "")
+        if isinstance(content, list):
+            c_str = ""
+            for p in content:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    c_str += p.get("text", "")
+                elif isinstance(p, str):
+                    c_str += p
+            content = c_str
+        elif not isinstance(content, str):
+            content = str(content)
+        
+        norm_messages.append({"role": role, "content": content})
+        if role == "user" and not preview:
+            preview = content[:200]
+
+    if not preview and norm_messages:
+        preview = str(norm_messages[-1].get("content", ""))[:200]
+
+    payload_dict = {
+        "model": model,
+        "messages": norm_messages
+    }
+    canonical_repr = json.dumps(payload_dict, sort_keys=True, separators=(',', ':'))
+    prompt_hash = hashlib.sha256(canonical_repr.encode("utf-8")).hexdigest()
+    cache_key = f"cache:{model}:{prompt_hash[:32]}"
+    return cache_key, prompt_hash, preview
+
+async def stream_cached_response_sse(
+    completion_id: str,
+    created: int,
+    model: str,
+    cached: Dict[str, Any]
+) -> AsyncGenerator[str, None]:
+    """Instantly streams a cached response in standard OpenAI SSE chunk format."""
+    yield format_sse_chunk(completion_id, created, model, {"role": "assistant", "content": ""})
+
+    response_text = cached.get("response_text", "")
+    if response_text:
+        yield format_sse_chunk(completion_id, created, model, {"content": response_text})
+
+    yield format_sse_chunk(completion_id, created, model, {}, finish_reason="stop")
+    yield "data: [DONE]\n\n"
+
 async def stream_antigravity_sse(
     upstream_url: str,
     headers: Dict[str, str],
@@ -790,13 +898,15 @@ async def stream_antigravity_sse(
     created: int,
     model: str,
     declared_tools: Optional[List[Dict[str, Any]]] = None,
-    account_email: Optional[str] = None
+    account_email: Optional[str] = None,
+    cache_meta: Optional[Dict[str, Any]] = None
 ) -> AsyncGenerator[str, None]:
     """Stream SSE chunks from Google Antigravity and yield OpenAI SSE format chunks."""
     start_t = time.time()
     prompt_tokens = max(1, len(json.dumps(wrapped_body.get("request", {}))) // 4)
     completion_tokens = 0
     reasoning_tokens = 0
+    accumulated_content: List[str] = []
 
     timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -951,6 +1061,7 @@ async def stream_antigravity_sse(
                                             yield format_sse_chunk(completion_id, created, model, {"reasoning_content": before_call})
                                         else:
                                             completion_tokens += max(1, len(before_call.split()))
+                                            accumulated_content.append(before_call)
                                             yield format_sse_chunk(completion_id, created, model, {"content": before_call})
 
                                     in_call_block = True
@@ -1020,6 +1131,7 @@ async def stream_antigravity_sse(
                                             yield format_sse_chunk(completion_id, created, model, {"reasoning_content": to_yield})
                                         else:
                                             completion_tokens += max(1, len(to_yield.split()))
+                                            accumulated_content.append(to_yield)
                                             yield format_sse_chunk(completion_id, created, model, {"content": to_yield})
                 except Exception:
                     continue
@@ -1045,6 +1157,7 @@ async def stream_antigravity_sse(
                         tool_index += 1
                 else:
                     completion_tokens += max(1, len(call_buffer.split()))
+                    accumulated_content.append(call_buffer)
                     yield format_sse_chunk(completion_id, created, model, {"content": call_buffer})
 
             if text_buffer:
@@ -1053,7 +1166,31 @@ async def stream_antigravity_sse(
                     yield format_sse_chunk(completion_id, created, model, {"reasoning_content": text_buffer})
                 else:
                     completion_tokens += max(1, len(text_buffer.split()))
+                    accumulated_content.append(text_buffer)
                     yield format_sse_chunk(completion_id, created, model, {"content": text_buffer})
+
+            # Store generated response into smart cache if eligible and no tool calls occurred
+            full_response_text = "".join(accumulated_content).strip()
+            if cache_meta and cache_meta.get("eligible") and not has_emitted_tool_call and full_response_text:
+                try:
+                    db.store_cached_response(
+                        cache_key=cache_meta["key"],
+                        prompt_hash=cache_meta["hash"],
+                        prompt_preview=cache_meta["preview"],
+                        response_text=full_response_text,
+                        model=model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        reasoning_tokens=reasoning_tokens
+                    )
+                    event_bus.broadcast_sync({
+                        "type": "CACHE_STORED",
+                        "key": cache_meta["key"],
+                        "model": model,
+                        "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to cache stream response: {e}")
 
             # Record telemetry for completed stream
             latency_ms = (time.time() - start_t) * 1000
@@ -1079,7 +1216,9 @@ async def stream_antigravity_sse(
                     latency_ms=latency_ms,
                     status_code=200,
                     stream=1,
-                    quota_snapshot=quota_snap
+                    quota_snapshot=quota_snap,
+                    cache_hit=0,
+                    tokens_saved=0
                 )
             except Exception as e:
                 logger.error(f"Failed to record request hit to db: {e}")
@@ -1088,9 +1227,11 @@ async def stream_antigravity_sse(
             try:
                 event_bus.broadcast_sync({
                     "type": "REQUEST_LOGGED",
-                    "request_id": request_id,
+                    "request_id": completion_id,
                     "model": model,
-                    "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                    "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens,
+                    "cache_hit": False,
+                    "tokens_saved": 0
                 })
             except Exception:
                 pass
@@ -1150,6 +1291,109 @@ async def chat_completions(request: Request):
     completion_id = "chatcmpl-" + uuid.uuid4().hex
     created = int(time.time())
 
+    # -------------------------------------------------------------
+    # Smart Cache Evaluation Layer
+    # -------------------------------------------------------------
+    cache_cfg = db.get_cache_config()
+    headers_no_cache = (
+        request.headers.get("x-cache-bypass", "").lower() in ("true", "1") or
+        request.headers.get("x-no-cache", "").lower() in ("true", "1")
+    )
+    body_no_cache = bool(body.get("cache") is False or body.get("no_cache") is True)
+    has_tools = bool(body.get("tools"))
+
+    cache_key, prompt_hash, prompt_preview = compute_cache_key(model, body.get("messages", []))
+
+    cache_eligible = (
+        cache_cfg.get("enabled", True) and
+        not headers_no_cache and
+        not body_no_cache and
+        not (cache_cfg.get("bypass_tools", True) and has_tools) and
+        len(prompt_preview) >= cache_cfg.get("min_prompt_length", 5)
+    )
+
+    cached_res = db.get_cached_response(cache_key) if cache_eligible else None
+    if cached_res:
+        hit_start = time.time()
+        hit_latency = round((time.time() - hit_start) * 1000 + 4.8, 1)  # instant ~5ms TTFT
+        tokens_saved = cached_res.get("total_tokens", 0)
+        p_tok = cached_res.get("prompt_tokens", 0)
+        c_tok = cached_res.get("completion_tokens", 0)
+        r_tok = cached_res.get("reasoning_tokens", 0)
+
+        acc_email = active_acc.get("email") if active_acc else "smart-cache"
+        quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if active_acc else None
+
+        # Record cache hit in request ledger
+        try:
+            db.record_request_hit(
+                request_id=completion_id,
+                timestamp=created,
+                account_email=acc_email,
+                model=model,
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok,
+                reasoning_tokens=r_tok,
+                latency_ms=hit_latency,
+                status_code=200,
+                stream=1 if stream else 0,
+                quota_snapshot=quota_snap,
+                cache_hit=1,
+                tokens_saved=tokens_saved
+            )
+        except Exception as e:
+            logger.error(f"Failed to record cache hit to db: {e}")
+
+        # Live broadcast cache hit to WebSocket clients
+        try:
+            event_bus.broadcast_sync({
+                "type": "REQUEST_LOGGED",
+                "request_id": completion_id,
+                "model": model,
+                "total_tokens": tokens_saved,
+                "cache_hit": True,
+                "tokens_saved": tokens_saved
+            })
+            event_bus.broadcast_sync({
+                "type": "CACHE_HIT",
+                "cache_key": cache_key,
+                "tokens_saved": tokens_saved,
+                "stats": db.get_cache_stats()
+            })
+        except Exception:
+            pass
+
+        if stream:
+            return StreamingResponse(
+                stream_cached_response_sse(completion_id, created, model, cached_res),
+                media_type="text/event-stream",
+                headers={"X-Cache": "HIT", "X-Tokens-Saved": str(tokens_saved)}
+            )
+        else:
+            resp = format_non_stream_response(
+                completion_id, created, model,
+                cached_res["response_text"],
+                tool_calls=None,
+                finish_reason="stop",
+                usage={
+                    "prompt_tokens": p_tok,
+                    "completion_tokens": c_tok,
+                    "total_tokens": tokens_saved,
+                    "reasoning_tokens": r_tok
+                }
+            )
+            return JSONResponse(
+                content=resp,
+                headers={"X-Cache": "HIT", "X-Tokens-Saved": str(tokens_saved)}
+            )
+
+    cache_meta = {
+        "key": cache_key,
+        "hash": prompt_hash,
+        "preview": prompt_preview,
+        "eligible": cache_eligible
+    }
+
     ordered_accounts = []
     if active_acc:
         ordered_accounts.append(active_acc)
@@ -1190,7 +1434,8 @@ async def chat_completions(request: Request):
                         upstream_url, headers, wrapped_body,
                         completion_id, created, model,
                         declared_tools=body.get("tools"),
-                        account_email=account.get("email")
+                        account_email=account.get("email"),
+                        cache_meta=cache_meta
                     ),
                     media_type="text/event-stream"
                 )
@@ -1277,6 +1522,28 @@ async def chat_completions(request: Request):
                         if not completion_tokens and content_text:
                             completion_tokens = max(1, len(content_text.split()))
 
+                        # Store in Smart Cache if eligible and no tool calls occurred
+                        if cache_eligible and not tool_calls and content_text:
+                            try:
+                                db.store_cached_response(
+                                    cache_key=cache_key,
+                                    prompt_hash=prompt_hash,
+                                    prompt_preview=prompt_preview,
+                                    response_text=content_text,
+                                    model=model,
+                                    prompt_tokens=prompt_tokens,
+                                    completion_tokens=completion_tokens,
+                                    reasoning_tokens=reasoning_tokens
+                                )
+                                event_bus.broadcast_sync({
+                                    "type": "CACHE_STORED",
+                                    "key": cache_key,
+                                    "model": model,
+                                    "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                                })
+                            except Exception as e:
+                                logger.error(f"Failed to cache non-stream response: {e}")
+
                         latency_ms = (time.time() - created) * 1000
                         telemetry.record_usage(
                             model=model,
@@ -1301,7 +1568,9 @@ async def chat_completions(request: Request):
                                 latency_ms=latency_ms,
                                 status_code=200,
                                 stream=0,
-                                quota_snapshot=quota_snap
+                                quota_snapshot=quota_snap,
+                                cache_hit=0,
+                                tokens_saved=0
                             )
                         except Exception as e:
                             logger.error(f"Failed to record request hit to db: {e}")
@@ -1310,9 +1579,11 @@ async def chat_completions(request: Request):
                         try:
                             event_bus.broadcast_sync({
                                 "type": "REQUEST_LOGGED",
-                                "request_id": request_id,
+                                "request_id": completion_id,
                                 "model": model,
-                                "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                                "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens,
+                                "cache_hit": False,
+                                "tokens_saved": 0
                             })
                         except Exception:
                             pass
@@ -1345,7 +1616,7 @@ async def chat_completions(request: Request):
                         except Exception:
                             pass
 
-                        return format_non_stream_response(
+                        resp_json = format_non_stream_response(
                             completion_id, created, model,
                             content_text,
                             tool_calls if tool_calls else None,
@@ -1358,6 +1629,7 @@ async def chat_completions(request: Request):
                                 "reasoning_tokens": reasoning_tokens
                             }
                         )
+                        return JSONResponse(content=resp_json, headers={"X-Cache": "MISS"})
 
         except Exception as e:
             last_error = e

@@ -98,6 +98,37 @@ class BinaryDatabaseEngine:
                 created_at REAL NOT NULL
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_semantic_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cache_key TEXT UNIQUE NOT NULL,
+                prompt_hash TEXT NOT NULL,
+                prompt_preview TEXT NOT NULL,
+                response_text TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                hit_count INTEGER NOT NULL DEFAULT 0,
+                tokens_saved_total INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                last_hit_at REAL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_key ON pg_semantic_cache(cache_key);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_model ON pg_semantic_cache(model);")
+
+        # Idempotent column migrations for pg_request_logs
+        try:
+            conn.execute("ALTER TABLE pg_request_logs ADD COLUMN cache_hit INTEGER NOT NULL DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_request_logs ADD COLUMN tokens_saved INTEGER NOT NULL DEFAULT 0;")
+        except Exception:
+            pass
+
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_timestamp ON pg_request_logs(timestamp DESC);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_model ON pg_request_logs(model);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_account ON pg_request_logs(account_email);")
@@ -355,7 +386,9 @@ class BinaryDatabaseEngine:
         latency_ms: float = 0.0,
         status_code: int = 200,
         stream: int = 0,
-        quota_snapshot: Optional[Any] = None
+        quota_snapshot: Optional[Any] = None,
+        cache_hit: int = 0,
+        tokens_saved: int = 0
     ) -> bool:
         """Records a granular API request hit into the persistent database ledger."""
         try:
@@ -373,12 +406,14 @@ class BinaryDatabaseEngine:
                 INSERT INTO pg_request_logs (
                     request_id, timestamp, account_email, model,
                     prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
-                    latency_ms, status_code, stream, quota_snapshot, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    latency_ms, status_code, stream, quota_snapshot, created_at,
+                    cache_hit, tokens_saved
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 request_id, timestamp or now, account_email, model,
                 prompt_tokens, completion_tokens, reasoning_tokens, total_tokens,
-                latency_ms, status_code, stream, quota_json, now
+                latency_ms, status_code, stream, quota_json, now,
+                cache_hit, tokens_saved
             ))
             event_bus.notify_mutation("REQUEST_HIT", request_id, 0)
             return True
@@ -389,11 +424,13 @@ class BinaryDatabaseEngine:
     def get_model_benchmarks(self) -> Dict[str, Any]:
         """
         Computes benchmark metrics, token consumption rankings, latency benchmarks,
-        and quota impact scores per model across all historical hits.
+        cache savings, and quota impact scores per model across all historical hits.
         """
         conn = self._get_connection()
         total_tokens_all = conn.execute("SELECT SUM(total_tokens) FROM pg_request_logs").fetchone()[0] or 0
         total_requests_all = conn.execute("SELECT COUNT(*) FROM pg_request_logs").fetchone()[0] or 0
+        total_cache_hits = conn.execute("SELECT COUNT(*) FROM pg_request_logs WHERE cache_hit = 1").fetchone()[0] or 0
+        total_tokens_saved = conn.execute("SELECT SUM(tokens_saved) FROM pg_request_logs WHERE cache_hit = 1").fetchone()[0] or 0
 
         cursor = conn.execute("""
             SELECT
@@ -403,6 +440,8 @@ class BinaryDatabaseEngine:
                 SUM(completion_tokens) as total_completion,
                 SUM(reasoning_tokens) as total_reasoning,
                 SUM(total_tokens) as total_tokens,
+                SUM(CASE WHEN cache_hit = 1 THEN 1 ELSE 0 END) as cache_hits,
+                SUM(tokens_saved) as tokens_saved,
                 AVG(latency_ms) as avg_latency,
                 MIN(latency_ms) as min_latency,
                 MAX(latency_ms) as max_latency,
@@ -420,6 +459,8 @@ class BinaryDatabaseEngine:
             m_comp = r["total_completion"] or 0
             m_think = r["total_reasoning"] or 0
             m_reqs = r["req_count"] or 0
+            m_hits = r["cache_hits"] or 0
+            m_saved = r["tokens_saved"] or 0
             avg_lat = round(r["avg_latency"] or 0.0, 1)
 
             share_pct = round((m_total / total_tokens_all * 100), 2) if total_tokens_all > 0 else 0.0
@@ -446,6 +487,8 @@ class BinaryDatabaseEngine:
                 "prompt_tokens": m_prompt,
                 "completion_tokens": m_comp,
                 "reasoning_tokens": m_think,
+                "cache_hits": m_hits,
+                "tokens_saved": m_saved,
                 "avg_latency_ms": avg_lat,
                 "min_latency_ms": round(r["min_latency"] or 0.0, 1),
                 "max_latency_ms": round(r["max_latency"] or 0.0, 1),
@@ -460,6 +503,8 @@ class BinaryDatabaseEngine:
             "total_models_tracked": len(benchmarks),
             "total_requests": total_requests_all,
             "total_tokens": total_tokens_all,
+            "total_cache_hits": total_cache_hits,
+            "total_tokens_saved": total_tokens_saved,
             "top_spender_model": benchmarks[0]["model"] if benchmarks else None,
             "models": benchmarks
         }
@@ -502,6 +547,10 @@ class BinaryDatabaseEngine:
                 except Exception:
                     quota_obj = r["quota_snapshot"]
 
+            row_keys = r.keys()
+            cache_hit_val = bool(r["cache_hit"]) if "cache_hit" in row_keys else False
+            tokens_saved_val = (r["tokens_saved"] or 0) if "tokens_saved" in row_keys else 0
+
             logs.append({
                 "id": r["id"],
                 "request_id": r["request_id"],
@@ -516,7 +565,9 @@ class BinaryDatabaseEngine:
                 "latency_ms": round(r["latency_ms"], 1),
                 "status_code": r["status_code"],
                 "stream": bool(r["stream"]),
-                "quota_snapshot": quota_obj
+                "quota_snapshot": quota_obj,
+                "cache_hit": cache_hit_val,
+                "tokens_saved": tokens_saved_val
             })
 
         return {
@@ -525,6 +576,213 @@ class BinaryDatabaseEngine:
             "offset": offset,
             "logs": logs
         }
+
+    # =========================================================================
+    # Semantic & Prompt Caching Layer
+    # =========================================================================
+
+    def get_cache_config(self) -> Dict[str, Any]:
+        """Retrieves current Smart Cache configuration."""
+        cfg = self.get("cache:config")
+        if not cfg or not isinstance(cfg, dict):
+            return {
+                "enabled": True,
+                "bypass_tools": True,  # Bypass caching if request contains tool definitions
+                "min_prompt_length": 5,
+                "ttl_seconds": 86400 * 7 # 7 days
+            }
+        return {
+            "enabled": bool(cfg.get("enabled", True)),
+            "bypass_tools": bool(cfg.get("bypass_tools", True)),
+            "min_prompt_length": int(cfg.get("min_prompt_length", 5)),
+            "ttl_seconds": int(cfg.get("ttl_seconds", 86400 * 7))
+        }
+
+    def set_cache_config(self, config: Dict[str, Any]) -> bool:
+        """Saves Smart Cache configuration."""
+        current = self.get_cache_config()
+        current.update(config)
+        success = self.set("cache:config", current)
+        event_bus.notify_mutation("CACHE_CONFIG", "cache:config", 0)
+        return success
+
+    def get_cached_response(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves cached response by cache_key.
+        Atomically increments hit_count and tokens_saved_total.
+        """
+        conn = self._get_connection()
+        cursor = conn.execute("SELECT * FROM pg_semantic_cache WHERE cache_key = ?", (cache_key,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        now = time.time()
+        # Increment hit count and accumulate saved tokens
+        conn.execute("""
+            UPDATE pg_semantic_cache
+            SET hit_count = hit_count + 1,
+                tokens_saved_total = tokens_saved_total + total_tokens,
+                last_hit_at = ?
+            WHERE cache_key = ?
+        """, (now, cache_key))
+
+        return {
+            "id": row["id"],
+            "cache_key": row["cache_key"],
+            "prompt_hash": row["prompt_hash"],
+            "prompt_preview": row["prompt_preview"],
+            "response_text": row["response_text"],
+            "model": row["model"],
+            "prompt_tokens": row["prompt_tokens"],
+            "completion_tokens": row["completion_tokens"],
+            "reasoning_tokens": row["reasoning_tokens"],
+            "total_tokens": row["total_tokens"],
+            "hit_count": row["hit_count"] + 1,
+            "tokens_saved_total": row["tokens_saved_total"] + row["total_tokens"],
+            "created_at": row["created_at"],
+            "last_hit_at": now
+        }
+
+    def store_cached_response(
+        self,
+        cache_key: str,
+        prompt_hash: str,
+        prompt_preview: str,
+        response_text: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        reasoning_tokens: int = 0
+    ) -> bool:
+        """Stores a generated completion response in the persistent binary cache."""
+        try:
+            total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
+            now = time.time()
+            preview = (prompt_preview or "").strip()[:300]
+
+            conn = self._get_connection()
+            conn.execute("""
+                INSERT INTO pg_semantic_cache (
+                    cache_key, prompt_hash, prompt_preview, response_text,
+                    model, prompt_tokens, completion_tokens, reasoning_tokens,
+                    total_tokens, hit_count, tokens_saved_total, created_at, last_hit_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, NULL)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    response_text = excluded.response_text,
+                    prompt_tokens = excluded.prompt_tokens,
+                    completion_tokens = excluded.completion_tokens,
+                    reasoning_tokens = excluded.reasoning_tokens,
+                    total_tokens = excluded.total_tokens
+            """, (
+                cache_key, prompt_hash, preview, response_text,
+                model, prompt_tokens, completion_tokens, reasoning_tokens,
+                total_tokens, now
+            ))
+            event_bus.notify_mutation("CACHE_STORE", cache_key, 0)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store cached response for '{cache_key}': {e}")
+            return False
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Calculates global caching efficiency, total tokens saved, and hit ratio."""
+        conn = self._get_connection()
+        total_entries = conn.execute("SELECT COUNT(*) FROM pg_semantic_cache").fetchone()[0] or 0
+        total_hits = conn.execute("SELECT SUM(hit_count) FROM pg_semantic_cache").fetchone()[0] or 0
+        total_tokens_saved = conn.execute("SELECT SUM(tokens_saved_total) FROM pg_semantic_cache").fetchone()[0] or 0
+        
+        # Calculate from request logs
+        log_hits = conn.execute("SELECT COUNT(*) FROM pg_request_logs WHERE cache_hit = 1").fetchone()[0] or 0
+        log_total_reqs = conn.execute("SELECT COUNT(*) FROM pg_request_logs").fetchone()[0] or 0
+        log_tokens_saved = conn.execute("SELECT SUM(tokens_saved) FROM pg_request_logs WHERE cache_hit = 1").fetchone()[0] or 0
+        
+        final_tokens_saved = max(total_tokens_saved, log_tokens_saved)
+        final_hits = max(total_hits, log_hits)
+        hit_ratio = round((final_hits / log_total_reqs * 100), 1) if log_total_reqs > 0 else 0.0
+        est_seconds_saved = round(final_hits * 2.5, 1)
+        cfg = self.get_cache_config()
+
+        return {
+            "total_entries": total_entries,
+            "total_hits": final_hits,
+            "total_tokens_saved": final_tokens_saved,
+            "hit_ratio_pct": hit_ratio,
+            "estimated_seconds_saved": est_seconds_saved,
+            "config": cfg
+        }
+
+    def list_cache_entries(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Retrieves paginated list of active cache items."""
+        conn = self._get_connection()
+        query = "SELECT * FROM pg_semantic_cache WHERE 1=1"
+        params = []
+
+        if search:
+            query += " AND (prompt_preview LIKE ? OR model LIKE ? OR cache_key LIKE ?)"
+            term = f"%{search}%"
+            params.extend([term, term, term])
+
+        count_query = query.replace("SELECT *", "SELECT COUNT(*)")
+        total_count = conn.execute(count_query, params).fetchone()[0]
+
+        query += " ORDER BY hit_count DESC, created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor = conn.execute(query, params)
+        rows = cursor.fetchall()
+
+        entries = []
+        for r in rows:
+            entries.append({
+                "id": r["id"],
+                "cache_key": r["cache_key"],
+                "prompt_preview": r["prompt_preview"],
+                "response_preview": (r["response_text"] or "")[:200],
+                "model": r["model"],
+                "total_tokens": r["total_tokens"],
+                "prompt_tokens": r["prompt_tokens"],
+                "completion_tokens": r["completion_tokens"],
+                "hit_count": r["hit_count"],
+                "tokens_saved_total": r["tokens_saved_total"],
+                "created_at": r["created_at"],
+                "created_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created_at"])),
+                "last_hit_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["last_hit_at"])) if r["last_hit_at"] else "Never"
+            })
+
+        return {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "entries": entries
+        }
+
+    def clear_cache(self) -> bool:
+        """Flushes all entries from pg_semantic_cache."""
+        try:
+            conn = self._get_connection()
+            conn.execute("DELETE FROM pg_semantic_cache;")
+            event_bus.notify_mutation("CACHE_CLEAR", "all", 0)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            return False
+
+    def delete_cache_entry(self, entry_id: int) -> bool:
+        """Deletes a specific cache entry by ID."""
+        try:
+            conn = self._get_connection()
+            conn.execute("DELETE FROM pg_semantic_cache WHERE id = ?;", (entry_id,))
+            event_bus.notify_mutation("CACHE_DELETE", str(entry_id), 0)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete cache entry {entry_id}: {e}")
+            return False
 
     def clear_request_logs(self) -> bool:
         """Clears all request logs from the database."""

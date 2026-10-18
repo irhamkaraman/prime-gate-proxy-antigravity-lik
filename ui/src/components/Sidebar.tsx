@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import {
   Activity,
   BarChart3,
+  Zap,
   Users,
   Terminal,
   ShieldCheck,
@@ -47,6 +48,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'benchmarks',
       label: 'Usage',
       icon: <BarChart3 size={18} />,
+    },
+    {
+      id: 'caching',
+      label: 'Caching Usage',
+      icon: <Zap size={18} />,
     },
     {
       id: 'accounts',

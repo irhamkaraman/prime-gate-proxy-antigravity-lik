@@ -1,4 +1,4 @@
-export type RoutePath = 'dashboard' | 'benchmarks' | 'accounts' | 'sandbox' | 'sentinel' | 'docs';
+export type RoutePath = 'dashboard' | 'benchmarks' | 'caching' | 'accounts' | 'sandbox' | 'sentinel' | 'docs';
 
 export type TimeRange = '1m' | '1h' | '1d' | '1month';
 
@@ -9,6 +9,8 @@ export interface ModelBenchmark {
   prompt_tokens: number;
   completion_tokens: number;
   reasoning_tokens: number;
+  cache_hits?: number;
+  tokens_saved?: number;
   avg_latency_ms: number;
   min_latency_ms: number;
   max_latency_ms: number;
@@ -23,6 +25,8 @@ export interface ModelBenchmarksResponse {
   total_models_tracked: number;
   total_requests: number;
   total_tokens: number;
+  total_cache_hits?: number;
+  total_tokens_saved?: number;
   top_spender_model: string | null;
   models: ModelBenchmark[];
 }
@@ -41,6 +45,8 @@ export interface RequestLogEntry {
   latency_ms: number;
   status_code: number;
   stream: boolean;
+  cache_hit?: boolean;
+  tokens_saved?: number;
   quota_snapshot?: Array<{
     family: string;
     label: string;
@@ -54,6 +60,48 @@ export interface RequestLogsResponse {
   limit: number;
   offset: number;
   logs: RequestLogEntry[];
+}
+
+export interface CacheConfig {
+  enabled: boolean;
+  bypass_tools: boolean;
+  min_prompt_length: number;
+  ttl_seconds: number;
+}
+
+export interface CacheStats {
+  total_entries: number;
+  total_hits: number;
+  total_tokens_saved: number;
+  hit_ratio_pct: number;
+  estimated_seconds_saved: number;
+  config: CacheConfig;
+}
+
+export interface CacheEntry {
+  id: number;
+  cache_key: string;
+  prompt_hash: string;
+  prompt_preview: string;
+  response_text: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  reasoning_tokens: number;
+  total_tokens: number;
+  hit_count: number;
+  tokens_saved_total: number;
+  created_at: number;
+  created_at_formatted?: string;
+  last_hit_at: number | null;
+  last_hit_formatted?: string;
+}
+
+export interface CacheEntriesResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  entries: CacheEntry[];
 }
 
 export interface Account {

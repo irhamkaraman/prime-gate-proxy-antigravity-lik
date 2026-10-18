@@ -19,6 +19,10 @@ const ROUTE_META: Record<RoutePath, { title: string; subtitle: string }> = {
     title: 'Model Benchmarks & Request Hit Ledger',
     subtitle: 'Persistent database tracking, latency rankings, token splits, and quota depletion analysis',
   },
+  caching: {
+    title: 'Smart Semantic Caching Usage',
+    subtitle: 'Zero-quota prompt caching layer, token economy ledger, and agent safety boundaries',
+  },
   accounts: {
     title: 'Google Antigravity Accounts',
     subtitle: 'Manage connected OAuth accounts, switch active identity, or sync live model limits',

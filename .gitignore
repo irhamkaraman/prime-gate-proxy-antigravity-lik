@@ -54,3 +54,6 @@ data/
 *.db-wal
 *.db-shm
 incidents.log
+
+# Scratch testing scripts
+scratch/

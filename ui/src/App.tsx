@@ -9,6 +9,7 @@ import { Modal } from './components/Modal';
 
 import { DashboardPage } from './pages/DashboardPage';
 import { ModelBenchmarkPage } from './pages/ModelBenchmarkPage';
+import { CachingUsagePage } from './pages/CachingUsagePage';
 import { AccountManagerPage } from './pages/AccountManagerPage';
 import { PromptSandboxPage } from './pages/PromptSandboxPage';
 import { SentinelPage } from './pages/SentinelPage';
@@ -204,7 +205,14 @@ const MainLayout: React.FC = () => {
                 // If viewing 1h, 1d, or 1month, re-fetch for active range so it never reverts to 1m
                 fetchMetrics(timeRangeRef.current);
               }
-            } else if (msgType === 'REQUEST_LOGGED' || msgType === 'LEDGER_CLEARED') {
+            } else if (
+              msgType === 'REQUEST_LOGGED' ||
+              msgType === 'LEDGER_CLEARED' ||
+              msgType === 'CACHE_HIT' ||
+              msgType === 'CACHE_STORED' ||
+              msgType === 'CACHE_CLEARED' ||
+              msgType === 'CACHE_CONFIG_UPDATED'
+            ) {
               setLastLedgerUpdate(Date.now());
             } else if (msgType === 'ACCOUNT_SWITCHED') {
               if (data.quota && Array.isArray(data.quota) && data.quota.length > 0) {
@@ -452,6 +460,13 @@ const MainLayout: React.FC = () => {
           {currentRoute === 'benchmarks' && (
             <ModelBenchmarkPage
               activeAccount={activeAccount}
+              lastLedgerUpdate={lastLedgerUpdate}
+              isWsConnected={isWsConnected}
+            />
+          )}
+
+          {currentRoute === 'caching' && (
+            <CachingUsagePage
               lastLedgerUpdate={lastLedgerUpdate}
               isWsConnected={isWsConnected}
             />

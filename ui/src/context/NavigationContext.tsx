@@ -10,12 +10,12 @@ const NavigationContext = createContext<NavigationContextValue | undefined>(unde
 
 function parsePathFromLocation(): RoutePath {
   const hash = window.location.hash.replace('#', '').replace('/', '').trim();
-  if (['dashboard', 'benchmarks', 'accounts', 'sandbox', 'sentinel', 'docs'].includes(hash)) {
+  if (['dashboard', 'benchmarks', 'caching', 'accounts', 'sandbox', 'sentinel', 'docs'].includes(hash)) {
     return hash as RoutePath;
   }
 
   const path = window.location.pathname.replace('/', '').trim().toLowerCase();
-  if (['dashboard', 'benchmarks', 'accounts', 'sandbox', 'sentinel', 'docs'].includes(path)) {
+  if (['dashboard', 'benchmarks', 'caching', 'accounts', 'sandbox', 'sentinel', 'docs'].includes(path)) {
     return path as RoutePath;
   }
 

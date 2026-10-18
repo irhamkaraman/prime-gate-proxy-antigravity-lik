@@ -416,10 +416,17 @@ export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({
             </div>
             <div style={{ fontSize: 12, color: '#78716c', marginTop: 4, fontFamily: 'var(--font-mono)' }}>
               Total Volume: {(benchmarkData?.total_tokens || 0).toLocaleString()} tokens
+              {(benchmarkData?.total_tokens_saved || 0) > 0 && (
+                <span style={{ color: '#10b981', marginLeft: 8, fontWeight: 600 }}>
+                  ⚡ Saved: {(benchmarkData?.total_tokens_saved || 0).toLocaleString()} tok
+                </span>
+              )}
             </div>
           </div>
           <div style={{ fontSize: 11, color: '#78716c', marginTop: 8 }}>
-            SQLite WAL ledger with CRC32 integrity
+            {(benchmarkData?.total_cache_hits || 0) > 0
+              ? `${(benchmarkData?.total_cache_hits || 0)} cache hits automatically accumulated`
+              : 'SQLite WAL ledger with CRC32 integrity'}
           </div>
         </div>
       </div>
@@ -521,6 +528,11 @@ export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({
                             }}
                           />
                         </div>
+                        {(m.tokens_saved || 0) > 0 && (
+                          <div style={{ fontSize: 10, color: '#10b981', marginTop: 4, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <Zap size={10} /> {(m.tokens_saved || 0).toLocaleString()} saved ({m.cache_hits || 0} hits)
+                          </div>
+                        )}
                       </td>
 
                       <td style={{ padding: '14px 14px' }}>
@@ -688,20 +700,56 @@ export const ModelBenchmarkPage: React.FC<ModelBenchmarkPageProps> = ({
 
                       {/* Token Breakdown */}
                       <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                        <span style={{ color: '#a8a29e' }} title="Prompt Tokens">P: {log.prompt_tokens}</span>
-                        {' '}&bull;{' '}
-                        <span style={{ color: '#38bdf8' }} title="Completion Tokens">C: {log.completion_tokens}</span>
-                        {log.reasoning_tokens > 0 && (
-                          <>
+                        {log.cache_hit ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                color: '#34d399',
+                              }}
+                            >
+                              <Zap size={10} /> CACHE HIT
+                            </span>
+                            <span style={{ color: '#10b981', fontWeight: 600 }}>
+                              +{(log.tokens_saved || log.total_tokens).toLocaleString()} saved
+                            </span>
+                            <span style={{ color: '#78716c', fontSize: 10 }}>
+                              (P:{log.prompt_tokens} &bull; C:{log.completion_tokens})
+                            </span>
+                          </div>
+                        ) : (
+                          <div>
+                            <span style={{ color: '#a8a29e' }} title="Prompt Tokens">P: {log.prompt_tokens}</span>
                             {' '}&bull;{' '}
-                            <span style={{ color: '#a78bfa' }} title="Reasoning Tokens">T: {log.reasoning_tokens}</span>
-                          </>
+                            <span style={{ color: '#38bdf8' }} title="Completion Tokens">C: {log.completion_tokens}</span>
+                            {log.reasoning_tokens > 0 && (
+                              <>
+                                {' '}&bull;{' '}
+                                <span style={{ color: '#a78bfa' }} title="Reasoning Tokens">T: {log.reasoning_tokens}</span>
+                              </>
+                            )}
+                          </div>
                         )}
                       </td>
 
                       {/* Total Tokens */}
-                      <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#ffffff' }}>
-                        {log.total_tokens.toLocaleString()}
+                      <td style={{ padding: '12px 12px', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>
+                        <div style={{ fontWeight: 700, color: log.cache_hit ? '#34d399' : '#ffffff' }}>
+                          {log.total_tokens.toLocaleString()}
+                        </div>
+                        {log.cache_hit && (
+                          <div style={{ fontSize: 10, color: '#10b981', fontWeight: 600 }}>
+                            ⚡ 0 upstream
+                          </div>
+                        )}
                       </td>
 
                       {/* Latency */}
