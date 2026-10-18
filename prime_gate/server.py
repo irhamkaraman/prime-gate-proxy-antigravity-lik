@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import uuid
+import asyncio
 import subprocess
 import hashlib
 import logging
@@ -2352,10 +2353,11 @@ async def anthropic_messages(request: Request):
                 resp = await client.send(req, stream=True)
 
                 if resp.status_code in (429, 503):
+                    err_text = await resp.aread()
                     AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
                     logger.warning(
-                        f"[FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}. "
-                        f"Rotating account..."
+                        f"[FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}: "
+                        f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating account..."
                     )
                     try:
                         event_bus.broadcast_sync({

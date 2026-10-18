@@ -544,10 +544,11 @@ async def stream_anthropic_sse(
                 resp = await client.send(req, stream=True)
 
                 if resp.status_code in (429, 503):
+                    err_text = await resp.aread()
                     AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=25)
                     logger.warning(
-                        f"[MID-FLIGHT FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}. "
-                        f"Rotating to next available account transparently..."
+                        f"[MID-FLIGHT FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}: "
+                        f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating to next available account transparently..."
                     )
                     try:
                         event_bus.broadcast_sync({
