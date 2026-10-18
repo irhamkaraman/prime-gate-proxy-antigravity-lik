@@ -199,7 +199,7 @@ def transform_anthropic_to_antigravity(
 
                 elif b_type == "tool_result":
                     call_id = block.get("tool_use_id", "")
-                    fn_name = tool_call_map.get(call_id, "unknown_tool")
+                    fn_name = block.get("name") or tool_call_map.get(call_id, "unknown_tool")
                     raw_res = block.get("content", "")
 
                     response_dict: Dict[str, Any] = {}
@@ -265,7 +265,16 @@ def transform_anthropic_to_antigravity(
     # on dedicated `systemInstruction` objects, throwing false-positive 429 RESOURCE_EXHAUSTED.
     # If the system prompt is large (e.g. Claude Code CLI harness prompts > 1,200 chars),
     # we inject it directly into the first user turn in `contents`, where Antigravity allows 1M+ tokens.
-    system_instruction = None
+    # Meanwhile, we maintain a concise (<500 chars) persistent agentic coding directive in `systemInstruction`
+    # so Gemini's attention heads consistently prioritize invoking tools (Edit/Write) rather than printing code.
+    agentic_rule = (
+        "You are an expert autonomous software engineer. "
+        "When tools (such as Edit, Write, Bash) are available and the user requests code changes, "
+        "fixes, refactoring, or adding comments: ALWAYS invoke the Edit or Write tool to apply "
+        "the changes directly to the file(s) on disk. DO NOT merely output markdown code blocks "
+        "in chat when file modification is requested; directly execute the tool edits."
+    )
+
     if system_texts:
         full_system_str = "\n\n".join([t for t in system_texts if t])
     else:
@@ -280,10 +289,16 @@ def transform_anthropic_to_antigravity(
                 contents[0]["parts"].insert(0, {"text": instruction_prefix.strip()})
         else:
             contents.insert(0, {"role": "user", "parts": [{"text": instruction_prefix.strip()}]})
-    else:
+
         system_instruction = {
             "role": "user",
-            "parts": [{"text": full_system_str}]
+            "parts": [{"text": agentic_rule}]
+        }
+    else:
+        combined_sys = f"{full_system_str}\n\n{agentic_rule}" if len(full_system_str) + len(agentic_rule) < 1200 else full_system_str
+        system_instruction = {
+            "role": "user",
+            "parts": [{"text": combined_sys}]
         }
 
     # Tools definition
@@ -326,6 +341,8 @@ def transform_anthropic_to_antigravity(
                         "allowedFunctionNames": [fn_name]
                     }
                 }
+    elif tools_list:
+        tool_config = {"functionCallingConfig": {"mode": "AUTO"}}
 
     # Generation config
     generation_config: Dict[str, Any] = {}

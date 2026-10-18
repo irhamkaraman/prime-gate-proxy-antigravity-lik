@@ -325,7 +325,14 @@ def transform_openai_to_antigravity(
     # System instruction: prioritize client's own system prompt over generic fallback.
     # If system prompt exceeds 1,200 chars, merge into the first user turn in contents
     # to avoid Google Antigravity internal gateway 429 RESOURCE_EXHAUSTED.
-    system_instruction = None
+    agentic_rule = (
+        "You are an expert autonomous software engineer. "
+        "When tools (such as Edit, Write, Bash) are available and the user requests code changes, "
+        "fixes, refactoring, or adding comments: ALWAYS invoke the Edit or Write tool to apply "
+        "the changes directly to the file(s) on disk. DO NOT merely output markdown code blocks "
+        "in chat when file modification is requested; directly execute the tool edits."
+    )
+
     if system_texts:
         full_system_str = "\n\n".join([p for p in system_texts if p])
     else:
@@ -340,10 +347,16 @@ def transform_openai_to_antigravity(
                 contents[0]["parts"].insert(0, {"text": instruction_prefix.strip()})
         else:
             contents.insert(0, {"role": "user", "parts": [{"text": instruction_prefix.strip()}]})
-    else:
+
         system_instruction = {
             "role": "user",
-            "parts": [{"text": full_system_str}]
+            "parts": [{"text": agentic_rule}]
+        }
+    else:
+        combined_sys = f"{full_system_str}\n\n{agentic_rule}" if len(full_system_str) + len(agentic_rule) < 1200 else full_system_str
+        system_instruction = {
+            "role": "user",
+            "parts": [{"text": combined_sys}]
         }
 
     # Tools
