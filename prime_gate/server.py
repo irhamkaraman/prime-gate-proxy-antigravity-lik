@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import uuid
+import subprocess
 import hashlib
 import logging
 import argparse
@@ -755,6 +756,183 @@ async def api_db_test_corrupt(request: Request):
         "corrupted_key": target_key,
         "message": f"Injected simulated binary corruption into '{target_key}'. Check WebSocket stream and terminal logs!"
     }
+
+
+# =====================================================================
+# System Update & Automated Git Sync Engine
+# =====================================================================
+
+_UPDATE_CACHE: Dict[str, Any] = {
+    "last_checked": 0.0,
+    "data": None
+}
+
+def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
+    global _UPDATE_CACHE
+    now = time.time()
+    if not force_refresh and _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["last_checked"] < 60.0):
+        return _UPDATE_CACHE["data"]
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    local_commit = "unknown"
+    remote_commit = "unknown"
+    commits_behind = 0
+    latest_tag = None
+    update_available = False
+
+    try:
+        r_head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=repo_root, timeout=5)
+        if r_head.returncode == 0:
+            local_commit = r_head.stdout.strip()
+    except Exception:
+        pass
+
+    # 1. Check GitHub API for latest release tags
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "https://api.github.com/repos/irhamkaraman/prime-gate-proxy-antigravity-lik/tags",
+            headers={"User-Agent": "PrimeGate-Updater"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            tags = json.loads(resp.read().decode("utf-8"))
+            if tags and isinstance(tags, list):
+                latest_tag = tags[0].get("name", "").lstrip("v")
+                t_sha = tags[0].get("commit", {}).get("sha", "")
+                if t_sha:
+                    remote_commit = t_sha[:7]
+    except Exception as e:
+        logger.debug(f"GitHub API tag lookup deferred: {e}")
+
+    # 2. Check remote git commit via git ls-remote
+    try:
+        r_remote = subprocess.run(["git", "ls-remote", "origin", "refs/heads/main"], capture_output=True, text=True, cwd=repo_root, timeout=6)
+        if r_remote.returncode == 0 and r_remote.stdout.strip():
+            remote_sha = r_remote.stdout.strip().split()[0][:7]
+            if remote_sha:
+                remote_commit = remote_sha
+    except Exception:
+        pass
+
+    # Compare versions / commits
+    if latest_tag:
+        try:
+            # Simple version comparison
+            cur_parts = [int(p) for p in __version__.split(".") if p.isdigit()]
+            lat_parts = [int(p) for p in latest_tag.split(".") if p.isdigit()]
+            if lat_parts > cur_parts:
+                update_available = True
+        except Exception:
+            if latest_tag != __version__:
+                update_available = True
+
+    if remote_commit and local_commit and remote_commit != "unknown" and local_commit != "unknown":
+        if remote_commit != local_commit:
+            update_available = True
+
+    # 3. Check commits behind if git origin is tracked
+    try:
+        r_behind = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/main"], capture_output=True, text=True, cwd=repo_root, timeout=5)
+        if r_behind.returncode == 0 and r_behind.stdout.strip().isdigit():
+            commits_behind = int(r_behind.stdout.strip())
+            if commits_behind > 0:
+                update_available = True
+    except Exception:
+        pass
+
+    result = {
+        "current_version": __version__,
+        "current_commit": local_commit,
+        "latest_version": latest_tag or __version__,
+        "latest_commit": remote_commit,
+        "update_available": update_available,
+        "commits_behind": commits_behind,
+        "is_synced": not update_available,
+        "last_checked": now,
+        "repo_url": "https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik"
+    }
+
+    _UPDATE_CACHE = {
+        "last_checked": now,
+        "data": result
+    }
+    return result
+
+
+@app.get("/api/system/update-status")
+@app.get("/api/system/version")
+async def api_system_update_status(refresh: bool = False):
+    """Returns local version vs remote GitHub version and sync status."""
+    return _check_github_sync(force_refresh=refresh)
+
+
+@app.post("/api/system/git-pull")
+async def api_system_git_pull():
+    """
+    Executes 'git pull origin main' in repository root,
+    re-compiles UI if frontend files were pulled,
+    and returns update log details.
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        pull_proc = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=40
+        )
+        stdout = pull_proc.stdout or ""
+        stderr = pull_proc.stderr or ""
+
+        if pull_proc.returncode != 0:
+            return {
+                "success": False,
+                "error": stderr or stdout,
+                "message": "Git pull failed. Check for local modifications or network connection."
+            }
+
+        ui_rebuilt = False
+        if "ui/" in stdout or "ui/" in stderr:
+            try:
+                build_proc = subprocess.run(
+                    ["npm", "run", "build"],
+                    shell=True,
+                    cwd=os.path.join(repo_root, "ui"),
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                ui_rebuilt = (build_proc.returncode == 0)
+            except Exception as e:
+                logger.warning(f"UI build after pull deferred: {e}")
+
+        # Invalidate update status cache
+        global _UPDATE_CACHE
+        _UPDATE_CACHE["data"] = None
+
+        new_status = _check_github_sync(force_refresh=True)
+
+        try:
+            event_bus.broadcast_sync({
+                "type": "SYSTEM_UPDATE_COMPLETED",
+                "version": new_status.get("current_version"),
+                "commit": new_status.get("current_commit")
+            })
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "message": "Repository successfully updated via git pull!",
+            "stdout": stdout,
+            "ui_rebuilt": ui_rebuilt,
+            "status": new_status
+        }
+    except Exception as e:
+        logger.error(f"Git pull execution error: {e}")
+        return {"success": False, "error": str(e)}
+
 
 @app.get("/api/metrics/tokens")
 async def api_token_metrics(range: str = "minute"):

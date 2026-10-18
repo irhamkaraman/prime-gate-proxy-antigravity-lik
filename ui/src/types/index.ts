@@ -277,3 +277,25 @@ export interface ModalConfig {
   onConfirm?: () => Promise<void> | void;
   onCancel?: () => void;
 }
+
+export interface SystemUpdateStatus {
+  current_version: string;
+  current_commit: string;
+  latest_version: string;
+  latest_commit: string;
+  update_available: boolean;
+  commits_behind: number;
+  is_synced: boolean;
+  last_checked: number;
+  repo_url: string;
+}
+
+export interface GitPullResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  stdout?: string;
+  ui_rebuilt?: boolean;
+  status?: SystemUpdateStatus;
+}
+

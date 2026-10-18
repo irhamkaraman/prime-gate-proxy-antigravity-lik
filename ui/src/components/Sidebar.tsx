@@ -12,9 +12,12 @@ import {
   BookOpen,
   ArrowRightLeft,
   ChevronRight,
-  Sparkles,
+  RefreshCw,
+  Download,
+  AlertCircle,
+  GitBranch,
 } from 'lucide-react';
-import { Account, RoutePath } from '../types';
+import { Account, RoutePath, SystemUpdateStatus, GitPullResponse } from '../types';
 
 interface SidebarProps {
   activeAccount: Account | null;
@@ -33,6 +36,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { openModal, closeModal } = useModal();
   const { showToast } = useToast();
   const [switchingEmail, setSwitchingEmail] = useState<string | null>(null);
+
+  const [updateInfo, setUpdateInfo] = useState<SystemUpdateStatus | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+
+  const fetchUpdateStatus = async (force: boolean = false) => {
+    try {
+      if (force) setIsCheckingUpdate(true);
+      const res = await fetch(`/api/system/update-status${force ? '?refresh=true' : ''}`);
+      if (res.ok) {
+        const data: SystemUpdateStatus = await res.json();
+        setUpdateInfo(data);
+      }
+    } catch (e) {
+      console.warn('Failed to check system update status:', e);
+    } finally {
+      if (force) setIsCheckingUpdate(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUpdateStatus();
+    const interval = setInterval(() => {
+      fetchUpdateStatus();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleGitPull = async () => {
+    if (isPulling) return;
+    setIsPulling(true);
+    showToast('Pulling latest updates from GitHub repository...', 'info');
+    try {
+      const res = await fetch('/api/system/git-pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data: GitPullResponse = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || 'Failed to execute git pull');
+      }
+
+      showToast(
+        data.ui_rebuilt
+          ? 'Update pulled and UI rebuilt successfully! Reloading system...'
+          : 'Update pulled successfully! Reloading page...',
+        'success'
+      );
+
+      if (data.status) {
+        setUpdateInfo(data.status);
+      }
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: unknown) {
+      showToast((err as Error).message || 'Failed to update repository', 'error');
+    } finally {
+      setIsPulling(false);
+    }
+  };
 
   const navItems: Array<{
     id: RoutePath;
@@ -163,54 +228,161 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Brand Header */}
       <div
         style={{
-          padding: '24px 20px',
+          padding: '20px 18px',
           borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
           display: 'flex',
-          alignItems: 'center',
-          gap: 12,
+          flexDirection: 'column',
+          gap: 6,
         }}
       >
-        <div
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 10,
-            background: 'linear-gradient(135deg, #f59e0b, #b45309)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#ffffff',
-            boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-          }}
-        >
-          <Sparkles size={20} />
-        </div>
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em' }}>
+            Prime Gate
+          </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em' }}>
-              Prime Gate
-            </span>
             <span
               style={{
                 fontSize: 10,
                 fontWeight: 700,
                 color: '#f59e0b',
-                background: 'rgba(245, 158, 11, 0.15)',
-                padding: '2px 6px',
-                borderRadius: 4,
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                padding: '2px 7px',
+                borderRadius: 5,
+                fontFamily: 'monospace',
+                letterSpacing: '0.02em',
               }}
+              title={`Version: v${updateInfo?.current_version || '1.2.2'}`}
             >
-              v1.2.0
+              v{updateInfo?.current_version || '1.2.2'}
             </span>
+            <button
+              onClick={() => fetchUpdateStatus(true)}
+              disabled={isCheckingUpdate}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '3px',
+                cursor: 'pointer',
+                color: '#78716c',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 4,
+                transition: 'color 0.15s ease',
+              }}
+              title="Check for GitHub updates"
+              onMouseEnter={e => (e.currentTarget.style.color = '#fbbf24')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#78716c')}
+            >
+              <RefreshCw
+                size={12}
+                style={{
+                  animation: isCheckingUpdate ? 'spin 1s linear infinite' : 'none',
+                }}
+              />
+            </button>
           </div>
-          <div style={{ fontSize: 11, color: '#78716c', fontWeight: 500, marginTop: 2 }}>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 11, color: '#78716c', fontWeight: 500 }}>
             Antigravity Gateway
           </div>
+          {updateInfo?.current_commit && (
+            <div
+              style={{
+                fontSize: 10,
+                color: '#57534e',
+                fontFamily: 'monospace',
+              }}
+              title={`Local Commit: ${updateInfo.current_commit}`}
+            >
+              #{updateInfo.current_commit}
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Update Available Alert Banner */}
+      {updateInfo && (updateInfo.update_available || !updateInfo.is_synced) && (
+        <div
+          style={{
+            margin: '12px 12px 0 12px',
+            padding: '12px',
+            borderRadius: 10,
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.08))',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            boxShadow: '0 4px 14px rgba(245, 158, 11, 0.1)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertCircle size={14} color="#f59e0b" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#fbbf24' }}>
+                Update Available!
+              </span>
+            </div>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                background: '#f59e0b',
+                color: '#000',
+                padding: '1px 5px',
+                borderRadius: 4,
+                fontFamily: 'monospace',
+              }}
+            >
+              v{updateInfo.latest_version}
+            </span>
+          </div>
+
+          <div style={{ fontSize: 11, color: '#d6d3d1', lineHeight: 1.4 }}>
+            {updateInfo.commits_behind > 0
+              ? `Behind by ${updateInfo.commits_behind} commit${updateInfo.commits_behind > 1 ? 's' : ''} from remote origin.`
+              : `Local version (v${updateInfo.current_version}) is out of sync with GitHub (v${updateInfo.latest_version}).`}
+          </div>
+
+          <button
+            onClick={handleGitPull}
+            disabled={isPulling}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '7px 10px',
+              borderRadius: 7,
+              background: isPulling ? 'rgba(245, 158, 11, 0.3)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
+              border: 'none',
+              color: isPulling ? '#fcd34d' : '#000000',
+              fontWeight: 700,
+              fontSize: 11,
+              cursor: isPulling ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)',
+            }}
+          >
+            {isPulling ? (
+              <>
+                <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                <span>Pulling Updates...</span>
+              </>
+            ) : (
+              <>
+                <Download size={12} />
+                <span>Update Now (git pull)</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Navigation Links */}
-      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <nav style={{ flex: 1, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' }}>
         {navItems.map(item => {
           const isActive = currentRoute === item.id;
           return (
