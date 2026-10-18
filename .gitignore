@@ -47,8 +47,11 @@ accounts*.json
 *.token
 *.key
 
-# Compiled Binary Database
+# Compiled Binary Database & SQLite
 data/
+*.db
+*.sqlite
+*.sqlite3
 *.pgdb
 *.pgbin
 *.db-wal
