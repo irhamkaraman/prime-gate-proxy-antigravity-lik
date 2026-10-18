@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Smart Cache Hit Ratio:** Percentage of total requests resolved via cache vs upstream execution.
   - **Active Cache Entries:** Real-time count of unique prompt patterns preserved in binary database.
   - **Estimated Latency Saved:** Total developer waiting seconds saved across cache hits.
-- **Live Cache Engine Controls:** Interactive glass card toggles to enable/disable caching, toggle Agent Safety tool bypass, and configure minimum prompt length thresholds.
+- **Live Cache Engine Controls & Responsive Settings:** Interactive glass card controls to enable/disable caching, toggle Agent Safety tool bypass, and configure minimum prompt length thresholds. Clean, responsive vertical column layout with segmented controls for retention TTL (7d/14d/30d) and prompt length (5c/10c/25c).
 - **Searchable Persistent Cache Ledger:** Interactive table detailing Cached Model, Prompt Preview, Response Preview, Token Breakdown, Hit Count, Cumulative Tokens Saved, and Last Hit Timestamp with single-entry deletion and full modal inspection.
+- **Polished Visual Layout:** Uniform glass-card KPI styling, streamlined toolbar with quick refresh and purge actions, and sidebar version synchronization to v1.1.5.
 
 #### 4. Granular Request Hit Ledger Breakdown & Cumulative Totals
 - **Visual Cache Hit Badges:** Cache hits in the **Usage** ledger table (`ModelBenchmarkPage`) now feature a prominent `⚡ CACHE HIT` badge displaying exact tokens saved (`+N saved`).
