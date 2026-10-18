@@ -41,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }> = [
     {
       id: 'dashboard',
-      label: 'Dashboard & Telemetry',
+      label: 'Dashboard',
       icon: <Activity size={18} />,
     },
     {

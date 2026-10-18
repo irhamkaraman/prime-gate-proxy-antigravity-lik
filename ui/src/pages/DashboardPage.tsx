@@ -84,41 +84,79 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         }}
       >
         {/* Card 1: Throughput */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: 142,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Throughput Speed</span>
             <div className="pulse-dot" />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
-            <span style={{ fontSize: 30, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
               {metrics.throughput_tokens_per_sec.toFixed(1)}
             </span>
-            <span style={{ fontSize: 13, color: '#78716c' }}>tokens / sec</span>
+            <span style={{ fontSize: 12, color: '#78716c' }}>tokens / sec</span>
           </div>
-          <div style={{ fontSize: 12, color: '#78716c', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: '#78716c', marginTop: 8 }}>
             Active rolling output rate
           </div>
         </div>
 
         {/* Card 2: Tokens Consumed Today */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: 142,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Tokens Consumed Today</span>
             <span className="badge badge-amber">24h Rolling</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
-            <span style={{ fontSize: 30, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
               {metrics.tokens_today.total.toLocaleString()}
             </span>
-            <span style={{ fontSize: 13, color: '#78716c' }}>tokens</span>
+            <span style={{ fontSize: 12, color: '#78716c' }}>tokens</span>
           </div>
-          <div style={{ fontSize: 11, color: '#78716c', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
-            Prompt: {metrics.tokens_today.prompt.toLocaleString()} &bull; Comp: {metrics.tokens_today.completion.toLocaleString()} &bull; Think: {metrics.tokens_today.reasoning.toLocaleString()}
+          <div
+            style={{
+              fontSize: 11,
+              color: '#78716c',
+              marginTop: 8,
+              fontFamily: 'var(--font-mono)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+            title={`Prompt: ${metrics.tokens_today.prompt.toLocaleString()} • Comp: ${metrics.tokens_today.completion.toLocaleString()} • Think: ${metrics.tokens_today.reasoning.toLocaleString()}`}
+          >
+            Prompt: {metrics.tokens_today.prompt.toLocaleString()} &bull; Comp: {metrics.tokens_today.completion.toLocaleString()}
           </div>
         </div>
 
         {/* Card 3: Economic Value Delivered */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: 142,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Value Delivered</span>
             <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.06)', borderRadius: 6, padding: '2px 4px', gap: 2 }}>
@@ -158,47 +196,73 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 12 }}>
             <span style={{ fontSize: 24, fontWeight: 800, color: '#10b981', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-              {currency === 'IDR'
-                ? `Rp ${(benchmarks?.total_idr_delivered || 0).toLocaleString('id-ID')}`
-                : `$${(benchmarks?.total_usd_delivered || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              {(() => {
+                const idrVal = (benchmarks?.total_idr_delivered && benchmarks.total_idr_delivered > 0)
+                  ? benchmarks.total_idr_delivered
+                  : Math.round((metrics.cumulative.tokens / 1_000_000) * 5.0 * 16250);
+                const usdVal = (benchmarks?.total_usd_delivered && benchmarks.total_usd_delivered > 0)
+                  ? benchmarks.total_usd_delivered
+                  : Number(((metrics.cumulative.tokens / 1_000_000) * 5.0).toFixed(2));
+                return currency === 'IDR'
+                  ? `Rp ${idrVal.toLocaleString('id-ID')}`
+                  : `$${usdVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              })()}
             </span>
           </div>
-          <div style={{ fontSize: 12, color: '#78716c', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 12, color: '#78716c', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span className="badge badge-emerald" style={{ fontSize: 9, padding: '1px 5px' }}>Free Tier</span>
-            <span>Commercial API savings benchmark</span>
+            <span>Commercial API savings</span>
           </div>
         </div>
 
         {/* Card 4: Average Latency */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: 142,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Average Latency (TTFT)</span>
             <span className="badge badge-emerald">Optimal</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
-            <span style={{ fontSize: 30, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
               {metrics.latency_ms.ttft_avg || 3121}
             </span>
-            <span style={{ fontSize: 13, color: '#78716c' }}>ms</span>
+            <span style={{ fontSize: 12, color: '#78716c' }}>ms</span>
           </div>
-          <div style={{ fontSize: 12, color: '#78716c', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: '#78716c', marginTop: 8 }}>
             Time to first streaming token
           </div>
         </div>
 
         {/* Card 5: Cumulative Handled */}
-        <div className="glass-card" style={{ padding: '20px 24px' }}>
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 22px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minHeight: 142,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Cumulative Handled</span>
             <span className="badge badge-neutral">All-time</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 12 }}>
-            <span style={{ fontSize: 30, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.03em', fontFamily: 'var(--font-mono)' }}>
               {metrics.cumulative.requests.toLocaleString()}
             </span>
-            <span style={{ fontSize: 13, color: '#78716c' }}>requests</span>
+            <span style={{ fontSize: 12, color: '#78716c' }}>requests</span>
           </div>
-          <div style={{ fontSize: 12, color: '#78716c', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: '#78716c', marginTop: 8 }}>
             Cumulative: {metrics.cumulative.tokens.toLocaleString()} tokens
           </div>
         </div>

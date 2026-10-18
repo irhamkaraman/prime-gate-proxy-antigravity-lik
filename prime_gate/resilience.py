@@ -56,7 +56,12 @@ class AccountFailoverPool:
         def _get_sort_score(acc):
             em = acc.get("email", "")
             if quota_cache and em in quota_cache:
-                return quota_cache[em].get("remaining_fraction", 1.0)
+                q_val = quota_cache[em]
+                if isinstance(q_val, dict):
+                    return q_val.get("remaining_fraction", 1.0)
+                elif isinstance(q_val, list) and q_val:
+                    pcts = [b.get("percentage", 100) for b in q_val if isinstance(b, dict)]
+                    return (sum(pcts) / len(pcts)) / 100.0 if pcts else 1.0
             return 1.0
 
         candidates.sort(key=_get_sort_score, reverse=True)
@@ -92,7 +97,12 @@ class AccountFailoverPool:
         def _quota_score(acc):
             em = acc.get("email", "")
             if quota_cache and em in quota_cache:
-                return quota_cache[em].get("remaining_fraction", 1.0)
+                q_val = quota_cache[em]
+                if isinstance(q_val, dict):
+                    return q_val.get("remaining_fraction", 1.0)
+                elif isinstance(q_val, list) and q_val:
+                    pcts = [b.get("percentage", 100) for b in q_val if isinstance(b, dict)]
+                    return (sum(pcts) / len(pcts)) / 100.0 if pcts else 1.0
             return 1.0
 
         healthy.sort(key=_quota_score, reverse=True)

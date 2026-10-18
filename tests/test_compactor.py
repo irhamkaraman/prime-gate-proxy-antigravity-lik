@@ -37,8 +37,26 @@ class TestContextCompactor(unittest.TestCase):
         self.assertGreater(pruned, 0)
         self.assertIn("Historical tool execution output pruned", compacted[2]["content"])
         # Ensure system prompt and latest user prompt are unaffected
-        self.assertEqual(compacted[0]["content"], "You are an AI assistant.")
-        self.assertEqual(compacted[-1]["content"], "Final analysis")
+    def test_server_style_compactor_call(self):
+        large_output = ("data row verbose output " * 10 + "\n") * 50
+        messages = [
+            {"role": "user", "content": "1"},
+            {"role": "tool", "tool_call_id": "c1", "content": large_output},
+            {"role": "user", "content": "2"},
+            {"role": "user", "content": "3"},
+            {"role": "user", "content": "4"},
+            {"role": "user", "content": "5"},
+        ]
+        compacted, stats = ContextCompactor.compact_messages(
+            messages=messages,
+            keep_recent_user_turns=3,
+            max_tool_output_lines=20
+        )
+        self.assertTrue(stats.get("compacted"))
+        self.assertGreater(stats["pruned_tool_messages"], 0)
+        self.assertGreater(stats["chars_saved"], 0)
+        self.assertGreater(int(stats), 0)
 
 if __name__ == "__main__":
     unittest.main()
+

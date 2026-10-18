@@ -1508,7 +1508,10 @@ async def chat_completions(request: Request):
         "eligible": cache_eligible
     }
 
-    quota_cache = QuotaMonitor.get_cached_quotas()
+    try:
+        quota_cache = QuotaMonitor.get_cached_quotas()
+    except Exception:
+        quota_cache = None
     ordered_accounts = AccountFailoverPool.get_ordered_accounts(
         accounts=accounts,
         preferred_account=active_acc,
@@ -1577,185 +1580,185 @@ async def chat_completions(request: Request):
                             continue
                         raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
 
-                        content_text = ""
-                        reasoning_text = ""
-                        tool_calls = []
-                        finish_reason = "stop"
-                        prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
-                        completion_tokens = 0
-                        reasoning_tokens = 0
+                    content_text = ""
+                    reasoning_text = ""
+                    tool_calls = []
+                    finish_reason = "stop"
+                    prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
+                    completion_tokens = 0
+                    reasoning_tokens = 0
 
-                        async for line in resp.aiter_lines():
-                            if not line or not line.startswith("data:"):
-                                continue
-                            raw_json = line[len("data:"):].strip()
-                            if not raw_json or raw_json == "[DONE]":
-                                continue
-                            try:
-                                payload = json.loads(raw_json)
-                                response_obj = payload.get("response", payload)
-                                usage = response_obj.get("usageMetadata", {})
-                                if usage.get("promptTokenCount"):
-                                    prompt_tokens = usage["promptTokenCount"]
-                                if usage.get("candidatesTokenCount"):
-                                    completion_tokens = usage["candidatesTokenCount"]
-                                if usage.get("thoughtsTokenCount"):
-                                    reasoning_tokens = usage["thoughtsTokenCount"]
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        raw_json = line[len("data:"):].strip()
+                        if not raw_json or raw_json == "[DONE]":
+                            continue
+                        try:
+                            payload = json.loads(raw_json)
+                            response_obj = payload.get("response", payload)
+                            usage = response_obj.get("usageMetadata", {})
+                            if usage.get("promptTokenCount"):
+                                prompt_tokens = usage["promptTokenCount"]
+                            if usage.get("candidatesTokenCount"):
+                                completion_tokens = usage["candidatesTokenCount"]
+                            if usage.get("thoughtsTokenCount"):
+                                reasoning_tokens = usage["thoughtsTokenCount"]
 
-                                candidates = response_obj.get("candidates", [])
-                                if candidates:
-                                    cand = candidates[0]
-                                    if cand.get("finishReason"):
-                                        finish_reason = cand["finishReason"].lower()
-                                    parts = cand.get("content", {}).get("parts", [])
-                                    for p in parts:
-                                        if p.get("thought") and p.get("text"):
-                                            reasoning_text += p["text"]
-                                        elif p.get("text"):
-                                            content_text += p["text"]
-                                        elif p.get("functionCall"):
-                                            fn = p["functionCall"]
-                                            call_id = fn.get("id") or ("call_" + uuid.uuid4().hex[:8])
-                                            raw_name = fn.get("name", "")
-                                            raw_args = fn.get("args", {})
-                                            fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
-                                            tool_calls.append({
-                                                "id": call_id,
-                                                "type": "function",
-                                                "function": {
-                                                    "name": fn_name,
-                                                    "arguments": json.dumps(args)
-                                                }
-                                            })
-                            except Exception:
-                                continue
+                            candidates = response_obj.get("candidates", [])
+                            if candidates:
+                                cand = candidates[0]
+                                if cand.get("finishReason"):
+                                    finish_reason = cand["finishReason"].lower()
+                                parts = cand.get("content", {}).get("parts", [])
+                                for p in parts:
+                                    if p.get("thought") and p.get("text"):
+                                        reasoning_text += p["text"]
+                                    elif p.get("text"):
+                                        content_text += p["text"]
+                                    elif p.get("functionCall"):
+                                        fn = p["functionCall"]
+                                        call_id = fn.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                                        raw_name = fn.get("name", "")
+                                        raw_args = fn.get("args", {})
+                                        fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
+                                        tool_calls.append({
+                                            "id": call_id,
+                                            "type": "function",
+                                            "function": {
+                                                "name": fn_name,
+                                                "arguments": json.dumps(args)
+                                            }
+                                        })
+                        except Exception:
+                            continue
 
-                        # Intercept and convert text-based Antigravity tool calls if model emitted text
-                        if not tool_calls and "call:" in content_text:
-                            raw_tools = body.get("tools")
-                            cleaned, text_tcs = extract_text_tool_calls(content_text, raw_tools)
-                            if text_tcs:
-                                tool_calls.extend(text_tcs)
-                                if cleaned.strip().startswith("Thought:") or cleaned.strip().startswith("thought:"):
-                                    reasoning_text += cleaned
-                                    content_text = ""
-                                else:
-                                    content_text = cleaned
-                                finish_reason = "tool_calls"
-                        elif tool_calls:
+                    # Intercept and convert text-based Antigravity tool calls if model emitted text
+                    if not tool_calls and "call:" in content_text:
+                        raw_tools = body.get("tools")
+                        cleaned, text_tcs = extract_text_tool_calls(content_text, raw_tools)
+                        if text_tcs:
+                            tool_calls.extend(text_tcs)
+                            if cleaned.strip().startswith("Thought:") or cleaned.strip().startswith("thought:"):
+                                reasoning_text += cleaned
+                                content_text = ""
+                            else:
+                                content_text = cleaned
                             finish_reason = "tool_calls"
+                    elif tool_calls:
+                        finish_reason = "tool_calls"
 
-                        if not completion_tokens and content_text:
-                            completion_tokens = max(1, len(content_text.split()))
+                    if not completion_tokens and content_text:
+                        completion_tokens = max(1, len(content_text.split()))
 
-                        # Store in Smart Cache if eligible and no tool calls occurred
-                        if cache_eligible and not tool_calls and content_text:
-                            try:
-                                db.store_cached_response(
-                                    cache_key=cache_key,
-                                    prompt_hash=prompt_hash,
-                                    prompt_preview=prompt_preview,
-                                    response_text=content_text,
-                                    model=model,
-                                    prompt_tokens=prompt_tokens,
-                                    completion_tokens=completion_tokens,
-                                    reasoning_tokens=reasoning_tokens
-                                )
-                                event_bus.broadcast_sync({
-                                    "type": "CACHE_STORED",
-                                    "key": cache_key,
-                                    "model": model,
-                                    "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
-                                })
-                            except Exception as e:
-                                logger.error(f"Failed to cache non-stream response: {e}")
+                    # Store in Smart Cache if eligible and no tool calls occurred
+                    if cache_eligible and not tool_calls and content_text:
+                        try:
+                            db.store_cached_response(
+                                cache_key=cache_key,
+                                prompt_hash=prompt_hash,
+                                prompt_preview=prompt_preview,
+                                response_text=content_text,
+                                model=model,
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=completion_tokens,
+                                reasoning_tokens=reasoning_tokens
+                            )
+                            event_bus.broadcast_sync({
+                                "type": "CACHE_STORED",
+                                "key": cache_key,
+                                "model": model,
+                                "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
+                            })
+                        except Exception as e:
+                            logger.error(f"Failed to cache non-stream response: {e}")
 
-                        latency_ms = (time.time() - created) * 1000
-                        telemetry.record_usage(
+                    latency_ms = (time.time() - created) * 1000
+                    telemetry.record_usage(
+                        model=model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        reasoning_tokens=reasoning_tokens,
+                        latency_ms=latency_ms
+                    )
+
+                    # Record granular request hit into persistent database ledger
+                    try:
+                        acc_email = account.get("email")
+                        quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if acc_email else None
+                        db.record_request_hit(
+                            request_id=completion_id,
+                            timestamp=created,
+                            account_email=acc_email,
                             model=model,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                             reasoning_tokens=reasoning_tokens,
-                            latency_ms=latency_ms
+                            latency_ms=latency_ms,
+                            status_code=200,
+                            stream=0,
+                            quota_snapshot=quota_snap,
+                            cache_hit=0,
+                            tokens_saved=0
                         )
+                    except Exception as e:
+                        logger.error(f"Failed to record request hit to db: {e}")
 
-                        # Record granular request hit into persistent database ledger
-                        try:
-                            acc_email = account.get("email")
-                            quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if acc_email else None
-                            db.record_request_hit(
-                                request_id=completion_id,
-                                timestamp=created,
-                                account_email=acc_email,
-                                model=model,
-                                prompt_tokens=prompt_tokens,
-                                completion_tokens=completion_tokens,
-                                reasoning_tokens=reasoning_tokens,
-                                latency_ms=latency_ms,
-                                status_code=200,
-                                stream=0,
-                                quota_snapshot=quota_snap,
-                                cache_hit=0,
-                                tokens_saved=0
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to record request hit to db: {e}")
+                    # Live broadcast request logged & telemetry to WebSocket clients
+                    try:
+                        event_bus.broadcast_sync({
+                            "type": "REQUEST_LOGGED",
+                            "request_id": completion_id,
+                            "model": model,
+                            "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens,
+                            "cache_hit": False,
+                            "tokens_saved": 0
+                        })
+                    except Exception:
+                        pass
 
-                        # Live broadcast request logged & telemetry to WebSocket clients
-                        try:
-                            event_bus.broadcast_sync({
-                                "type": "REQUEST_LOGGED",
-                                "request_id": completion_id,
-                                "model": model,
-                                "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens,
-                                "cache_hit": False,
-                                "tokens_saved": 0
-                            })
-                        except Exception:
-                            pass
-
-                        try:
-                            metrics_data = telemetry.get_metrics(time_range="minute")
-                            s = metrics_data["summary"]
-                            event_bus.broadcast_sync({
-                                "type": "TELEMETRY_UPDATE",
-                                "metrics": {
-                                    "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
-                                    "tokens_today": {
-                                        "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
-                                        "prompt": s.get("total_prompt_tokens", 0),
-                                        "completion": s.get("total_completion_tokens", 0),
-                                        "reasoning": s.get("total_reasoning_tokens", 0)
-                                    },
-                                    "latency_ms": {
-                                        "ttft_avg": s.get("avg_latency_ms", 0.0),
-                                        "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
-                                    },
-                                    "cumulative": {
-                                        "requests": s.get("total_requests_all_time", 0),
-                                        "tokens": s.get("total_tokens_all_time", 0)
-                                    }
+                    try:
+                        metrics_data = telemetry.get_metrics(time_range="minute")
+                        s = metrics_data["summary"]
+                        event_bus.broadcast_sync({
+                            "type": "TELEMETRY_UPDATE",
+                            "metrics": {
+                                "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
+                                "tokens_today": {
+                                    "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
+                                    "prompt": s.get("total_prompt_tokens", 0),
+                                    "completion": s.get("total_completion_tokens", 0),
+                                    "reasoning": s.get("total_reasoning_tokens", 0)
                                 },
-                                "chart_data": metrics_data.get("chart_data"),
-                                "chart_range": "1m"
-                            })
-                        except Exception:
-                            pass
+                                "latency_ms": {
+                                    "ttft_avg": s.get("avg_latency_ms", 0.0),
+                                    "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
+                                },
+                                "cumulative": {
+                                    "requests": s.get("total_requests_all_time", 0),
+                                    "tokens": s.get("total_tokens_all_time", 0)
+                                }
+                            },
+                            "chart_data": metrics_data.get("chart_data"),
+                            "chart_range": "1m"
+                        })
+                    except Exception:
+                        pass
 
-                        resp_json = format_non_stream_response(
-                            completion_id, created, model,
-                            content_text,
-                            tool_calls if tool_calls else None,
-                            finish_reason=finish_reason,
-                            reasoning_content=reasoning_text if reasoning_text else None,
-                            usage={
-                                "prompt_tokens": prompt_tokens,
-                                "completion_tokens": completion_tokens,
-                                "total_tokens": prompt_tokens + completion_tokens,
-                                "reasoning_tokens": reasoning_tokens
-                            }
-                        )
-                        return JSONResponse(content=resp_json, headers={"X-Cache": "MISS"})
+                    resp_json = format_non_stream_response(
+                        completion_id, created, model,
+                        content_text,
+                        tool_calls if tool_calls else None,
+                        finish_reason=finish_reason,
+                        reasoning_content=reasoning_text if reasoning_text else None,
+                        usage={
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": prompt_tokens + completion_tokens,
+                            "reasoning_tokens": reasoning_tokens
+                        }
+                    )
+                    return JSONResponse(content=resp_json, headers={"X-Cache": "MISS"})
 
         except Exception as e:
             last_error = e

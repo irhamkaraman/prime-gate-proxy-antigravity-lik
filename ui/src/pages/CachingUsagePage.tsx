@@ -24,6 +24,7 @@ import {
   Cpu,
   Minimize2,
   ShieldAlert,
+  Power,
 } from 'lucide-react';
 
 
@@ -459,7 +460,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
             gap: 16,
           }}
         >
@@ -469,17 +470,18 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '18px 20px',
-              borderRadius: 12,
-              background: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: `1px solid ${config.enabled ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+              minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Zap size={16} color={config.enabled ? '#34d399' : '#78716c'} />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                     Smart Semantic Cache
                   </span>
                 </div>
@@ -504,23 +506,64 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
             </div>
 
             <div style={{ marginTop: 18 }}>
-              <button
-                onClick={() => handleSaveConfig({ enabled: !config.enabled })}
-                disabled={isSavingConfig}
-                className={`btn btn-sm ${config.enabled ? 'btn-primary' : 'btn-secondary'}`}
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  padding: '7px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: config.enabled ? '#10b981' : undefined,
-                  borderColor: config.enabled ? '#10b981' : undefined,
-                  color: '#ffffff',
-                }}
-              >
-                {config.enabled ? 'Enabled' : 'Disabled'}
-              </button>
+              {config.enabled ? (
+                <button
+                  onClick={() => handleSaveConfig({ enabled: false })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    color: '#f87171',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.25)';
+                  }}
+                >
+                  <Power size={13} />
+                  <span>Turn Off Cache</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSaveConfig({ enabled: true })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: '#10b981',
+                    border: '1px solid #10b981',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                  }}
+                >
+                  <Zap size={13} />
+                  <span>Enable Cache</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -530,21 +573,35 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '18px 20px',
-              borderRadius: 12,
-              background: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: `1px solid ${config.bypass_tools ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+              minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Shield size={16} color={config.bypass_tools ? '#38bdf8' : '#78716c'} />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                     Bypass Dynamic Tools
                   </span>
                 </div>
-                <span className="badge badge-amber" style={{ fontSize: 10, padding: '2px 6px' }}>Recommended</span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: config.bypass_tools ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                    color: config.bypass_tools ? '#38bdf8' : '#78716c',
+                    border: `1px solid ${config.bypass_tools ? 'rgba(56, 189, 248, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`,
+                  }}
+                >
+                  {config.bypass_tools ? 'ACTIVE (SAFE)' : 'OFF'}
+                </span>
               </div>
               <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 10, lineHeight: 1.5 }}>
                 Prevents stale state when AI coding agents execute file operations, terminal commands, or live dynamic tools.
@@ -552,23 +609,64 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
             </div>
 
             <div style={{ marginTop: 18 }}>
-              <button
-                onClick={() => handleSaveConfig({ bypass_tools: !config.bypass_tools })}
-                disabled={isSavingConfig}
-                className={`btn btn-sm ${config.bypass_tools ? 'btn-primary' : 'btn-secondary'}`}
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  padding: '7px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: config.bypass_tools ? '#38bdf8' : undefined,
-                  borderColor: config.bypass_tools ? '#38bdf8' : undefined,
-                  color: '#ffffff',
-                }}
-              >
-                {config.bypass_tools ? 'Active (Safe)' : 'Off'}
-              </button>
+              {config.bypass_tools ? (
+                <button
+                  onClick={() => handleSaveConfig({ bypass_tools: false })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    color: '#f87171',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.25)';
+                  }}
+                >
+                  <Power size={13} />
+                  <span>Disable Tool Bypass</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSaveConfig({ bypass_tools: true })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: '#0284c7',
+                    border: '1px solid #0284c7',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)',
+                  }}
+                >
+                  <Shield size={13} />
+                  <span>Enable Tool Bypass (Safe)</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -578,17 +676,18 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '18px 20px',
-              borderRadius: 12,
-              background: 'rgba(0, 0, 0, 0.3)',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
+              minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Cpu size={16} color="#a78bfa" />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                     Minimum Prompt Length
                   </span>
                 </div>
@@ -597,7 +696,11 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                     fontSize: 11,
                     fontFamily: 'var(--font-mono)',
                     fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: 'rgba(167, 139, 250, 0.15)',
                     color: '#c4b5fd',
+                    border: '1px solid rgba(167, 139, 250, 0.3)',
                   }}
                 >
                   {config.min_prompt_length} chars
@@ -632,7 +735,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                       onClick={() => handleSaveConfig({ min_prompt_length: item.len })}
                       disabled={isSavingConfig}
                       style={{
-                        padding: '6px 0',
+                        padding: '7px 0',
                         fontSize: 11,
                         fontWeight: isActive ? 700 : 500,
                         fontFamily: 'var(--font-mono)',
@@ -659,17 +762,18 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '18px 20px',
-              borderRadius: 12,
-              background: 'rgba(0, 0, 0, 0.3)',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
               border: '1px solid rgba(255, 255, 255, 0.08)',
+              minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Clock size={16} color="#f59e0b" />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                     Cache Retention (TTL)
                   </span>
                 </div>
@@ -678,7 +782,11 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                     fontSize: 11,
                     fontFamily: 'var(--font-mono)',
                     fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: 'rgba(245, 158, 11, 0.15)',
                     color: '#fbbf24',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
                   }}
                 >
                   {config.ttl_seconds === 604800 ? '7 Days' : config.ttl_seconds === 1209600 ? '14 Days' : '30 Days'}
@@ -713,7 +821,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                       onClick={() => handleSaveConfig({ ttl_seconds: item.sec })}
                       disabled={isSavingConfig}
                       style={{
-                        padding: '6px 0',
+                        padding: '7px 0',
                         fontSize: 11,
                         fontWeight: isActive ? 700 : 500,
                         fontFamily: 'var(--font-mono)',
@@ -740,17 +848,18 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '18px 20px',
-              borderRadius: 12,
-              background: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: `1px solid ${config.compactor_enabled !== false ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+              minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Minimize2 size={16} color={config.compactor_enabled !== false ? '#34d399' : '#78716c'} />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                     Context Compactor
                   </span>
                 </div>
@@ -774,7 +883,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               </p>
             </div>
 
-            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div
                 style={{
                   display: 'grid',
@@ -817,23 +926,64 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                 })}
               </div>
 
-              <button
-                onClick={() => handleSaveConfig({ compactor_enabled: config.compactor_enabled === false ? true : false })}
-                disabled={isSavingConfig}
-                className={`btn btn-sm ${config.compactor_enabled !== false ? 'btn-primary' : 'btn-secondary'}`}
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  padding: '7px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: config.compactor_enabled !== false ? '#10b981' : undefined,
-                  borderColor: config.compactor_enabled !== false ? '#10b981' : undefined,
-                  color: '#ffffff',
-                }}
-              >
-                {config.compactor_enabled !== false ? 'Compactor Enabled' : 'Compactor Disabled'}
-              </button>
+              {config.compactor_enabled !== false ? (
+                <button
+                  onClick={() => handleSaveConfig({ compactor_enabled: false })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    color: '#f87171',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.25)';
+                  }}
+                >
+                  <Power size={13} />
+                  <span>Turn Off Compactor</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSaveConfig({ compactor_enabled: true })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: '#10b981',
+                    border: '1px solid #10b981',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)',
+                  }}
+                >
+                  <Minimize2 size={13} />
+                  <span>Enable Compactor</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -843,17 +993,18 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              padding: '18px 20px',
-              borderRadius: 12,
-              background: 'rgba(0, 0, 0, 0.3)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '20px',
+              borderRadius: 14,
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: `1px solid ${config.loop_guard_enabled !== false ? 'rgba(244, 63, 94, 0.25)' : 'rgba(255, 255, 255, 0.08)'}`,
+              minHeight: 230,
             }}
           >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <ShieldAlert size={16} color={config.loop_guard_enabled !== false ? '#f43f5e' : '#78716c'} />
-                  <span style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                     Runaway Loop Sentinel
                   </span>
                 </div>
@@ -877,7 +1028,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               </p>
             </div>
 
-            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div
                 style={{
                   display: 'grid',
@@ -920,23 +1071,64 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                 })}
               </div>
 
-              <button
-                onClick={() => handleSaveConfig({ loop_guard_enabled: config.loop_guard_enabled === false ? true : false })}
-                disabled={isSavingConfig}
-                className={`btn btn-sm ${config.loop_guard_enabled !== false ? 'btn-primary' : 'btn-secondary'}`}
-                style={{
-                  width: '100%',
-                  justifyContent: 'center',
-                  padding: '7px 14px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: config.loop_guard_enabled !== false ? '#f43f5e' : undefined,
-                  borderColor: config.loop_guard_enabled !== false ? '#f43f5e' : undefined,
-                  color: '#ffffff',
-                }}
-              >
-                {config.loop_guard_enabled !== false ? 'Loop Guard Active' : 'Loop Guard Disabled'}
-              </button>
+              {config.loop_guard_enabled !== false ? (
+                <button
+                  onClick={() => handleSaveConfig({ loop_guard_enabled: false })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: 'rgba(244, 63, 94, 0.08)',
+                    border: '1px solid rgba(244, 63, 94, 0.25)',
+                    color: '#f87171',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.16)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(244, 63, 94, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.25)';
+                  }}
+                >
+                  <Power size={13} />
+                  <span>Deactivate Sentinel</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleSaveConfig({ loop_guard_enabled: true })}
+                  disabled={isSavingConfig}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: '#f43f5e',
+                    border: '1px solid #f43f5e',
+                    color: '#ffffff',
+                    boxShadow: '0 2px 8px rgba(244, 63, 94, 0.25)',
+                  }}
+                >
+                  <ShieldAlert size={13} />
+                  <span>Activate Sentinel</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

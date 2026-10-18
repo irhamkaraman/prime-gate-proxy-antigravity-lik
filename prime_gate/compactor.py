@@ -4,6 +4,49 @@ from typing import List, Dict, Any, Tuple, Optional
 
 logger = logging.getLogger("prime_gate.compactor")
 
+class CompactorStats(dict):
+    """
+    Statistics dictionary that also behaves as an integer (tokens_saved)
+    for seamless backwards compatibility.
+    """
+    def __init__(self, tokens_saved: int = 0, chars_saved: int = 0, pruned_tool_messages: int = 0):
+        super().__init__({
+            "compacted": tokens_saved > 0 or chars_saved > 0,
+            "tokens_saved": tokens_saved,
+            "chars_saved": chars_saved,
+            "pruned_tool_messages": pruned_tool_messages,
+        })
+        self.tokens_saved = tokens_saved
+
+    def __int__(self):
+        return self.tokens_saved
+
+    def __eq__(self, other):
+        if isinstance(other, int):
+            return self.tokens_saved == other
+        return super().__eq__(other)
+
+    def __gt__(self, other):
+        if isinstance(other, int):
+            return self.tokens_saved > other
+        return super().__gt__(other)
+
+    def __ge__(self, other):
+        if isinstance(other, int):
+            return self.tokens_saved >= other
+        return super().__ge__(other)
+
+    def __lt__(self, other):
+        if isinstance(other, int):
+            return self.tokens_saved < other
+        return super().__lt__(other)
+
+    def __le__(self, other):
+        if isinstance(other, int):
+            return self.tokens_saved <= other
+        return super().__le__(other)
+
+
 class ContextCompactor:
     """
     Intelligent conversation context compactor for AI coding agents.
@@ -25,24 +68,37 @@ class ContextCompactor:
     def compact_messages(
         cls,
         messages: List[Dict[str, Any]],
-        config: Optional[Dict[str, Any]] = None
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        config: Optional[Dict[str, Any]] = None,
+        keep_recent_user_turns: Optional[int] = None,
+        max_tool_output_lines: Optional[int] = None,
+        **kwargs
+    ) -> Tuple[List[Dict[str, Any]], CompactorStats]:
         """
         Compacts the message history.
         
         Args:
             messages: OpenAI-format list of message dicts.
             config: Optional override dictionary for compactor parameters.
+            keep_recent_user_turns: Optional override for active user turns window.
+            max_tool_output_lines: Optional override for maximum tool output lines preserved.
             
         Returns:
-            Tuple of (compacted_messages, estimated_tokens_pruned).
+            Tuple of (compacted_messages, compactor_stats).
         """
         cfg = dict(cls.DEFAULT_CONFIG)
         if config:
             cfg.update(config)
+        if keep_recent_user_turns is not None:
+            cfg["window_turns"] = keep_recent_user_turns
+        if max_tool_output_lines is not None:
+            half = max(2, max_tool_output_lines // 2)
+            cfg["preserve_head_lines"] = half
+            cfg["preserve_tail_lines"] = half
+        for k, v in kwargs.items():
+            cfg[k] = v
 
         if not cfg.get("enabled", True) or not messages:
-            return messages, 0
+            return messages, CompactorStats()
 
         window_turns = int(cfg.get("window_turns", 3))
         max_tool_chars = int(cfg.get("max_tool_chars", 600))
@@ -50,6 +106,7 @@ class ContextCompactor:
         tail_lines = int(cfg.get("preserve_tail_lines", 6))
 
         total_pruned_chars = 0
+        pruned_tool_count = 0
         compacted: List[Dict[str, Any]] = []
 
         # Step 1: Identify turns backwards (a user message typically marks a new user turn)
@@ -90,6 +147,7 @@ class ContextCompactor:
                         pruned_diff = len(content) - len(new_content)
                         if pruned_diff > 0:
                             total_pruned_chars += pruned_diff
+                            pruned_tool_count += 1
                             msg_copy["content"] = new_content
                 elif isinstance(content, list):
                     # Handle multimodal or structured text parts
@@ -107,7 +165,10 @@ class ContextCompactor:
                                         f"({len(p_text):,} chars) ...]\n"
                                     )
                                     part["text"] = "\n".join(kept_head) + pruned_marker + "\n".join(kept_tail)
-                                    total_pruned_chars += (len(p_text) - len(part["text"]))
+                                    p_diff = len(p_text) - len(part["text"])
+                                    if p_diff > 0:
+                                        total_pruned_chars += p_diff
+                                        pruned_tool_count += 1
                         new_parts.append(part)
                     msg_copy["content"] = new_parts
 
@@ -117,7 +178,12 @@ class ContextCompactor:
         if estimated_tokens_pruned > 0:
             logger.info(
                 f"[COMPACTOR] Pruned ~{estimated_tokens_pruned:,} tokens ({total_pruned_chars:,} chars) "
-                f"from historical turns beyond last {window_turns} active turns."
+                f"across {pruned_tool_count} tool output(s) beyond last {window_turns} active turns."
             )
 
-        return compacted, estimated_tokens_pruned
+        stats = CompactorStats(
+            tokens_saved=estimated_tokens_pruned,
+            chars_saved=total_pruned_chars,
+            pruned_tool_messages=pruned_tool_count
+        )
+        return compacted, stats
