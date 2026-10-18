@@ -200,7 +200,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 borderRadius: 4,
               }}
             >
-              v1.1.2
+              v1.1.5
             </span>
           </div>
           <div style={{ fontSize: 11, color: '#78716c', fontWeight: 500, marginTop: 2 }}>

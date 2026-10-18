@@ -83,6 +83,7 @@ export interface CacheEntry {
   cache_key: string;
   prompt_hash: string;
   prompt_preview: string;
+  response_preview?: string;
   response_text: string;
   model: string;
   prompt_tokens: number;

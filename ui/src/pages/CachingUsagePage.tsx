@@ -16,10 +16,11 @@ import {
   Shield,
   Layers,
   Settings,
-  Flame,
   CheckCircle2,
   XCircle,
   Eye,
+  Sliders,
+  Database,
 } from 'lucide-react';
 
 interface CachingUsagePageProps {
@@ -32,7 +33,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
   isWsConnected = false,
 }) => {
   const { showToast } = useToast();
-  const { openModal, closeModal } = useModal();
+  const { openModal } = useModal();
 
   const [stats, setStats] = useState<CacheStats | null>(null);
   const [entriesData, setEntriesData] = useState<CacheEntriesResponse | null>(null);
@@ -182,6 +183,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
 
   // View full response modal
   const handleViewDetails = (entry: CacheEntry) => {
+    const responseContent = entry.response_text || entry.response_preview || '(No response text captured)';
     openModal({
       title: `Cached Prompt & Response Details`,
       description: `Model: ${entry.model} | Cache Key: ${entry.cache_key}`,
@@ -190,11 +192,11 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12 }}>
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#a8a29e', marginBottom: 6 }}>
-              Prompt Preview:
+              Prompt Content:
             </div>
             <pre
               style={{
-                background: 'rgba(0, 0, 0, 0.4)',
+                background: 'rgba(0, 0, 0, 0.45)',
                 border: '1px solid rgba(255, 255, 255, 0.1)',
                 padding: '12px 14px',
                 borderRadius: 8,
@@ -216,19 +218,20 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
             </div>
             <pre
               style={{
-                background: 'rgba(0, 0, 0, 0.5)',
-                border: '1px solid rgba(16, 185, 129, 0.2)',
+                background: 'rgba(0, 0, 0, 0.55)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
                 padding: '12px 14px',
                 borderRadius: 8,
                 fontSize: 12,
                 color: '#34d399',
-                maxHeight: 220,
+                maxHeight: 240,
                 overflowY: 'auto',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
+                fontFamily: 'var(--font-mono)',
               }}
             >
-              {entry.response_text}
+              {responseContent}
             </pre>
           </div>
 
@@ -271,48 +274,98 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
   const totalPages = Math.ceil(totalEntriesCount / pageSize);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {/* Top Header & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
+    <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Top Sub-Bar: Clean Engine Status & Actions Toolbar (No duplicate title) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Status Badge */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 14px',
+              borderRadius: 20,
+              background: config.enabled ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+              border: `1px solid ${config.enabled ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+            }}
+          >
+            <span
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                background: 'rgba(16, 185, 129, 0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#10b981',
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: config.enabled ? '#10b981' : '#f59e0b',
+                boxShadow: config.enabled ? '0 0 8px #10b981' : 'none',
+              }}
+            />
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: config.enabled ? '#34d399' : '#fbbf24',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.03em',
               }}
             >
-              <Zap size={20} />
-            </div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em' }}>
-              Smart Semantic Caching Usage
-            </h1>
+              {config.enabled ? 'SMART CACHE ACTIVE' : 'CACHE ENGINE PAUSED'}
+            </span>
           </div>
-          <p style={{ fontSize: 13, color: '#a8a29e', marginTop: 4 }}>
-            Zero-quota prompt caching layer. Intercepts identical requests, delivers ~5ms response times, and preserves upstream quota.
-          </p>
+
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 12px',
+              borderRadius: 20,
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              fontSize: 11,
+              color: '#a8a29e',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <Database size={12} color="#38bdf8" />
+            <span>SQLite WAL Mode &bull; CRC32 Verified</span>
+          </div>
+
+          {config.bypass_tools && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '6px 12px',
+                borderRadius: 20,
+                background: 'rgba(56, 189, 248, 0.1)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                fontSize: 11,
+                color: '#38bdf8',
+                fontWeight: 600,
+              }}
+            >
+              <Shield size={12} />
+              <span>Agent Safety Guard Active</span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {/* WebSocket Status Indicator */}
           <div
             style={{
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              background: 'rgba(0, 0, 0, 0.4)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
               padding: '6px 12px',
-              borderRadius: 8,
+              borderRadius: 20,
+              background: isWsConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+              border: `1px solid ${isWsConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
             }}
+            title={isWsConnected ? 'Connected to live WebSocket stream' : 'Syncing via periodic background polling'}
           >
-            <div
+            <span
               style={{
                 width: 7,
                 height: 7,
@@ -486,25 +539,30 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
             </div>
           </div>
           <div style={{ fontSize: 11, color: '#78716c', marginTop: 8 }}>
-            Average ~5ms TTFT response delivery
+            Average ~3ms TTFT response delivery
           </div>
         </div>
       </div>
 
       {/* Smart Cache Configuration & Controls */}
       <div className="glass-card" style={{ padding: '24px 28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Settings size={18} color="#38bdf8" />
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
-            Smart Cache Engine Settings & Safety Boundaries
-          </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Settings size={18} color="#38bdf8" />
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ffffff' }}>
+              Smart Cache Engine Settings & Safety Boundaries
+            </h2>
+          </div>
+          <span style={{ fontSize: 12, color: '#78716c' }}>
+            Instant dynamic persistence in SQLite WAL
+          </span>
         </div>
 
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 20,
+            gap: 16,
           }}
         >
           {/* Toggle 1: Smart Cache Enabled */}
@@ -534,10 +592,11 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               style={{
                 marginLeft: 16,
                 padding: '6px 14px',
-                minWidth: 80,
+                minWidth: 84,
                 background: config.enabled ? '#10b981' : undefined,
                 borderColor: config.enabled ? '#10b981' : undefined,
                 color: '#ffffff',
+                fontWeight: 600,
               }}
             >
               {config.enabled ? 'Enabled' : 'Disabled'}
@@ -574,14 +633,99 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               style={{
                 marginLeft: 16,
                 padding: '6px 14px',
-                minWidth: 80,
+                minWidth: 84,
                 background: config.bypass_tools ? '#38bdf8' : undefined,
                 borderColor: config.bypass_tools ? '#38bdf8' : undefined,
                 color: '#ffffff',
+                fontWeight: 600,
               }}
             >
               {config.bypass_tools ? 'Active' : 'Off'}
             </button>
+          </div>
+
+          {/* Setting 3: Min Prompt Length */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              padding: '16px 18px',
+              borderRadius: 10,
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                Minimum Prompt Length
+              </div>
+              <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4, lineHeight: 1.4 }}>
+                Short greetings or single-word inputs under this character count will skip cache storage.
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
+              {[5, 10, 25].map(len => (
+                <button
+                  key={len}
+                  onClick={() => handleSaveConfig({ min_prompt_length: len })}
+                  className={`btn btn-sm ${config.min_prompt_length === len ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    background: config.min_prompt_length === len ? '#a78bfa' : undefined,
+                    borderColor: config.min_prompt_length === len ? '#a78bfa' : undefined,
+                  }}
+                >
+                  {len}c
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Setting 4: Cache Retention TTL */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              padding: '16px 18px',
+              borderRadius: 10,
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#ffffff' }}>
+                Cache Retention (TTL)
+              </div>
+              <div style={{ fontSize: 12, color: '#a8a29e', marginTop: 4, lineHeight: 1.4 }}>
+                Entries older than this period can be scheduled for auto-pruning.
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
+              {[
+                { label: '7d', sec: 604800 },
+                { label: '14d', sec: 1209600 },
+                { label: '30d', sec: 2592000 },
+              ].map(item => (
+                <button
+                  key={item.label}
+                  onClick={() => handleSaveConfig({ ttl_seconds: item.sec })}
+                  className={`btn btn-sm ${config.ttl_seconds === item.sec ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    background: config.ttl_seconds === item.sec ? '#f59e0b' : undefined,
+                    borderColor: config.ttl_seconds === item.sec ? '#f59e0b' : undefined,
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -590,9 +734,14 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
       <div className="glass-card" style={{ padding: '24px 28px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 20 }}>
           <div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#ffffff' }}>
-              Persistent Cache Ledger ({totalEntriesCount})
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: '#ffffff' }}>
+                Persistent Cache Ledger
+              </h2>
+              <span className="badge badge-emerald" style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+                {totalEntriesCount} Patterns
+              </span>
+            </div>
             <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 2 }}>
               Inspect all stored prompt patterns, cached responses, hit counters, and accumulated token savings.
             </p>
@@ -656,6 +805,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               ) : (
                 entries.map(entry => {
                   const isCopied = copiedKey === entry.cache_key;
+                  const responseSnippet = entry.response_preview || entry.response_text || '(Empty Response)';
                   return (
                     <tr
                       key={entry.id}
@@ -692,16 +842,16 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
                       <td style={{ padding: '12px 12px', maxWidth: 240 }}>
                         <div
                           style={{
-                            color: '#a8a29e',
+                            color: '#34d399',
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             fontFamily: 'var(--font-mono)',
                             fontSize: 11,
                           }}
-                          title={entry.response_text}
+                          title={responseSnippet}
                         >
-                          {entry.response_text}
+                          {responseSnippet}
                         </div>
                       </td>
 

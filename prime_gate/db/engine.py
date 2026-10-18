@@ -744,6 +744,7 @@ class BinaryDatabaseEngine:
                 "cache_key": r["cache_key"],
                 "prompt_preview": r["prompt_preview"],
                 "response_preview": (r["response_text"] or "")[:200],
+                "response_text": r["response_text"] or "",
                 "model": r["model"],
                 "total_tokens": r["total_tokens"],
                 "prompt_tokens": r["prompt_tokens"],
