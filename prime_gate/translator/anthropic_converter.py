@@ -503,7 +503,8 @@ async def stream_anthropic_sse(
     req_payload: Dict[str, Any],
     message_id: str,
     created: int,
-    cache_meta: Optional[Dict[str, Any]] = None
+    cache_meta: Optional[Dict[str, Any]] = None,
+    acquired_email: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """
     Connects to Google Antigravity upstream with transparent mid-flight failover,
@@ -517,10 +518,32 @@ async def stream_anthropic_sse(
     timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
     connected_resp = None
     connected_account = None
+    current_held_email = acquired_email
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt, account in enumerate(ordered_accounts):
+    client = httpx.AsyncClient(timeout=timeout)
+    try:
+        max_attempts = max(len(ordered_accounts) * 2, 4)
+        for attempt in range(max_attempts):
+            if attempt < len(ordered_accounts):
+                account = ordered_accounts[attempt]
+            else:
+                try:
+                    q_cache = QuotaMonitor.get_cached_quotas()
+                except Exception:
+                    q_cache = None
+                refreshed = AccountFailoverPool.get_ordered_accounts(
+                    accounts=ordered_accounts,
+                    quota_cache=q_cache
+                )
+                account = refreshed[attempt % len(refreshed)]
+
             account_email = account.get("email", "")
+            if current_held_email != account_email:
+                if current_held_email:
+                    AccountFailoverPool.release(current_held_email)
+                AccountFailoverPool.acquire(account_email)
+                current_held_email = account_email
+
             try:
                 access_token = await get_access_token(account)
                 project_id = account.get("projectId", "rising-fact-p41fc")
@@ -559,7 +582,7 @@ async def stream_anthropic_sse(
                     except Exception:
                         pass
                     await resp.aclose()
-                    if attempt == len(ordered_accounts) - 1:
+                    if attempt == max_attempts - 1:
                         await asyncio.sleep(1.2)
                     else:
                         await asyncio.sleep(0.4)
@@ -569,7 +592,7 @@ async def stream_anthropic_sse(
                     err_text = await resp.aread()
                     logger.error(f"Upstream stream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
                     await resp.aclose()
-                    if attempt < len(ordered_accounts) - 1:
+                    if attempt < max_attempts - 1:
                         continue
                     yield format_anthropic_sse_event("error", {
                         "type": "error",
@@ -583,7 +606,7 @@ async def stream_anthropic_sse(
                 break
             except Exception as e:
                 logger.error(f"[MID-FLIGHT FAILOVER (ANTHROPIC)] Connection failed for {account_email}: {e}")
-                if attempt == len(ordered_accounts) - 1:
+                if attempt == max_attempts - 1:
                     yield format_anthropic_sse_event("error", {
                         "type": "error",
                         "error": {"type": "api_error", "message": f"Upstream connection failed: {e}"}
@@ -809,3 +832,9 @@ async def stream_anthropic_sse(
 
         finally:
             await resp.aclose()
+    finally:
+        if current_held_email:
+            AccountFailoverPool.release(current_held_email)
+            current_held_email = None
+        await client.aclose()
+

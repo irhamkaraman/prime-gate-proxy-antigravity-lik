@@ -1,16 +1,19 @@
 import time
 import logging
+import asyncio
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("prime_gate.resilience")
 
 class AccountFailoverPool:
     """
-    Manages account health, cooldowns, and automatic failovers to eliminate
-    HTTP 429 (Rate Limit / Quota Exhaustion) errors from upstream Google Antigravity.
+    Manages account health, cooldowns, in-flight concurrency, and automatic failovers
+    to eliminate HTTP 429 (Rate Limit / Quota Exhaustion) errors from upstream Google Antigravity.
     """
 
     _cooldowns: Dict[str, float] = {}
+    _in_flight: Dict[str, int] = {}
 
     @classmethod
     def mark_rate_limited(cls, email: str, cooldown_seconds: int = 6):
@@ -30,6 +33,34 @@ class AccountFailoverPool:
         return time.time() > expiry
 
     @classmethod
+    def acquire(cls, email: str):
+        """Track that an account has an active in-flight request."""
+        if email:
+            cls._in_flight[email] = cls._in_flight.get(email, 0) + 1
+            logger.info(f"[CONCURRENCY] Account {email} acquired (in-flight: {cls._in_flight[email]})")
+
+    @classmethod
+    def release(cls, email: str):
+        """Release the in-flight tracking for an account."""
+        if email and email in cls._in_flight:
+            cls._in_flight[email] = max(0, cls._in_flight[email] - 1)
+            logger.info(f"[CONCURRENCY] Account {email} released (in-flight: {cls._in_flight[email]})")
+
+    @classmethod
+    def get_in_flight(cls, email: str) -> int:
+        return cls._in_flight.get(email, 0)
+
+    @classmethod
+    @asynccontextmanager
+    async def slot(cls, email: str):
+        """Async context manager ensuring in-flight count is always cleaned up."""
+        cls.acquire(email)
+        try:
+            yield
+        finally:
+            cls.release(email)
+
+    @classmethod
     def get_failover_account(
         cls,
         current_email: str,
@@ -38,7 +69,7 @@ class AccountFailoverPool:
     ) -> Optional[Dict[str, Any]]:
         """
         Finds the best available candidate account excluding the current failing account.
-        Prioritizes accounts not in cooldown, sorted by highest quota remaining if available.
+        Prioritizes accounts not in cooldown, with 0 in-flight requests, sorted by highest quota remaining.
         """
         candidates = [
             acc for acc in accounts
@@ -52,17 +83,19 @@ class AccountFailoverPool:
                 return other_accs[0]
             return None
 
-        # Sort candidates by quota if available (highest remaining quota first)
         def _get_sort_score(acc):
             em = acc.get("email", "")
+            in_fl = cls.get_in_flight(em)
+            q_score = 1.0
             if quota_cache and em in quota_cache:
                 q_val = quota_cache[em]
                 if isinstance(q_val, dict):
-                    return q_val.get("remaining_fraction", 1.0)
+                    q_score = q_val.get("remaining_fraction", 1.0)
                 elif isinstance(q_val, list) and q_val:
                     pcts = [b.get("percentage", 100) for b in q_val if isinstance(b, dict)]
-                    return (sum(pcts) / len(pcts)) / 100.0 if pcts else 1.0
-            return 1.0
+                    q_score = (sum(pcts) / len(pcts)) / 100.0 if pcts else 1.0
+            # Prioritize 0 in-flight accounts first, then highest quota
+            return (-in_fl, q_score)
 
         candidates.sort(key=_get_sort_score, reverse=True)
         return candidates[0]
@@ -76,10 +109,12 @@ class AccountFailoverPool:
         **kwargs
     ) -> List[Dict[str, Any]]:
         """
-        Returns a prioritized list of accounts for request execution.
-        Healthy accounts (not in cooldown) are placed first, with preferred_account (if healthy)
-        at the front. Quota remaining fraction is used to break ties among healthy accounts.
-        Cooldown accounts are placed at the back, ordered by earliest recovery time.
+        Returns a prioritized, load-balanced list of accounts for request execution.
+        1. Healthy accounts (not in cooldown) are placed first.
+        2. Among healthy accounts, accounts with FEWER in-flight requests are placed first.
+        3. If multiple accounts have 0 in-flight requests, preferred_account (if healthy & idle)
+           comes first, followed by highest remaining quota.
+        4. Cooldown accounts are placed at the back, ordered by earliest recovery time.
         """
         if not preferred_account and "active_account" in kwargs:
             preferred_account = kwargs["active_account"]
@@ -108,20 +143,20 @@ class AccountFailoverPool:
                     return (sum(pcts) / len(pcts)) / 100.0 if pcts else 1.0
             return 1.0
 
-        healthy.sort(key=_quota_score, reverse=True)
+        def _healthy_sort_key(acc):
+            em = acc.get("email", "")
+            in_fl = cls.get_in_flight(em)
+            is_pref = 1 if (em == pref_email and in_fl == 0) else 0
+            q_score = _quota_score(acc)
+            # Tier 1: In-flight count (0 in-flight first)
+            # Tier 2: Preferred account if idle
+            # Tier 3: Highest remaining quota
+            return (-in_fl, is_pref, q_score)
+
+        healthy.sort(key=_healthy_sort_key, reverse=True)
         cooling.sort(key=lambda a: cls._cooldowns.get(a.get("email", ""), 0))
 
-        ordered = []
-        if pref_email:
-            pref_in_healthy = [a for a in healthy if a.get("email") == pref_email]
-            if pref_in_healthy:
-                ordered.append(pref_in_healthy[0])
-                ordered.extend([a for a in healthy if a.get("email") != pref_email])
-            else:
-                ordered.extend(healthy)
-        else:
-            ordered.extend(healthy)
-
+        ordered = list(healthy)
         for acc in cooling:
             if acc not in ordered:
                 ordered.append(acc)

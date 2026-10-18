@@ -1148,7 +1148,8 @@ async def stream_antigravity_sse(
     completion_id: str,
     created: int,
     declared_tools: Optional[List[Dict[str, Any]]] = None,
-    cache_meta: Optional[Dict[str, Any]] = None
+    cache_meta: Optional[Dict[str, Any]] = None,
+    acquired_email: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """Stream SSE chunks from Google Antigravity with transparent mid-flight failover."""
     start_t = time.time()
@@ -1160,10 +1161,32 @@ async def stream_antigravity_sse(
     timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
     connected_resp = None
     connected_account = None
+    current_held_email = acquired_email
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt, account in enumerate(ordered_accounts):
+    client = httpx.AsyncClient(timeout=timeout)
+    try:
+        max_attempts = max(len(ordered_accounts) * 2, 4)
+        for attempt in range(max_attempts):
+            if attempt < len(ordered_accounts):
+                account = ordered_accounts[attempt]
+            else:
+                try:
+                    q_cache = QuotaMonitor.get_cached_quotas()
+                except Exception:
+                    q_cache = None
+                refreshed = AccountFailoverPool.get_ordered_accounts(
+                    accounts=ordered_accounts,
+                    quota_cache=q_cache
+                )
+                account = refreshed[attempt % len(refreshed)]
+
             account_email = account.get("email", "")
+            if current_held_email != account_email:
+                if current_held_email:
+                    AccountFailoverPool.release(current_held_email)
+                AccountFailoverPool.acquire(account_email)
+                current_held_email = account_email
+
             try:
                 access_token = await get_access_token(account)
                 project_id = account.get("projectId", "rising-fact-p41fc")
@@ -1187,10 +1210,11 @@ async def stream_antigravity_sse(
                 resp = await client.send(req, stream=True)
 
                 if resp.status_code in (429, 503):
+                    err_text = await resp.aread()
                     AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
                     logger.warning(
-                        f"[MID-FLIGHT FAILOVER] Upstream HTTP {resp.status_code} on {account_email}. "
-                        f"Rotating to next available account transparently..."
+                        f"[MID-FLIGHT FAILOVER] Upstream HTTP {resp.status_code} on {account_email}: "
+                        f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating to next available account transparently..."
                     )
                     try:
                         event_bus.broadcast_sync({
@@ -1201,14 +1225,17 @@ async def stream_antigravity_sse(
                     except Exception:
                         pass
                     await resp.aclose()
-                    await asyncio.sleep(0.4)
+                    if attempt == max_attempts - 1:
+                        await asyncio.sleep(1.2)
+                    else:
+                        await asyncio.sleep(0.4)
                     continue
 
                 if resp.status_code != 200:
                     err_text = await resp.aread()
                     logger.error(f"Upstream stream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
                     await resp.aclose()
-                    if attempt < len(ordered_accounts) - 1:
+                    if attempt < max_attempts - 1:
                         continue
                     yield f"data: {json.dumps({'error': {'message': f'Upstream error: {resp.status_code}'}})}\n\n"
                     yield "data: [DONE]\n\n"
@@ -1220,7 +1247,7 @@ async def stream_antigravity_sse(
                 break
             except Exception as e:
                 logger.error(f"[MID-FLIGHT FAILOVER] Connection attempt failed for {account_email}: {e}")
-                if attempt == len(ordered_accounts) - 1:
+                if attempt == max_attempts - 1:
                     yield f"data: {json.dumps({'error': {'message': f'Upstream connection failed: {e}'}})}\n\n"
                     yield "data: [DONE]\n\n"
                     return
@@ -1596,6 +1623,12 @@ async def stream_antigravity_sse(
             yield "data: [DONE]\n\n"
         finally:
             await resp.aclose()
+    finally:
+        if current_held_email:
+            AccountFailoverPool.release(current_held_email)
+            current_held_email = None
+        await client.aclose()
+
 
 
 @app.post("/v1/chat/completions")
@@ -1815,25 +1848,33 @@ async def chat_completions(request: Request):
         preferred_account=active_acc,
         quota_cache=quota_cache
     )
+    primary_email = ordered_accounts[0].get("email", "") if ordered_accounts else ""
+    AccountFailoverPool.acquire(primary_email)
 
     if stream:
-        return StreamingResponse(
-            stream_antigravity_sse(
-                ordered_accounts=ordered_accounts,
-                model=model,
-                req_payload=req_payload,
-                completion_id=completion_id,
-                created=created,
-                declared_tools=body.get("tools"),
-                cache_meta=cache_meta
-            ),
-            media_type="text/event-stream"
-        )
+        try:
+            return StreamingResponse(
+                stream_antigravity_sse(
+                    ordered_accounts=ordered_accounts,
+                    model=model,
+                    req_payload=req_payload,
+                    completion_id=completion_id,
+                    created=created,
+                    declared_tools=body.get("tools"),
+                    cache_meta=cache_meta,
+                    acquired_email=primary_email
+                ),
+                media_type="text/event-stream"
+            )
+        except Exception:
+            AccountFailoverPool.release(primary_email)
+            raise
 
     last_error = None
     for attempt in range(len(ordered_accounts)):
         account = ordered_accounts[attempt]
         account_email = account.get("email", "")
+        AccountFailoverPool.acquire(account_email)
         try:
             access_token = await get_access_token(account)
             project_id = account.get("projectId", "rising-fact-p41fc")
@@ -2072,6 +2113,8 @@ async def chat_completions(request: Request):
             last_error = e
             logger.error(f"Attempt with {account.get('email')} failed: {e}")
             continue
+        finally:
+            AccountFailoverPool.release(account_email)
 
     raise HTTPException(status_code=502, detail=f"All account attempts failed: {last_error}")
 
@@ -2292,6 +2335,8 @@ async def anthropic_messages(request: Request):
         model=model,
         quota_cache=QuotaMonitor.get_cached_quotas()
     )
+    primary_email = ordered_accounts[0].get("email", "") if ordered_accounts else ""
+    AccountFailoverPool.acquire(primary_email)
 
     cache_meta = {
         "eligible": cache_eligible,
@@ -2304,23 +2349,28 @@ async def anthropic_messages(request: Request):
     }
 
     if stream:
-        return StreamingResponse(
-            stream_anthropic_sse(
-                ordered_accounts=ordered_accounts,
-                model=model,
-                req_payload=req_payload,
-                message_id=message_id,
-                created=created,
-                cache_meta=cache_meta
-            ),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "anthropic-version": anthropic_ver,
-                "X-Cache": "MISS"
-            }
-        )
+        try:
+            return StreamingResponse(
+                stream_anthropic_sse(
+                    ordered_accounts=ordered_accounts,
+                    model=model,
+                    req_payload=req_payload,
+                    message_id=message_id,
+                    created=created,
+                    cache_meta=cache_meta,
+                    acquired_email=primary_email
+                ),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "anthropic-version": anthropic_ver,
+                    "X-Cache": "MISS"
+                }
+            )
+        except Exception:
+            AccountFailoverPool.release(primary_email)
+            raise
 
     # Non-streaming Request Flow
     start_t = time.time()
@@ -2330,6 +2380,7 @@ async def anthropic_messages(request: Request):
     async with httpx.AsyncClient(timeout=timeout) as client:
         for attempt, account in enumerate(ordered_accounts):
             account_email = account.get("email", "")
+            AccountFailoverPool.acquire(account_email)
             try:
                 access_token = await get_access_token(account)
                 project_id = account.get("projectId", "rising-fact-p41fc")
@@ -2519,6 +2570,8 @@ async def anthropic_messages(request: Request):
                 if attempt == len(ordered_accounts) - 1:
                     raise HTTPException(status_code=502, detail=f"All upstream accounts exhausted: {e}")
                 continue
+            finally:
+                AccountFailoverPool.release(account_email)
 
     raise HTTPException(status_code=502, detail="Failed to connect to upstream Antigravity accounts.")
 
