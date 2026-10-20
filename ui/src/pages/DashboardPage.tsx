@@ -27,6 +27,7 @@ interface DashboardPageProps {
   onSyncQuota: () => Promise<void>;
   isSyncing: boolean;
   lastLedgerUpdate?: number;
+  isChartLoading?: boolean;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
@@ -38,6 +39,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onSyncQuota,
   isSyncing,
   lastLedgerUpdate,
+  isChartLoading = false,
 }) => {
   const { showToast } = useToast();
   const { navigate } = useNavigation();
@@ -275,6 +277,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         data={chartPoints}
         timeRange={timeRange}
         onTimeRangeChange={onTimeRangeChange}
+        isLoading={isChartLoading}
       />
 
       {/* Top Token Spenders & Quota Drainers Leaderboard */}

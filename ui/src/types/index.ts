@@ -1,6 +1,6 @@
 export type RoutePath = 'dashboard' | 'benchmarks' | 'caching' | 'accounts' | 'sandbox' | 'sentinel' | 'docs';
 
-export type TimeRange = '1m' | '1h' | '1d' | '1month';
+export type TimeRange = '1h' | '1d' | '7d' | '1m';
 
 export interface ModelBenchmark {
   model: string;

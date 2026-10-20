@@ -46,8 +46,9 @@ const MainLayout: React.FC = () => {
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [metrics, setMetrics] = useState<TelemetryMetrics>(initialMetrics);
   const [chartPoints, setChartPoints] = useState<TokenVolumePoint[]>([]);
-  const [timeRange, setTimeRange] = useState<TimeRange>('1m');
-  const timeRangeRef = useRef<TimeRange>('1m');
+  const [timeRange, setTimeRange] = useState<TimeRange>('1h');
+  const timeRangeRef = useRef<TimeRange>('1h');
+  const [isChartLoading, setIsChartLoading] = useState<boolean>(false);
   const [lastLedgerUpdate, setLastLedgerUpdate] = useState<number>(Date.now());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
@@ -91,7 +92,7 @@ const MainLayout: React.FC = () => {
   }, []);
 
   // Fetch telemetry metrics and real-time time-series chart data
-  const fetchMetrics = useCallback(async (rangeToFetch: TimeRange = '1m') => {
+  const fetchMetrics = useCallback(async (rangeToFetch: TimeRange = '1h') => {
     try {
       const res = await fetch(`/api/metrics/tokens?range=${rangeToFetch}`);
       if (res.ok) {
@@ -188,8 +189,8 @@ const MainLayout: React.FC = () => {
                   latency_ms: data.metrics.latency_ms ?? prev.latency_ms,
                 }));
               }
-              // Only apply real-time chart points directly if client is currently on 1m!
-              if (timeRangeRef.current === '1m') {
+              // Only apply real-time chart points directly if client is currently on 1h (default)!
+              if (timeRangeRef.current === '1h') {
                 if (data.chart_data && Array.isArray(data.chart_data.labels)) {
                   const pts: TokenVolumePoint[] = data.chart_data.labels.map((lbl: string, idx: number) => ({
                     timestamp: String(idx),
@@ -245,7 +246,7 @@ const MainLayout: React.FC = () => {
 
     connectWs();
     fetchAccounts();
-    fetchMetrics('1m');
+    fetchMetrics('1h');
 
     const pollingInterval = setInterval(() => {
       fetchMetrics(timeRange);
@@ -446,10 +447,22 @@ const MainLayout: React.FC = () => {
               activeAccount={activeAccount}
               chartPoints={chartPoints}
               timeRange={timeRange}
-              onTimeRangeChange={(newRange) => {
+              isChartLoading={isChartLoading}
+              onTimeRangeChange={async (newRange) => {
+                if (newRange === timeRangeRef.current && chartPoints.length > 0) return;
                 setTimeRange(newRange);
                 timeRangeRef.current = newRange;
-                fetchMetrics(newRange);
+                setIsChartLoading(true);
+                const startTime = Date.now();
+                try {
+                  await fetchMetrics(newRange);
+                } finally {
+                  const elapsed = Date.now() - startTime;
+                  const remaining = Math.max(0, 300 - elapsed);
+                  setTimeout(() => {
+                    setIsChartLoading(false);
+                  }, remaining);
+                }
               }}
               onSyncQuota={handleSyncQuota}
               isSyncing={isSyncing}

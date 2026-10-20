@@ -160,10 +160,11 @@ class TokenTelemetryCollector:
         if self.total_requests_all_time % 5 == 0:
             self._persist_to_db()
 
-    def get_metrics(self, time_range: str = "minute") -> Dict[str, Any]:
+    def get_metrics(self, time_range: str = "1h") -> Dict[str, Any]:
         """
         Returns structured chart series and KPI summary for the selected time range.
-        Options: 'minute' (1m), 'hour' (1h), 'day' (1d), 'month' (1month)
+        Options: '1h' (last 1 hour, 1m intervals - default), '1d' (last 24 hours, 1h intervals),
+                 '7d' (last 7 days, 1d intervals), '1m' (last 1 month / 30 days, 1d intervals).
         """
         now = time.time()
         labels: List[str] = []
@@ -173,29 +174,29 @@ class TokenTelemetryCollector:
         total_series: List[int] = []
 
         # Normalize time_range identifier
-        tr_norm = time_range.lower()
-        if tr_norm in ["1m", "minute", "min", "1min"]:
-            target_range = "minute"
-        elif tr_norm in ["1h", "hour", "hr", "1hour"]:
-            target_range = "hour"
-        elif tr_norm in ["1d", "day", "1day", "daily"]:
-            target_range = "day"
-        elif tr_norm in ["1month", "month", "30d", "monthly"]:
-            target_range = "month"
+        tr_norm = (time_range or "").strip().lower()
+        if tr_norm in ["1h", "minute", "min", "1min", "60m", "hour_minute"]:
+            target_range = "1h"
+        elif tr_norm in ["1d", "day", "1day", "24h", "daily", "hour"]:
+            target_range = "1d"
+        elif tr_norm in ["7d", "week", "7day", "7days", "weekly"]:
+            target_range = "7d"
+        elif tr_norm in ["1m", "month", "1month", "30d", "monthly"]:
+            target_range = "1m"
         else:
-            target_range = "minute"
+            target_range = "1h"
 
         # Pull historical hits from database to ensure no gaps across restarts
         db_records: List[Any] = []
         try:
             conn = db._get_connection()
-            if target_range == "minute":
-                min_ts = now - 1800
-            elif target_range == "hour":
+            if target_range == "1h":
+                min_ts = now - 3600
+            elif target_range == "1d":
                 min_ts = now - 86400
-            elif target_range == "day":
-                min_ts = now - (14 * 86400)
-            else:  # month
+            elif target_range == "7d":
+                min_ts = now - (7 * 86400)
+            else:  # 1m (month)
                 min_ts = now - (30 * 86400)
 
             cursor = conn.execute(
@@ -206,8 +207,8 @@ class TokenTelemetryCollector:
         except Exception as e:
             logger.debug(f"Could not load request logs for telemetry aggregation: {e}")
 
-        if target_range == "minute":
-            # Last 30 minutes in 1-minute intervals
+        if target_range == "1h":
+            # Last 60 minutes in 1-minute intervals (Default View)
             slot_map: Dict[int, Dict[str, int]] = {}
             for r in db_records:
                 s = int(r["timestamp"] // 60) * 60
@@ -228,7 +229,7 @@ class TokenTelemetryCollector:
                     slot_map[s]["total"] = max(slot_map[s]["total"], b.get("total", 0))
 
             current_min = int(now // 60) * 60
-            for m in range(current_min - (29 * 60), current_min + 60, 60):
+            for m in range(current_min - (59 * 60), current_min + 60, 60):
                 t_str = time.strftime("%H:%M", time.localtime(m))
                 b = slot_map.get(m, {"prompt": 0, "completion": 0, "reasoning": 0, "total": 0})
                 labels.append(t_str)
@@ -237,7 +238,7 @@ class TokenTelemetryCollector:
                 reasoning_series.append(b["reasoning"])
                 total_series.append(b["total"])
 
-        elif target_range == "hour":
+        elif target_range == "1d":
             # Last 24 hours in 1-hour intervals
             hour_map: Dict[int, Dict[str, int]] = {}
             for r in db_records:
@@ -268,8 +269,8 @@ class TokenTelemetryCollector:
                 reasoning_series.append(b["reasoning"])
                 total_series.append(b["total"])
 
-        elif target_range == "day":
-            # Last 14 days in 1-day intervals
+        elif target_range == "7d":
+            # Last 7 days in 1-day intervals
             day_map: Dict[str, Dict[str, int]] = {}
             for r in db_records:
                 dk = time.strftime("%Y-%m-%d", time.localtime(r["timestamp"]))
@@ -290,7 +291,7 @@ class TokenTelemetryCollector:
                     day_map[dk]["total"] = max(day_map[dk]["total"], b.get("total", 0))
 
             current_day = int(now)
-            for d in range(13, -1, -1):
+            for d in range(6, -1, -1):
                 day_ts = current_day - (d * 86400)
                 d_key = time.strftime("%Y-%m-%d", time.localtime(day_ts))
                 d_label = time.strftime("%b %d", time.localtime(day_ts))
@@ -301,7 +302,7 @@ class TokenTelemetryCollector:
                 reasoning_series.append(b["reasoning"])
                 total_series.append(b["total"])
 
-        else:  # 'month' (1month / 30 days)
+        else:  # target_range == "1m" (1 month / 30 days)
             # Last 30 days in 1-day intervals
             month_map: Dict[str, Dict[str, int]] = {}
             for r in db_records:
@@ -346,7 +347,7 @@ class TokenTelemetryCollector:
         avg_latency = round(sum(self.latencies) / len(self.latencies), 1) if self.latencies else 0.0
 
         return {
-            "range": time_range,
+            "range": target_range,
             "summary": {
                 "total_tokens_all_time": self.total_tokens_all_time,
                 "total_requests_all_time": self.total_requests_all_time,

@@ -183,7 +183,7 @@ async def v1_health_check(
     db_status = db.get_status()
 
     # 4. Telemetry metrics snapshot
-    metrics = telemetry.get_metrics(time_range="minute")
+    metrics = telemetry.get_metrics(time_range="1h")
     telemetry_summary = metrics.get("summary", {})
 
     # 5. Recent Logs from memory ring buffer
@@ -938,19 +938,19 @@ async def api_system_git_pull():
 
 
 @app.get("/api/metrics/tokens")
-async def api_token_metrics(range: str = "minute"):
-    """Returns token consumption time-series chart data and KPIs (1m, 1h, 1d, 1month)."""
-    r_lower = range.lower()
-    if r_lower in ["1m", "minute", "min", "1min"]:
-        r = "minute"
-    elif r_lower in ["1h", "hour", "hr", "1hour"]:
-        r = "hour"
-    elif r_lower in ["1d", "day", "1day", "daily"]:
-        r = "day"
-    elif r_lower in ["1month", "month", "30d", "monthly"]:
-        r = "month"
+async def api_token_metrics(range: str = "1h"):
+    """Returns token consumption time-series chart data and KPIs (1h, 1d, 7d, 1m)."""
+    r_lower = (range or "").strip().lower()
+    if r_lower in ["1h", "minute", "min", "1min", "60m"]:
+        r = "1h"
+    elif r_lower in ["1d", "day", "1day", "24h", "daily", "hour"]:
+        r = "1d"
+    elif r_lower in ["7d", "week", "7day", "7days", "weekly"]:
+        r = "7d"
+    elif r_lower in ["1m", "month", "1month", "30d", "monthly"]:
+        r = "1m"
     else:
-        r = "minute"
+        r = "1h"
 
     data = telemetry.get_metrics(time_range=r)
     s = data.get("summary", {})
@@ -1610,7 +1610,7 @@ async def stream_antigravity_sse(
                 pass
 
             try:
-                metrics_data = telemetry.get_metrics(time_range="minute")
+                metrics_data = telemetry.get_metrics(time_range="1h")
                 s = metrics_data["summary"]
                 event_bus.broadcast_sync({
                     "type": "TELEMETRY_UPDATE",
@@ -2085,7 +2085,7 @@ async def chat_completions(request: Request):
                     pass
 
                 try:
-                    metrics_data = telemetry.get_metrics(time_range="minute")
+                    metrics_data = telemetry.get_metrics(time_range="1h")
                     s = metrics_data["summary"]
                     event_bus.broadcast_sync({
                         "type": "TELEMETRY_UPDATE",

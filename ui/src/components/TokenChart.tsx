@@ -5,12 +5,14 @@ interface TokenChartProps {
   data: TokenVolumePoint[];
   timeRange: TimeRange;
   onTimeRangeChange: (range: TimeRange) => void;
+  isLoading?: boolean;
 }
 
 export const TokenChart: React.FC<TokenChartProps> = ({
   data,
   timeRange,
   onTimeRangeChange,
+  isLoading = false,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(1100);
@@ -86,7 +88,10 @@ export const TokenChart: React.FC<TokenChartProps> = ({
             Token Consumption Breakdown
           </h2>
           <p style={{ fontSize: 13, color: '#a8a29e', marginTop: 3 }}>
-            Granular token volume segmented into Prompt, Reasoning (Thinking), and Completion
+            {timeRange === '1h' && 'Past 60 minutes in 1-minute intervals (Default)'}
+            {timeRange === '1d' && 'Past 24 hours in 1-hour intervals'}
+            {timeRange === '7d' && 'Past 7 days in 1-day intervals'}
+            {timeRange === '1m' && 'Past 30 days in 1-day intervals'}
           </p>
         </div>
 
@@ -117,23 +122,46 @@ export const TokenChart: React.FC<TokenChartProps> = ({
               border: '1px solid rgba(168, 162, 158, 0.15)',
             }}
           >
-            {(['1m', '1h', '1d', '1month'] as const).map(range => (
+            {([
+              { id: '1h', label: '1h', tooltip: '1 Hour (1-minute intervals - Default)' },
+              { id: '1d', label: '1d', tooltip: '24 Hours (1-hour intervals)' },
+              { id: '7d', label: '7d', tooltip: '7 Days (1-day intervals)' },
+              { id: '1m', label: '1m', tooltip: '1 Month (30 days)' },
+            ] as const).map(({ id, label, tooltip }) => (
               <button
-                key={range}
-                onClick={() => onTimeRangeChange(range)}
+                key={id}
+                title={tooltip}
+                onClick={() => onTimeRangeChange(id)}
+                disabled={isLoading && timeRange === id}
                 style={{
-                  background: timeRange === range ? '#d97706' : 'transparent',
-                  color: timeRange === range ? '#ffffff' : '#a8a29e',
+                  background: timeRange === id ? '#d97706' : 'transparent',
+                  color: timeRange === id ? '#ffffff' : '#a8a29e',
                   border: 'none',
                   borderRadius: 6,
-                  padding: '4px 10px',
+                  padding: '4px 12px',
                   fontSize: 12,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: isLoading ? 'wait' : 'pointer',
                   transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                {range}
+                {label}
+                {isLoading && timeRange === id && (
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 7,
+                      height: 7,
+                      border: '1.5px solid rgba(255,255,255,0.4)',
+                      borderTopColor: '#ffffff',
+                      borderRadius: '50%',
+                      animation: 'pgSpin 0.7s linear infinite',
+                    }}
+                  />
+                )}
               </button>
             ))}
           </div>
@@ -147,12 +175,93 @@ export const TokenChart: React.FC<TokenChartProps> = ({
           position: 'relative',
           width: '100%',
           overflow: 'hidden',
+          minHeight: chartHeight,
         }}
       >
-        <svg
-          viewBox={`0 0 ${containerWidth} ${chartHeight}`}
-          style={{ width: '100%', height: chartHeight, display: 'block', overflow: 'visible' }}
+        <style>{`
+          @keyframes pgSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          @keyframes pgFadeIn {
+            from { opacity: 0; transform: scale(0.99); }
+            to { opacity: 1; transform: scale(1); }
+          }
+          @keyframes pgShimmerBar {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
+        `}</style>
+
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(15, 12, 10, 0.65)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 25,
+              borderRadius: 8,
+              animation: 'pgFadeIn 0.2s ease forwards',
+            }}
+          >
+            {/* Top glowing progress shimmer line */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2,
+                background: 'linear-gradient(90deg, transparent, #f59e0b, #fbbf24, transparent)',
+                backgroundSize: '200% 100%',
+                animation: 'pgShimmerBar 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+              }}
+            />
+            <div style={{ position: 'relative', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '50%',
+                  border: '2.5px solid rgba(245, 158, 11, 0.2)',
+                  borderTopColor: '#f59e0b',
+                  animation: 'pgSpin 0.75s linear infinite',
+                }}
+              />
+              <div
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: '#f59e0b',
+                  boxShadow: '0 0 10px #f59e0b',
+                }}
+              />
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: '#f59e0b', letterSpacing: '0.02em' }}>
+              Switching to {timeRange.toUpperCase()} timeframe...
+            </div>
+          </div>
+        )}
+
+        {/* Smooth chart SVG wrapper */}
+        <div
+          style={{
+            opacity: isLoading ? 0.35 : 1,
+            filter: isLoading ? 'blur(1.5px)' : 'none',
+            transition: 'opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), filter 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          }}
         >
+          <svg
+            viewBox={`0 0 ${containerWidth} ${chartHeight}`}
+            style={{ width: '100%', height: chartHeight, display: 'block', overflow: 'visible' }}
+          >
           {/* Grid lines and Y-axis labels */}
           {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
             const y = paddingTop + usableHeight * (1 - pct);
@@ -318,6 +427,7 @@ export const TokenChart: React.FC<TokenChartProps> = ({
             );
           })}
         </svg>
+        </div>
 
         {/* Floating Context-Aware Tooltip */}
         {hoveredPoint && hoveredPoint.total > 0 && hoveredX !== null && (
