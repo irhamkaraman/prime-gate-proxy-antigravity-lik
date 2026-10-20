@@ -451,6 +451,19 @@ def transform_openai_to_antigravity(
 
             generation_config["thinkingConfig"] = thinking_cfg
 
+            # Ensure maxOutputTokens has sufficient headroom for both thoughts and answer tokens
+            budget = thinking_cfg.get("thinkingBudget")
+            current_max = generation_config.get("maxOutputTokens")
+            if budget and isinstance(budget, int) and budget > 0:
+                if current_max is None or current_max <= budget:
+                    generation_config["maxOutputTokens"] = budget + 8192
+            elif current_max is None:
+                generation_config["maxOutputTokens"] = 16384
+
+    # Default safe maximum output token cap to prevent premature truncation
+    if "maxOutputTokens" not in generation_config:
+        generation_config["maxOutputTokens"] = 16384
+
     req_payload: Dict[str, Any] = {
         "contents": contents,
         "generationConfig": generation_config

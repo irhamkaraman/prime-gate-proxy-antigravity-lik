@@ -43,6 +43,7 @@ from .telemetry import telemetry
 from .compactor import ContextCompactor
 from .resilience import AccountFailoverPool
 from .sentinel.loop_guard import AgentLoopGuard
+from .client_pool import get_shared_client, close_shared_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("prime_gate.server")
@@ -127,6 +128,7 @@ async def on_startup():
 @app.on_event("shutdown")
 async def on_shutdown():
     await sentinel.stop()
+    await close_shared_client()
     db.close()
 
 @app.get("/")
@@ -1163,7 +1165,9 @@ async def stream_antigravity_sse(
     connected_account = None
     current_held_email = acquired_email
 
-    client = httpx.AsyncClient(timeout=timeout)
+    client = get_shared_client()
+    # Immediately flush HTTP 200 OK headers to prevent client connection/read timeout
+    yield ": connected\n\n"
     try:
         max_attempts = max(len(ordered_accounts) * 2, 4)
         for attempt in range(max_attempts):
@@ -1207,7 +1211,13 @@ async def stream_antigravity_sse(
                 }
 
                 req = client.build_request("POST", upstream_url, headers=headers, json=wrapped_body)
-                resp = await client.send(req, stream=True)
+                send_task = asyncio.create_task(client.send(req, stream=True))
+                while not send_task.done():
+                    try:
+                        resp = await asyncio.wait_for(asyncio.shield(send_task), timeout=5.0)
+                        break
+                    except asyncio.TimeoutError:
+                        yield ": ping\n\n" 
 
                 if resp.status_code in (429, 503):
                     err_text = await resp.aread()
@@ -1279,7 +1289,17 @@ async def stream_antigravity_sse(
                         if t_name:
                             declared_names[t_name] = t
 
-            async for line in resp.aiter_lines():
+            aiter = resp.aiter_lines().__aiter__()
+            while True:
+                try:
+                    line = await asyncio.wait_for(aiter.__anext__(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    # Upstream Antigravity is processing prompt/thinking; emit SSE comment heartbeat
+                    yield ": ping\n\n"
+                    continue
+                except StopAsyncIteration:
+                    break
+
                 if not line or not line.startswith("data:"):
                     continue
 
@@ -1627,7 +1647,6 @@ async def stream_antigravity_sse(
         if current_held_email:
             AccountFailoverPool.release(current_held_email)
             current_held_email = None
-        await client.aclose()
 
 
 
@@ -1897,217 +1916,216 @@ async def chat_completions(request: Request):
                 "Accept": "text/event-stream"
             }
 
-            timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
-                    if resp.status_code in (429, 503):
-                        AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
-                        logger.warning(f"[FAILOVER] Account {account_email} quota exceeded ({resp.status_code}). Rotating to next...")
-                        try:
-                            event_bus.broadcast_sync({
-                                "type": "ACCOUNT_FAILOVER",
-                                "account": account_email,
-                                "status_code": resp.status_code
-                            })
-                        except Exception:
-                            pass
-                        await asyncio.sleep(0.4)
-                        continue
-                    if resp.status_code != 200:
-                        err_text = await resp.aread()
-                        logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
-                        if attempt < len(ordered_accounts) - 1:
-                            continue
-                        raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
-
-                    content_text = ""
-                    reasoning_text = ""
-                    tool_calls = []
-                    finish_reason = "stop"
-                    prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
-                    completion_tokens = 0
-                    reasoning_tokens = 0
-
-                    async for line in resp.aiter_lines():
-                        if not line or not line.startswith("data:"):
-                            continue
-                        raw_json = line[len("data:"):].strip()
-                        if not raw_json or raw_json == "[DONE]":
-                            continue
-                        try:
-                            payload = json.loads(raw_json)
-                            response_obj = payload.get("response", payload)
-                            usage = response_obj.get("usageMetadata", {})
-                            if usage.get("promptTokenCount"):
-                                prompt_tokens = usage["promptTokenCount"]
-                            if usage.get("candidatesTokenCount"):
-                                completion_tokens = usage["candidatesTokenCount"]
-                            if usage.get("thoughtsTokenCount"):
-                                reasoning_tokens = usage["thoughtsTokenCount"]
-
-                            candidates = response_obj.get("candidates", [])
-                            if candidates:
-                                cand = candidates[0]
-                                if cand.get("finishReason"):
-                                    finish_reason = cand["finishReason"].lower()
-                                parts = cand.get("content", {}).get("parts", [])
-                                for p in parts:
-                                    if p.get("thought") and p.get("text"):
-                                        reasoning_text += p["text"]
-                                    elif p.get("text"):
-                                        content_text += p["text"]
-                                    elif p.get("functionCall"):
-                                        fn = p["functionCall"]
-                                        call_id = fn.get("id") or ("call_" + uuid.uuid4().hex[:8])
-                                        raw_name = fn.get("name", "")
-                                        raw_args = fn.get("args", {})
-                                        fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
-                                        tool_calls.append({
-                                            "id": call_id,
-                                            "type": "function",
-                                            "function": {
-                                                "name": fn_name,
-                                                "arguments": json.dumps(args)
-                                            }
-                                        })
-                        except Exception:
-                            continue
-
-                    # Intercept and convert text-based Antigravity tool calls if model emitted text
-                    if not tool_calls and "call:" in content_text:
-                        raw_tools = body.get("tools")
-                        cleaned, text_tcs = extract_text_tool_calls(content_text, raw_tools)
-                        if text_tcs:
-                            tool_calls.extend(text_tcs)
-                            if cleaned.strip().startswith("Thought:") or cleaned.strip().startswith("thought:"):
-                                reasoning_text += cleaned
-                                content_text = ""
-                            else:
-                                content_text = cleaned
-                            finish_reason = "tool_calls"
-                    elif tool_calls:
-                        finish_reason = "tool_calls"
-
-                    if not completion_tokens and content_text:
-                        completion_tokens = max(1, len(content_text.split()))
-
-                    # Store in Smart Cache if eligible and no tool calls occurred
-                    if cache_eligible and not tool_calls and content_text:
-                        try:
-                            emb_bytes = None
-                            if last_user_query:
-                                from prime_gate.cache.semantic import SemanticVectorEngine
-                                q_vec = SemanticVectorEngine.embed_text(last_user_query)
-                                if q_vec is not None:
-                                    emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
-
-                            db.store_cached_response(
-                                cache_key=cache_key,
-                                prompt_hash=prompt_hash,
-                                prompt_preview=prompt_preview,
-                                response_text=content_text,
-                                model=model,
-                                prompt_tokens=prompt_tokens,
-                                completion_tokens=completion_tokens,
-                                reasoning_tokens=reasoning_tokens,
-                                embedding=emb_bytes,
-                                tools_signature=tools_sig
-                            )
-                            event_bus.broadcast_sync({
-                                "type": "CACHE_STORED",
-                                "key": cache_key,
-                                "model": model,
-                                "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
-                            })
-                        except Exception as e:
-                            logger.error(f"Failed to cache non-stream response: {e}")
-
-                    latency_ms = (time.time() - created) * 1000
-                    telemetry.record_usage(
-                        model=model,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        reasoning_tokens=reasoning_tokens,
-                        latency_ms=latency_ms
-                    )
-
-                    # Record granular request hit into persistent database ledger
+            client = get_shared_client()
+            async with client.stream("POST", upstream_url, headers=headers, json=wrapped_body) as resp:
+                if resp.status_code in (429, 503):
+                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
+                    logger.warning(f"[FAILOVER] Account {account_email} quota exceeded ({resp.status_code}). Rotating to next...")
                     try:
-                        acc_email = account.get("email")
-                        quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if acc_email else None
-                        db.record_request_hit(
-                            request_id=completion_id,
-                            timestamp=created,
-                            account_email=acc_email,
+                        event_bus.broadcast_sync({
+                            "type": "ACCOUNT_FAILOVER",
+                            "account": account_email,
+                            "status_code": resp.status_code
+                        })
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.4)
+                    continue
+                if resp.status_code != 200:
+                    err_text = await resp.aread()
+                    logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
+                    if attempt < len(ordered_accounts) - 1:
+                        continue
+                    raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
+
+                content_text = ""
+                reasoning_text = ""
+                tool_calls = []
+                finish_reason = "stop"
+                prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
+                completion_tokens = 0
+                reasoning_tokens = 0
+
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    raw_json = line[len("data:"):].strip()
+                    if not raw_json or raw_json == "[DONE]":
+                        continue
+                    try:
+                        payload = json.loads(raw_json)
+                        response_obj = payload.get("response", payload)
+                        usage = response_obj.get("usageMetadata", {})
+                        if usage.get("promptTokenCount"):
+                            prompt_tokens = usage["promptTokenCount"]
+                        if usage.get("candidatesTokenCount"):
+                            completion_tokens = usage["candidatesTokenCount"]
+                        if usage.get("thoughtsTokenCount"):
+                            reasoning_tokens = usage["thoughtsTokenCount"]
+
+                        candidates = response_obj.get("candidates", [])
+                        if candidates:
+                            cand = candidates[0]
+                            if cand.get("finishReason"):
+                                finish_reason = cand["finishReason"].lower()
+                            parts = cand.get("content", {}).get("parts", [])
+                            for p in parts:
+                                if p.get("thought") and p.get("text"):
+                                    reasoning_text += p["text"]
+                                elif p.get("text"):
+                                    content_text += p["text"]
+                                elif p.get("functionCall"):
+                                    fn = p["functionCall"]
+                                    call_id = fn.get("id") or ("call_" + uuid.uuid4().hex[:8])
+                                    raw_name = fn.get("name", "")
+                                    raw_args = fn.get("args", {})
+                                    fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
+                                    tool_calls.append({
+                                        "id": call_id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": fn_name,
+                                            "arguments": json.dumps(args)
+                                        }
+                                    })
+                    except Exception:
+                        continue
+
+                # Intercept and convert text-based Antigravity tool calls if model emitted text
+                if not tool_calls and "call:" in content_text:
+                    raw_tools = body.get("tools")
+                    cleaned, text_tcs = extract_text_tool_calls(content_text, raw_tools)
+                    if text_tcs:
+                        tool_calls.extend(text_tcs)
+                        if cleaned.strip().startswith("Thought:") or cleaned.strip().startswith("thought:"):
+                            reasoning_text += cleaned
+                            content_text = ""
+                        else:
+                            content_text = cleaned
+                        finish_reason = "tool_calls"
+                elif tool_calls:
+                    finish_reason = "tool_calls"
+
+                if not completion_tokens and content_text:
+                    completion_tokens = max(1, len(content_text.split()))
+
+                # Store in Smart Cache if eligible and no tool calls occurred
+                if cache_eligible and not tool_calls and content_text:
+                    try:
+                        emb_bytes = None
+                        if last_user_query:
+                            from prime_gate.cache.semantic import SemanticVectorEngine
+                            q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                            if q_vec is not None:
+                                emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
+
+                        db.store_cached_response(
+                            cache_key=cache_key,
+                            prompt_hash=prompt_hash,
+                            prompt_preview=prompt_preview,
+                            response_text=content_text,
                             model=model,
                             prompt_tokens=prompt_tokens,
                             completion_tokens=completion_tokens,
                             reasoning_tokens=reasoning_tokens,
-                            latency_ms=latency_ms,
-                            status_code=200,
-                            stream=0,
-                            quota_snapshot=quota_snap,
-                            cache_hit=0,
-                            tokens_saved=0
+                            embedding=emb_bytes,
+                            tools_signature=tools_sig
                         )
-                    except Exception as e:
-                        logger.error(f"Failed to record request hit to db: {e}")
-
-                    # Live broadcast request logged & telemetry to WebSocket clients
-                    try:
                         event_bus.broadcast_sync({
-                            "type": "REQUEST_LOGGED",
-                            "request_id": completion_id,
+                            "type": "CACHE_STORED",
+                            "key": cache_key,
                             "model": model,
-                            "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens,
-                            "cache_hit": False,
-                            "tokens_saved": 0
+                            "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens
                         })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(f"Failed to cache non-stream response: {e}")
 
-                    try:
-                        metrics_data = telemetry.get_metrics(time_range="minute")
-                        s = metrics_data["summary"]
-                        event_bus.broadcast_sync({
-                            "type": "TELEMETRY_UPDATE",
-                            "metrics": {
-                                "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
-                                "tokens_today": {
-                                    "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
-                                    "prompt": s.get("total_prompt_tokens", 0),
-                                    "completion": s.get("total_completion_tokens", 0),
-                                    "reasoning": s.get("total_reasoning_tokens", 0)
-                                },
-                                "latency_ms": {
-                                    "ttft_avg": s.get("avg_latency_ms", 0.0),
-                                    "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
-                                },
-                                "cumulative": {
-                                    "requests": s.get("total_requests_all_time", 0),
-                                    "tokens": s.get("total_tokens_all_time", 0)
-                                }
-                            },
-                            "chart_data": metrics_data.get("chart_data"),
-                            "chart_range": "1m"
-                        })
-                    except Exception:
-                        pass
+                latency_ms = (time.time() - created) * 1000
+                telemetry.record_usage(
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=reasoning_tokens,
+                    latency_ms=latency_ms
+                )
 
-                    resp_json = format_non_stream_response(
-                        completion_id, created, model,
-                        content_text,
-                        tool_calls if tool_calls else None,
-                        finish_reason=finish_reason,
-                        reasoning_content=reasoning_text if reasoning_text else None,
-                        usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": completion_tokens,
-                            "total_tokens": prompt_tokens + completion_tokens,
-                            "reasoning_tokens": reasoning_tokens
-                        }
+                # Record granular request hit into persistent database ledger
+                try:
+                    acc_email = account.get("email")
+                    quota_snap = QuotaMonitor.get_cached_quotas(acc_email) if acc_email else None
+                    db.record_request_hit(
+                        request_id=completion_id,
+                        timestamp=created,
+                        account_email=acc_email,
+                        model=model,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        reasoning_tokens=reasoning_tokens,
+                        latency_ms=latency_ms,
+                        status_code=200,
+                        stream=0,
+                        quota_snapshot=quota_snap,
+                        cache_hit=0,
+                        tokens_saved=0
                     )
-                    return JSONResponse(content=resp_json, headers={"X-Cache": "MISS"})
+                except Exception as e:
+                    logger.error(f"Failed to record request hit to db: {e}")
+
+                # Live broadcast request logged & telemetry to WebSocket clients
+                try:
+                    event_bus.broadcast_sync({
+                        "type": "REQUEST_LOGGED",
+                        "request_id": completion_id,
+                        "model": model,
+                        "total_tokens": prompt_tokens + completion_tokens + reasoning_tokens,
+                        "cache_hit": False,
+                        "tokens_saved": 0
+                    })
+                except Exception:
+                    pass
+
+                try:
+                    metrics_data = telemetry.get_metrics(time_range="minute")
+                    s = metrics_data["summary"]
+                    event_bus.broadcast_sync({
+                        "type": "TELEMETRY_UPDATE",
+                        "metrics": {
+                            "throughput_tokens_per_sec": s.get("current_tokens_per_sec", 0.0),
+                            "tokens_today": {
+                                "total": s.get("tokens_today", s.get("total_tokens_all_time", 0)),
+                                "prompt": s.get("total_prompt_tokens", 0),
+                                "completion": s.get("total_completion_tokens", 0),
+                                "reasoning": s.get("total_reasoning_tokens", 0)
+                            },
+                            "latency_ms": {
+                                "ttft_avg": s.get("avg_latency_ms", 0.0),
+                                "status": "optimal" if s.get("avg_latency_ms", 0.0) < 4000 else "normal"
+                            },
+                            "cumulative": {
+                                "requests": s.get("total_requests_all_time", 0),
+                                "tokens": s.get("total_tokens_all_time", 0)
+                            }
+                        },
+                        "chart_data": metrics_data.get("chart_data"),
+                        "chart_range": "1m"
+                    })
+                except Exception:
+                    pass
+
+                resp_json = format_non_stream_response(
+                    completion_id, created, model,
+                    content_text,
+                    tool_calls if tool_calls else None,
+                    finish_reason=finish_reason,
+                    reasoning_content=reasoning_text if reasoning_text else None,
+                    usage={
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": prompt_tokens + completion_tokens,
+                        "reasoning_tokens": reasoning_tokens
+                    }
+                )
+                return JSONResponse(content=resp_json, headers={"X-Cache": "MISS"})
 
         except Exception as e:
             last_error = e
@@ -2377,220 +2395,219 @@ async def anthropic_messages(request: Request):
     start_t = time.time()
     prompt_tokens = max(1, len(json.dumps(req_payload)) // 4)
     timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
+    client = get_shared_client()
+    for attempt, account in enumerate(ordered_accounts):
+        account_email = account.get("email", "")
+        AccountFailoverPool.acquire(account_email)
+        try:
+            access_token = await get_access_token(account)
+            project_id = account.get("projectId", "rising-fact-p41fc")
+            upstream_url = f"{ANTIGRAVITY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+                "User-Agent": "Antigravity/2.24.0.0",
+                "Accept": "text/event-stream"
+            }
+            wrapped_body = {
+                "project": project_id,
+                "model": model,
+                "request": req_payload,
+                "requestType": "agent",
+                "userAgent": "antigravity",
+                "requestId": "agent-" + uuid.uuid4().hex
+            }
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        for attempt, account in enumerate(ordered_accounts):
-            account_email = account.get("email", "")
-            AccountFailoverPool.acquire(account_email)
-            try:
-                access_token = await get_access_token(account)
-                project_id = account.get("projectId", "rising-fact-p41fc")
-                upstream_url = f"{ANTIGRAVITY_ENDPOINT}/v1internal:streamGenerateContent?alt=sse"
-                headers = {
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "User-Agent": "Antigravity/2.24.0.0",
-                    "Accept": "text/event-stream"
-                }
-                wrapped_body = {
-                    "project": project_id,
-                    "model": model,
-                    "request": req_payload,
-                    "requestType": "agent",
-                    "userAgent": "antigravity",
-                    "requestId": "agent-" + uuid.uuid4().hex
-                }
 
+            req = client.build_request("POST", upstream_url, headers=headers, json=wrapped_body)
+            resp = await client.send(req, stream=True)
 
-                req = client.build_request("POST", upstream_url, headers=headers, json=wrapped_body)
-                resp = await client.send(req, stream=True)
+            if resp.status_code in (429, 503):
+                err_text = await resp.aread()
+                AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
+                logger.warning(
+                    f"[FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}: "
+                    f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating account..."
+                )
+                try:
+                    event_bus.broadcast_sync({
+                        "type": "ACCOUNT_FAILOVER",
+                        "account": account_email,
+                        "status_code": resp.status_code
+                    })
+                except Exception:
+                    pass
+                if attempt == len(ordered_accounts) - 1:
+                    await asyncio.sleep(1.2)
+                else:
+                    await asyncio.sleep(0.4)
+                continue
 
-                if resp.status_code in (429, 503):
-                    err_text = await resp.aread()
-                    AccountFailoverPool.mark_rate_limited(account_email, cooldown_seconds=6)
-                    logger.warning(
-                        f"[FAILOVER (ANTHROPIC)] Upstream HTTP {resp.status_code} on {account_email}: "
-                        f"{err_text.decode('utf-8', errors='ignore')[:300]}. Rotating account..."
-                    )
-                    try:
-                        event_bus.broadcast_sync({
-                            "type": "ACCOUNT_FAILOVER",
-                            "account": account_email,
-                            "status_code": resp.status_code
-                        })
-                    except Exception:
-                        pass
-                    if attempt == len(ordered_accounts) - 1:
-                        await asyncio.sleep(1.2)
-                    else:
-                        await asyncio.sleep(0.4)
+            if resp.status_code != 200:
+                err_text = await resp.aread()
+                logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
+                if attempt < len(ordered_accounts) - 1:
+                    continue
+                raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
+
+            content_blocks: List[Dict[str, Any]] = []
+            accumulated_text = ""
+            completion_tokens = 0
+            stop_reason = "end_turn"
+
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                raw_json = line[len("data:"):].strip()
+                if not raw_json or raw_json == "[DONE]":
+                    continue
+                try:
+                    payload = json.loads(raw_json)
+                    response_obj = payload.get("response", payload)
+                    usage = response_obj.get("usageMetadata", {})
+                    if usage.get("promptTokenCount"):
+                        prompt_tokens = usage["promptTokenCount"]
+                    if usage.get("candidatesTokenCount"):
+                        completion_tokens = usage["candidatesTokenCount"]
+
+                    candidates = response_obj.get("candidates", [])
+                    if candidates:
+                        cand = candidates[0]
+                        parts = cand.get("content", {}).get("parts", [])
+                        for p in parts:
+                            if p.get("text"):
+                                accumulated_text += p["text"]
+                            elif p.get("functionCall"):
+                                fn = p["functionCall"]
+                                call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
+                                raw_name = fn.get("name", "tool")
+                                raw_args = fn.get("args", {})
+                                fn_name, fn_args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
+                                content_blocks.append({
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": fn_name,
+                                    "input": fn_args if isinstance(fn_args, dict) else {}
+                                })
+                                stop_reason = "tool_use"
+                except Exception:
                     continue
 
-                if resp.status_code != 200:
-                    err_text = await resp.aread()
-                    logger.error(f"Upstream error {resp.status_code}: {err_text.decode('utf-8', errors='ignore')[:300]}")
-                    if attempt < len(ordered_accounts) - 1:
-                        continue
-                    raise HTTPException(status_code=resp.status_code, detail=f"Upstream error: {resp.status_code}")
-
-                content_blocks: List[Dict[str, Any]] = []
-                accumulated_text = ""
-                completion_tokens = 0
-                stop_reason = "end_turn"
-
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data:"):
-                        continue
-                    raw_json = line[len("data:"):].strip()
-                    if not raw_json or raw_json == "[DONE]":
-                        continue
-                    try:
-                        payload = json.loads(raw_json)
-                        response_obj = payload.get("response", payload)
-                        usage = response_obj.get("usageMetadata", {})
-                        if usage.get("promptTokenCount"):
-                            prompt_tokens = usage["promptTokenCount"]
-                        if usage.get("candidatesTokenCount"):
-                            completion_tokens = usage["candidatesTokenCount"]
-
-                        candidates = response_obj.get("candidates", [])
-                        if candidates:
-                            cand = candidates[0]
-                            parts = cand.get("content", {}).get("parts", [])
-                            for p in parts:
-                                if p.get("text"):
-                                    accumulated_text += p["text"]
-                                elif p.get("functionCall"):
-                                    fn = p["functionCall"]
-                                    call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
-                                    raw_name = fn.get("name", "tool")
-                                    raw_args = fn.get("args", {})
-                                    fn_name, fn_args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
-                                    content_blocks.append({
-                                        "type": "tool_use",
-                                        "id": call_id,
-                                        "name": fn_name,
-                                        "input": fn_args if isinstance(fn_args, dict) else {}
-                                    })
-                                    stop_reason = "tool_use"
-                    except Exception:
-                        continue
-
-                if "call:" in accumulated_text:
-                    cleaned_txt, text_tcs = extract_text_tool_calls(accumulated_text, body.get("tools"))
-                    if text_tcs:
-                        accumulated_text = cleaned_txt
-                        for tc in text_tcs:
-                            fn = tc["function"]
-                            fn_name = fn["name"]
-                            fn_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
-                            content_blocks.append({
-                                "type": "tool_use",
-                                "id": tc.get("id") or f"toolu_{uuid.uuid4().hex[:12]}",
-                                "name": fn_name,
-                                "input": fn_args if isinstance(fn_args, dict) else {}
-                            })
-                            stop_reason = "tool_use"
-
-                if accumulated_text:
-                    content_blocks.insert(0, {"type": "text", "text": accumulated_text})
-
-                if not completion_tokens:
-                    completion_tokens = max(1, len(accumulated_text) // 4)
-
-                latency_ms = round((time.time() - start_t) * 1000, 1)
-                telemetry.record_usage(
-                    model=model,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    reasoning_tokens=0,
-                    latency_ms=latency_ms
-                )
-
-                if cache_eligible and accumulated_text and stop_reason != "tool_use":
-                    try:
-                        emb_bytes = None
-                        if last_user_query:
-                            from prime_gate.cache.semantic import SemanticVectorEngine
-                            q_vec = SemanticVectorEngine.embed_text(last_user_query)
-                            if q_vec is not None:
-                                emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
-
-                        db.store_cached_response(
-                            cache_key=cache_key,
-                            prompt_hash=prompt_hash,
-                            prompt_preview=prompt_preview,
-                            response_text=accumulated_text,
-                            model=model,
-                            prompt_tokens=prompt_tokens,
-                            completion_tokens=completion_tokens,
-                            reasoning_tokens=0,
-                            embedding=emb_bytes,
-                            tools_signature=tools_sig
-                        )
-                        event_bus.broadcast_sync({
-                            "type": "CACHE_STORED",
-                            "key": cache_key,
-                            "model": model,
-                            "total_tokens": prompt_tokens + completion_tokens
+            if "call:" in accumulated_text:
+                cleaned_txt, text_tcs = extract_text_tool_calls(accumulated_text, body.get("tools"))
+                if text_tcs:
+                    accumulated_text = cleaned_txt
+                    for tc in text_tcs:
+                        fn = tc["function"]
+                        fn_name = fn["name"]
+                        fn_args = json.loads(fn["arguments"]) if isinstance(fn["arguments"], str) else fn["arguments"]
+                        content_blocks.append({
+                            "type": "tool_use",
+                            "id": tc.get("id") or f"toolu_{uuid.uuid4().hex[:12]}",
+                            "name": fn_name,
+                            "input": fn_args if isinstance(fn_args, dict) else {}
                         })
-                    except Exception as e:
-                        logger.warning(f"Failed to cache Anthropic non-stream response: {e}")
+                        stop_reason = "tool_use"
 
+            if accumulated_text:
+                content_blocks.insert(0, {"type": "text", "text": accumulated_text})
+
+            if not completion_tokens:
+                completion_tokens = max(1, len(accumulated_text) // 4)
+
+            latency_ms = round((time.time() - start_t) * 1000, 1)
+            telemetry.record_usage(
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                reasoning_tokens=0,
+                latency_ms=latency_ms
+            )
+
+            if cache_eligible and accumulated_text and stop_reason != "tool_use":
                 try:
-                    quota_snap = QuotaMonitor.get_cached_quotas(account_email)
-                    db.record_request_hit(
-                        request_id=message_id,
-                        timestamp=created,
-                        account_email=account_email,
+                    emb_bytes = None
+                    if last_user_query:
+                        from prime_gate.cache.semantic import SemanticVectorEngine
+                        q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                        if q_vec is not None:
+                            emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
+
+                    db.store_cached_response(
+                        cache_key=cache_key,
+                        prompt_hash=prompt_hash,
+                        prompt_preview=prompt_preview,
+                        response_text=accumulated_text,
                         model=model,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         reasoning_tokens=0,
-                        latency_ms=latency_ms,
-                        status_code=200,
-                        stream=0,
-                        quota_snapshot=quota_snap,
-                        cache_hit=0,
-                        tokens_saved=0
+                        embedding=emb_bytes,
+                        tools_signature=tools_sig
                     )
-                except Exception as e:
-                    logger.error(f"Failed to record Anthropic request hit: {e}")
-
-                try:
                     event_bus.broadcast_sync({
-                        "type": "REQUEST_LOGGED",
-                        "request_id": message_id,
+                        "type": "CACHE_STORED",
+                        "key": cache_key,
                         "model": model,
-                        "total_tokens": prompt_tokens + completion_tokens,
-                        "cache_hit": False,
-                        "tokens_saved": 0
+                        "total_tokens": prompt_tokens + completion_tokens
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to cache Anthropic non-stream response: {e}")
 
-                return JSONResponse(
-                    content=format_anthropic_non_stream_response(
-                        message_id=message_id,
-                        model=model,
-                        content_blocks=content_blocks,
-                        stop_reason=stop_reason,
-                        prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens,
-                        cache_read_tokens=0
-                    ),
-                    headers={"anthropic-version": anthropic_ver, "X-Cache": "MISS"}
+            try:
+                quota_snap = QuotaMonitor.get_cached_quotas(account_email)
+                db.record_request_hit(
+                    request_id=message_id,
+                    timestamp=created,
+                    account_email=account_email,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=0,
+                    latency_ms=latency_ms,
+                    status_code=200,
+                    stream=0,
+                    quota_snapshot=quota_snap,
+                    cache_hit=0,
+                    tokens_saved=0
                 )
-
-            except HTTPException:
-                raise
             except Exception as e:
-                logger.error(f"[FAILOVER (ANTHROPIC)] Connection failed for {account_email}: {e}")
-                if attempt == len(ordered_accounts) - 1:
-                    raise HTTPException(status_code=502, detail=f"All upstream accounts exhausted: {e}")
-                continue
-            finally:
-                AccountFailoverPool.release(account_email)
+                logger.error(f"Failed to record Anthropic request hit: {e}")
+
+            try:
+                event_bus.broadcast_sync({
+                    "type": "REQUEST_LOGGED",
+                    "request_id": message_id,
+                    "model": model,
+                    "total_tokens": prompt_tokens + completion_tokens,
+                    "cache_hit": False,
+                    "tokens_saved": 0
+                })
+            except Exception:
+                pass
+
+            return JSONResponse(
+                content=format_anthropic_non_stream_response(
+                    message_id=message_id,
+                    model=model,
+                    content_blocks=content_blocks,
+                    stop_reason=stop_reason,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cache_read_tokens=0
+                ),
+                headers={"anthropic-version": anthropic_ver, "X-Cache": "MISS"}
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"[FAILOVER (ANTHROPIC)] Connection failed for {account_email}: {e}")
+            if attempt == len(ordered_accounts) - 1:
+                raise HTTPException(status_code=502, detail=f"All upstream accounts exhausted: {e}")
+            continue
+        finally:
+            AccountFailoverPool.release(account_email)
 
     raise HTTPException(status_code=502, detail="Failed to connect to upstream Antigravity accounts.")
 

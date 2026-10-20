@@ -19,6 +19,7 @@ from .schema_cleaner import clean_schema_for_antigravity
 from .request_converter import resolve_model_info
 from .response_converter import extract_text_tool_calls, normalize_tool_call
 from ..quota.monitor import QuotaMonitor
+from ..client_pool import get_shared_client
 
 logger = logging.getLogger("prime_gate.translator.anthropic_converter")
 
@@ -433,6 +434,19 @@ def transform_anthropic_to_antigravity(
         # Ensure temperature conforms to Gemini thinking constraints (must be default/1.0)
         generation_config["temperature"] = 1.0
 
+        # Ensure maxOutputTokens has sufficient headroom for both thoughts and answer tokens
+        budget = thinking_cfg.get("thinkingBudget")
+        current_max = generation_config.get("maxOutputTokens")
+        if budget and isinstance(budget, int) and budget > 0:
+            if current_max is None or current_max <= budget:
+                generation_config["maxOutputTokens"] = budget + 8192
+        elif current_max is None:
+            generation_config["maxOutputTokens"] = 16384
+
+    # Default safe maximum output token cap to prevent premature truncation
+    if "maxOutputTokens" not in generation_config:
+        generation_config["maxOutputTokens"] = 16384
+
 
     req_payload: Dict[str, Any] = {
         "contents": contents,
@@ -611,7 +625,9 @@ async def stream_anthropic_sse(
     connected_account = None
     current_held_email = acquired_email
 
-    client = httpx.AsyncClient(timeout=timeout)
+    client = get_shared_client()
+    # Immediately flush HTTP 200 OK headers to prevent client connection/read timeout
+    yield ": connected\n\n"
     try:
         max_attempts = max(len(ordered_accounts) * 2, 4)
         for attempt in range(max_attempts):
@@ -655,7 +671,13 @@ async def stream_anthropic_sse(
                 }
 
                 req = client.build_request("POST", upstream_url, headers=headers, json=wrapped_body)
-                resp = await client.send(req, stream=True)
+                send_task = asyncio.create_task(client.send(req, stream=True))
+                while not send_task.done():
+                    try:
+                        resp = await asyncio.wait_for(asyncio.shield(send_task), timeout=5.0)
+                        break
+                    except asyncio.TimeoutError:
+                        yield ": ping\n\n" 
 
                 if resp.status_code in (429, 503):
                     err_text = await resp.aread()
@@ -837,7 +859,17 @@ async def stream_anthropic_sse(
             return False
 
         try:
-            async for line in resp.aiter_lines():
+            aiter = resp.aiter_lines().__aiter__()
+            while True:
+                try:
+                    line = await asyncio.wait_for(aiter.__anext__(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    # Upstream Antigravity is processing prompt/thinking; emit SSE comment heartbeat
+                    yield ": ping\n\n"
+                    continue
+                except StopAsyncIteration:
+                    break
+
                 if not line:
                     continue
                 if line.startswith("data: "):
@@ -1061,5 +1093,4 @@ async def stream_anthropic_sse(
         if current_held_email:
             AccountFailoverPool.release(current_held_email)
             current_held_email = None
-        await client.aclose()
 

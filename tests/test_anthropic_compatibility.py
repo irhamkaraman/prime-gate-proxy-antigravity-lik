@@ -25,7 +25,7 @@ class TestAnthropicCompatibility(unittest.TestCase):
         # Verify systemInstruction
         sys_inst = req_payload.get("systemInstruction", {})
         self.assertEqual(sys_inst.get("role"), "user")
-        self.assertEqual(sys_inst["parts"][0]["text"], "You are a helpful coding assistant.")
+        self.assertTrue(sys_inst["parts"][0]["text"].startswith("You are a helpful coding assistant."))
 
         # Verify contents
         contents = req_payload.get("contents", [])

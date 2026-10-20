@@ -41,6 +41,7 @@ class TestContextCompactor(unittest.TestCase):
         large_output = ("data row verbose output " * 10 + "\n") * 50
         messages = [
             {"role": "user", "content": "1"},
+            {"role": "assistant", "content": "ok"},
             {"role": "tool", "tool_call_id": "c1", "content": large_output},
             {"role": "user", "content": "2"},
             {"role": "user", "content": "3"},
