@@ -36,7 +36,7 @@ class TestContextCompactor(unittest.TestCase):
         compacted, pruned = ContextCompactor.compact_messages(messages, {"window_turns": 3, "max_tool_chars": 200})
         self.assertGreater(pruned, 0)
         self.assertIn("Historical tool execution output pruned", compacted[2]["content"])
-        # Ensure system prompt and latest user prompt are unaffected
+
     def test_server_style_compactor_call(self):
         large_output = ("data row verbose output " * 10 + "\n") * 50
         messages = [
@@ -58,6 +58,36 @@ class TestContextCompactor(unittest.TestCase):
         self.assertGreater(stats["chars_saved"], 0)
         self.assertGreater(int(stats), 0)
 
+    def test_autonomous_agent_tool_loop(self):
+        # Even in a single or long user session, historical tools in an autonomous agent loop MUST be pruned
+        messages = [
+            {"role": "user", "content": "Initial prompt"},
+            {"role": "assistant", "content": "Starting agent loop"},
+        ]
+        for i in range(15):
+            messages.append({"role": "assistant", "content": f"Step {i}", "tool_calls": [{"id": f"c_{i}", "type": "function", "function": {"name": "run"}}]})
+            messages.append({"role": "tool", "tool_call_id": f"c_{i}", "content": "Log data row " * 100})
+        
+        compacted, stats = ContextCompactor.compact_messages(messages, {"window_tools": 2})
+        self.assertTrue(stats.get("compacted"))
+        self.assertEqual(stats["pruned_tool_messages"], 13)
+        self.assertGreater(stats["tokens_saved"], 0)
+
+    def test_anthropic_body_compaction(self):
+        anthropic_msgs = [
+            {"role": "user", "content": "Fix code"},
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "bash", "input": {}}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Old massive tool result\n" * 50}]},
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "t2", "name": "bash", "input": {}}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "Recent tool result 1"}]},
+            {"role": "assistant", "content": [{"type": "tool_use", "id": "t3", "name": "bash", "input": {}}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t3", "content": "Recent tool result 2"}]},
+        ]
+        compacted = ContextCompactor.compact_anthropic_body_messages(anthropic_msgs, window_tools=2)
+        t1_content = compacted[2]["content"][0]["content"]
+        self.assertIn("Historical tool execution output pruned", t1_content)
+        self.assertEqual(compacted[4]["content"][0]["content"], "Recent tool result 1")
+        self.assertEqual(compacted[6]["content"][0]["content"], "Recent tool result 2")
+
 if __name__ == "__main__":
     unittest.main()
-

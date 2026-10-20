@@ -2193,6 +2193,13 @@ async def anthropic_messages(request: Request):
                 f"[COMPACTOR (ANTHROPIC)] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
                 f"saved ~{compactor_stats['chars_saved']} chars."
             )
+        # Apply compaction to native Anthropic request body messages
+        if isinstance(body.get("messages"), list):
+            body["messages"] = ContextCompactor.compact_anthropic_body_messages(
+                body.get("messages", []),
+                window_tools=cache_cfg.get("compactor_window_tools", 2),
+                max_tool_chars=cache_cfg.get("compactor_max_chars", 600)
+            )
 
     # 3. AI Agent Runaway Loop Guard
     if cache_cfg.get("loop_guard_enabled", True) and internal_msgs:

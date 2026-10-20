@@ -429,10 +429,20 @@ def transform_openai_to_antigravity(
                 "include_thoughts": True,
                 "thinking_budget": claude_budget
             }
-    elif supports_thinking or reasoning_effort in ["low", "medium", "high"] or explicit_budget is not None or "thinking" in model.lower():
+    elif ("-high" in model.lower() or "-medium" in model.lower() or "-low" in model.lower() or "thinking" in model.lower() or reasoning_effort in ["low", "medium", "high"] or explicit_budget is not None):
+            client_req = str(body.get("model", "")).lower()
             gemini_level = "medium"
             if reasoning_effort in ["low", "medium", "high"]:
                 gemini_level = reasoning_effort
+            elif explicit_budget is not None:
+                gemini_level = "medium"
+            elif "-high" in client_req:
+                gemini_level = "high"
+            elif "-low" in client_req:
+                gemini_level = "low"
+            elif "flash" in client_req:
+                # Client requested base flash model: prioritize low latency and instant response
+                gemini_level = "low"
             elif model_spec.get("thinking_level") in ["low", "medium", "high"]:
                 gemini_level = model_spec["thinking_level"]
             elif "-high" in model.lower():
@@ -448,6 +458,12 @@ def transform_openai_to_antigravity(
                 thinking_cfg["thinkingBudget"] = explicit_budget
             elif model_spec.get("thinking_budget") and model_spec["thinking_budget"] > 0:
                 thinking_cfg["thinkingBudget"] = model_spec["thinking_budget"]
+            elif gemini_level == "low":
+                thinking_cfg["thinkingBudget"] = 1024
+            elif gemini_level == "medium":
+                thinking_cfg["thinkingBudget"] = 2048
+            elif gemini_level == "high":
+                thinking_cfg["thinkingBudget"] = 4096
 
             generation_config["thinkingConfig"] = thinking_cfg
 
