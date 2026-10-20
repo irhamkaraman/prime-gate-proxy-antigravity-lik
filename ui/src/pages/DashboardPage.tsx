@@ -591,21 +591,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              paddingTop: 14,
-              marginTop: 16,
-              fontSize: 12,
-              color: '#78716c',
-            }}
-          >
-            <span>Protocols: <strong style={{ color: '#d6d3d1' }}>OpenAI (/v1) &bull; Anthropic (/v1/messages)</strong></span>
-            <span>Version: <strong style={{ color: '#f59e0b' }}>v1.2.1</strong></span>
-          </div>
         </div>
       </div>
     </div>
