@@ -1674,7 +1674,7 @@ async def chat_completions(request: Request):
     if cache_cfg.get("compactor_enabled", True) and isinstance(raw_messages, list):
         compacted_messages, compactor_stats = ContextCompactor.compact_messages(
             messages=raw_messages,
-            keep_recent_user_turns=cache_cfg.get("compactor_window", 3),
+            keep_recent_user_turns=cache_cfg.get("compactor_window_turns", cache_cfg.get("compactor_window", 3)),
             max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40)
         )
         if compactor_stats.get("compacted"):
@@ -2185,7 +2185,7 @@ async def anthropic_messages(request: Request):
     if cache_cfg.get("compactor_enabled", True) and internal_msgs:
         compacted_msgs, compactor_stats = ContextCompactor.compact_messages(
             messages=internal_msgs,
-            keep_recent_user_turns=cache_cfg.get("compactor_window", 3),
+            keep_recent_user_turns=cache_cfg.get("compactor_window_turns", cache_cfg.get("compactor_window", 3)),
             max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40)
         )
         if compactor_stats.get("compacted"):

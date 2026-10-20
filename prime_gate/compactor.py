@@ -117,6 +117,11 @@ class ContextCompactor:
         cutoff_index = 0
         if len(user_indices) > window_turns:
             cutoff_index = user_indices[-window_turns]
+        elif len(messages) > 8:
+            # Autonomous agent trajectory: few user messages but multiple sequential tool turns.
+            # Protect the most recent 6 messages (active working memory) while allowing
+            # pruning of earlier execution outputs.
+            cutoff_index = max(2, len(messages) - 6)
 
         for idx, msg in enumerate(messages):
             msg_copy = copy.deepcopy(msg)
