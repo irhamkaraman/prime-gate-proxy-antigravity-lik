@@ -38,22 +38,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [switchingEmail, setSwitchingEmail] = useState<string | null>(null);
 
   const [updateInfo, setUpdateInfo] = useState<SystemUpdateStatus | null>(null);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isTogglingAutoUpdate, setIsTogglingAutoUpdate] = useState(false);
 
-  const fetchUpdateStatus = async (force: boolean = false) => {
+  const fetchUpdateStatus = async () => {
     try {
-      if (force) setIsCheckingUpdate(true);
-      const res = await fetch(`/api/system/update-status${force ? '?refresh=true' : ''}`);
+      const res = await fetch('/api/system/update-status');
       if (res.ok) {
         const data: SystemUpdateStatus = await res.json();
         setUpdateInfo(data);
       }
     } catch (e) {
       console.warn('Failed to check system update status:', e);
-    } finally {
-      if (force) setIsCheckingUpdate(false);
     }
   };
 
@@ -270,50 +266,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em' }}>
             Prime Gate
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: '#f59e0b',
-                background: 'rgba(245, 158, 11, 0.12)',
-                border: '1px solid rgba(245, 158, 11, 0.25)',
-                padding: '2px 7px',
-                borderRadius: 5,
-                fontFamily: 'monospace',
-                letterSpacing: '0.02em',
-              }}
-              title={`Version: v${updateInfo?.current_version || '1.2.2'}`}
-            >
-              v{updateInfo?.current_version || '1.2.2'}
-            </span>
-            <button
-              onClick={() => fetchUpdateStatus(true)}
-              disabled={isCheckingUpdate}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                padding: '3px',
-                cursor: 'pointer',
-                color: '#78716c',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 4,
-                transition: 'color 0.15s ease',
-              }}
-              title="Check for GitHub updates"
-              onMouseEnter={e => (e.currentTarget.style.color = '#fbbf24')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#78716c')}
-            >
-              <RefreshCw
-                size={12}
-                style={{
-                  animation: isCheckingUpdate ? 'spin 1s linear infinite' : 'none',
-                }}
-              />
-            </button>
-          </div>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: '#f59e0b',
+              background: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              padding: '2px 7px',
+              borderRadius: 5,
+              fontFamily: 'monospace',
+              letterSpacing: '0.02em',
+            }}
+            title={`Version: v${updateInfo?.current_version || '1.2.3'}`}
+          >
+            v{updateInfo?.current_version || '1.2.3'}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 11, color: '#78716c', fontWeight: 500 }}>
