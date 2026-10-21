@@ -118,13 +118,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         } : null);
         showToast(
           nextEnabled
-            ? 'Zero-Touch Auto-Sync enabled! Updates will pull automatically when system is idle.'
-            : 'Zero-Touch Auto-Sync disabled.',
+            ? 'Auto Update enabled! Updates will pull automatically when system is idle.'
+            : 'Auto Update disabled.',
           'success'
         );
       }
     } catch {
-      showToast('Failed to update Auto-Sync setting', 'error');
+      showToast('Failed to update Auto Update setting', 'error');
     } finally {
       setIsTogglingAutoUpdate(false);
     }
@@ -333,35 +333,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
-          <span style={{ fontSize: 10, color: '#a8a29e', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: updateInfo?.auto_update?.enabled ? '#10b981' : '#78716c',
-                boxShadow: updateInfo?.auto_update?.enabled ? '0 0 6px #10b981' : 'none',
-              }}
-            />
-            Auto-Sync
+          <span style={{ fontSize: 11, color: '#a8a29e', fontWeight: 500 }}>
+            Auto Update
           </span>
           <button
             onClick={handleToggleAutoUpdate}
             disabled={isTogglingAutoUpdate}
+            type="button"
+            role="switch"
+            aria-checked={Boolean(updateInfo?.auto_update?.enabled)}
             style={{
-              fontSize: 10,
-              fontWeight: 600,
-              padding: '2px 7px',
-              borderRadius: 4,
+              width: 30,
+              height: 16,
+              borderRadius: 999,
+              background: updateInfo?.auto_update?.enabled ? '#10b981' : '#3f3f46',
               border: 'none',
-              background: updateInfo?.auto_update?.enabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-              color: updateInfo?.auto_update?.enabled ? '#34d399' : '#a8a29e',
+              padding: 2,
+              display: 'flex',
+              alignItems: 'center',
               cursor: isTogglingAutoUpdate ? 'wait' : 'pointer',
-              transition: 'all 0.15s ease',
+              transition: 'background 0.2s ease, opacity 0.2s ease',
+              opacity: isTogglingAutoUpdate ? 0.6 : 1,
+              outline: 'none',
+              boxShadow: updateInfo?.auto_update?.enabled ? '0 0 8px rgba(16, 185, 129, 0.35)' : 'none',
             }}
-            title={updateInfo?.auto_update?.enabled ? 'Click to disable zero-touch auto-sync' : 'Click to enable zero-touch auto-sync'}
+            title={
+              updateInfo?.auto_update?.enabled
+                ? 'Auto Update is active (Idle safe). Click to disable.'
+                : 'Auto Update is disabled. Click to enable.'
+            }
           >
-            {updateInfo?.auto_update?.enabled ? 'ON (Idle Safe)' : 'OFF'}
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                background: '#ffffff',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.4)',
+                transform: updateInfo?.auto_update?.enabled ? 'translateX(14px)' : 'translateX(0px)',
+                transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                display: 'block',
+              }}
+            />
           </button>
         </div>
       </div>
@@ -423,7 +436,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
             >
               <RefreshCw size={10} style={{ animation: 'spin 4s linear infinite', flexShrink: 0 }} />
-              <span>Zero-Touch Auto-Sync will install automatically once system is idle.</span>
+              <span>Auto Update will install automatically once system is idle.</span>
             </div>
           )}
 
