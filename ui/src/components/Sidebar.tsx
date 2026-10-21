@@ -40,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [updateInfo, setUpdateInfo] = useState<SystemUpdateStatus | null>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
+  const [isTogglingAutoUpdate, setIsTogglingAutoUpdate] = useState(false);
 
   const fetchUpdateStatus = async (force: boolean = false) => {
     try {
@@ -96,6 +97,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
       showToast((err as Error).message || 'Failed to update repository', 'error');
     } finally {
       setIsPulling(false);
+    }
+  };
+
+  const handleToggleAutoUpdate = async () => {
+    const currentEnabled = updateInfo?.auto_update ? updateInfo.auto_update.enabled : true;
+    const nextEnabled = !currentEnabled;
+    setIsTogglingAutoUpdate(true);
+    try {
+      const res = await fetch('/api/system/auto-update/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextEnabled }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUpdateInfo(prev => prev ? {
+          ...prev,
+          auto_update: data.config
+        } : null);
+        showToast(
+          nextEnabled
+            ? 'Zero-Touch Auto-Sync enabled! Updates will pull automatically when system is idle.'
+            : 'Zero-Touch Auto-Sync disabled.',
+          'success'
+        );
+      }
+    } catch {
+      showToast('Failed to update Auto-Sync setting', 'error');
+    } finally {
+      setIsTogglingAutoUpdate(false);
     }
   };
 
@@ -301,6 +332,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingTop: 6, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+          <span style={{ fontSize: 10, color: '#a8a29e', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: updateInfo?.auto_update?.enabled ? '#10b981' : '#78716c',
+                boxShadow: updateInfo?.auto_update?.enabled ? '0 0 6px #10b981' : 'none',
+              }}
+            />
+            Auto-Sync
+          </span>
+          <button
+            onClick={handleToggleAutoUpdate}
+            disabled={isTogglingAutoUpdate}
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              padding: '2px 7px',
+              borderRadius: 4,
+              border: 'none',
+              background: updateInfo?.auto_update?.enabled ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+              color: updateInfo?.auto_update?.enabled ? '#34d399' : '#a8a29e',
+              cursor: isTogglingAutoUpdate ? 'wait' : 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            title={updateInfo?.auto_update?.enabled ? 'Click to disable zero-touch auto-sync' : 'Click to enable zero-touch auto-sync'}
+          >
+            {updateInfo?.auto_update?.enabled ? 'ON (Idle Safe)' : 'OFF'}
+          </button>
+        </div>
       </div>
 
       {/* Update Available Alert Banner */}
@@ -345,6 +408,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ? `Behind by ${updateInfo.commits_behind} commit${updateInfo.commits_behind > 1 ? 's' : ''} from remote origin.`
               : `Local version (v${updateInfo.current_version}) is out of sync with GitHub (v${updateInfo.latest_version}).`}
           </div>
+
+          {updateInfo?.auto_update?.enabled && (
+            <div
+              style={{
+                fontSize: 10,
+                color: '#fde68a',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: 'rgba(245, 158, 11, 0.12)',
+                padding: '4px 7px',
+                borderRadius: 5,
+              }}
+            >
+              <RefreshCw size={10} style={{ animation: 'spin 4s linear infinite', flexShrink: 0 }} />
+              <span>Zero-Touch Auto-Sync will install automatically once system is idle.</span>
+            </div>
+          )}
 
           <button
             onClick={handleGitPull}

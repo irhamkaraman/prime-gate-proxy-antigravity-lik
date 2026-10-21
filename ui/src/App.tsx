@@ -212,9 +212,15 @@ const MainLayout: React.FC = () => {
               msgType === 'CACHE_HIT' ||
               msgType === 'CACHE_STORED' ||
               msgType === 'CACHE_CLEARED' ||
-              msgType === 'CACHE_CONFIG_UPDATED'
+              msgType === 'CACHE_CONFIG_UPDATED' ||
+              msgType === 'AUTO_UPDATE_CONFIG_UPDATED'
             ) {
               setLastLedgerUpdate(Date.now());
+            } else if (msgType === 'AUTO_UPDATE_COMPLETED' || msgType === 'SYSTEM_UPDATE_COMPLETED') {
+              showToast(`System updated to commit #${data.commit || ''}! Refreshing page...`, 'success');
+              setTimeout(() => {
+                window.location.reload();
+              }, 2000);
             } else if (msgType === 'ACCOUNT_SWITCHED') {
               if (data.quota && Array.isArray(data.quota) && data.quota.length > 0) {
                 setActiveAccount(prev => prev ? { ...prev, email: data.email || prev.email, quota_summary: data.quota } : null);

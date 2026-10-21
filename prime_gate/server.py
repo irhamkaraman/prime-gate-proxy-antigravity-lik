@@ -72,6 +72,7 @@ app.add_middleware(
 
 account_mgr = AccountManager()
 START_TIME = time.time()
+_last_traffic_timestamp: float = time.time()
 
 @app.on_event("startup")
 async def on_startup():
@@ -104,6 +105,9 @@ async def on_startup():
                 logger.warning(f"[STARTUP SYNC] Startup sync deferred (will use binary DB cached models): {e}")
 
         asyncio.create_task(_startup_sync())
+
+    # Autonomous Zero-Touch Auto-Update Worker (Metode B)
+    asyncio.create_task(_background_auto_update_worker())
 
     # Seed baseline request log if empty but telemetry exists
     try:
@@ -521,6 +525,149 @@ async def api_auth_login():
         return {"success": False, "error": str(e)}
 
 
+async def _background_auto_update_worker():
+    """
+    Autonomous Zero-Touch Auto-Update Worker (Metode B).
+    Periodically checks for remote GitHub updates when enabled.
+    Safely drains in-flight requests and executes git pull and optional UI build.
+    """
+    logger.info("[AUTO-UPDATE] Autonomous background sync worker started (default: Enabled).")
+    await asyncio.sleep(20)
+
+    while True:
+        try:
+            cfg = db.get_auto_update_config()
+            if not cfg.get("enabled", True):
+                await asyncio.sleep(60)
+                continue
+
+            interval = max(60, int(cfg.get("check_interval_seconds", 600)))
+            idle_threshold = max(10, int(cfg.get("idle_threshold_seconds", 30)))
+
+            # 1. Check if update is available
+            sync_status = _check_github_sync(force_refresh=True)
+            db.set_auto_update_config({"last_checked": time.time()})
+
+            if sync_status.get("update_available"):
+                logger.info(
+                    f"[AUTO-UPDATE] Update available! Local: #{sync_status.get('current_commit')} "
+                    f"vs Remote: #{sync_status.get('latest_commit')} ({sync_status.get('commits_behind')} behind). "
+                    "Awaiting system idle calm..."
+                )
+
+                # 2. Check idle state
+                total_in_flight = AccountFailoverPool.get_total_in_flight()
+                time_since_traffic = time.time() - _last_traffic_timestamp
+
+                if total_in_flight == 0 and time_since_traffic >= idle_threshold:
+                    logger.info("[AUTO-UPDATE] System is idle (0 in-flight). Executing zero-touch git pull...")
+                    db.set_auto_update_config({
+                        "last_update_attempt": time.time(),
+                        "last_update_status": "updating"
+                    })
+
+                    pull_res = await api_system_git_pull()
+                    success = pull_res.get("success", False)
+                    status_label = "success" if success else "failed"
+                    log_text = pull_res.get("stdout") or pull_res.get("error") or ""
+
+                    db.record_auto_update_event(
+                        status=status_label,
+                        from_commit=sync_status.get("current_commit", ""),
+                        to_commit=sync_status.get("latest_commit", ""),
+                        from_version=sync_status.get("current_version", ""),
+                        to_version=sync_status.get("latest_version", ""),
+                        ui_rebuilt=pull_res.get("ui_rebuilt", False),
+                        log=log_text
+                    )
+
+                    db.set_auto_update_config({
+                        "last_update_status": status_label,
+                        "last_update_log": log_text[:500]
+                    })
+
+                    if success:
+                        logger.info(f"[AUTO-UPDATE] Auto-update successfully completed to commit {sync_status.get('latest_commit')}!")
+                        try:
+                            event_bus.broadcast_sync({
+                                "type": "AUTO_UPDATE_COMPLETED",
+                                "version": sync_status.get("latest_version"),
+                                "commit": sync_status.get("latest_commit"),
+                                "ui_rebuilt": pull_res.get("ui_rebuilt", False)
+                            })
+                        except Exception:
+                            pass
+                else:
+                    logger.debug(
+                        f"[AUTO-UPDATE] Postponed due to active traffic "
+                        f"(in_flight: {total_in_flight}, calm: {int(time_since_traffic)}s < {idle_threshold}s)."
+                    )
+
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning(f"[AUTO-UPDATE] Background update worker cycle exception: {e}")
+            await asyncio.sleep(60)
+
+
+@app.get("/api/system/auto-update/config")
+async def api_get_auto_update_config():
+    """Returns current Zero-Touch auto-update configuration."""
+    return db.get_auto_update_config()
+
+
+@app.post("/api/system/auto-update/config")
+async def api_set_auto_update_config(request: Request):
+    """Updates Zero-Touch auto-update configuration."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    success = db.set_auto_update_config(body)
+    new_cfg = db.get_auto_update_config()
+    try:
+        event_bus.broadcast_sync({
+            "type": "AUTO_UPDATE_CONFIG_UPDATED",
+            "config": new_cfg
+        })
+    except Exception:
+        pass
+    return {"success": success, "config": new_cfg}
+
+
+@app.get("/api/system/auto-update/logs")
+async def api_get_auto_update_logs(limit: int = 20):
+    """Returns recent auto-update audit history ledger."""
+    return {"logs": db.get_auto_update_logs(limit=limit)}
+
+
+@app.post("/api/system/restart")
+async def api_system_restart():
+    """
+    Safely triggers daemon/process restart after update.
+    """
+    def _do_restart():
+        time.sleep(1.0)
+        from .daemon.process_win import start_daemon, stop_daemon, get_daemon_status
+        status = get_daemon_status()
+        if status.get("running"):
+            stop_daemon()
+            start_daemon()
+        else:
+            cmd = [sys.executable, "-m", "prime_gate.server"] + sys.argv[1:]
+            env = os.environ.copy()
+            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            env["PYTHONPATH"] = str(repo_root) + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
+            subprocess.Popen(cmd, env=env, creationflags=0x08000000 | 0x00000200)
+            os._exit(0)
+
+    import threading
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return {"success": True, "message": "Server is restarting in background..."}
+
+
+
 @app.get("/api/accounts")
 async def api_accounts_list():
     """List all accounts currently configured in Prime Gate with live quota summaries."""
@@ -854,7 +1001,8 @@ def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
         "commits_behind": commits_behind,
         "is_synced": not update_available,
         "last_checked": now,
-        "repo_url": "https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik"
+        "repo_url": "https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik",
+        "auto_update": db.get_auto_update_config()
     }
 
     _UPDATE_CACHE = {
@@ -1659,6 +1807,8 @@ async def stream_antigravity_sse(
 @app.post("/v1/chat/completions")
 @app.post("/chat/completions")
 async def chat_completions(request: Request):
+    global _last_traffic_timestamp
+    _last_traffic_timestamp = time.time()
     accounts = account_mgr.load_accounts()
     if not accounts:
         raise HTTPException(
@@ -2171,6 +2321,8 @@ async def count_tokens(request: Request):
 @app.post("/v1/messages")
 @app.post("/messages")
 async def anthropic_messages(request: Request):
+    global _last_traffic_timestamp
+    _last_traffic_timestamp = time.time()
     """
     Native Anthropic Messages API compatible generation endpoint:
     - Transparent translation to Google Antigravity

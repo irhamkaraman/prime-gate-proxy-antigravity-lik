@@ -51,6 +51,11 @@ class AccountFailoverPool:
         return cls._in_flight.get(email, 0)
 
     @classmethod
+    def get_total_in_flight(cls) -> int:
+        """Returns the total number of in-flight requests across all accounts."""
+        return sum(cls._in_flight.values())
+
+    @classmethod
     @asynccontextmanager
     async def slot(cls, email: str):
         """Async context manager ensuring in-flight count is always cleaned up."""

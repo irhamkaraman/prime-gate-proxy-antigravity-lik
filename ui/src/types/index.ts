@@ -278,6 +278,17 @@ export interface ModalConfig {
   onCancel?: () => void;
 }
 
+export interface AutoUpdateConfig {
+  enabled: boolean;
+  check_interval_seconds: number;
+  idle_threshold_seconds: number;
+  auto_rebuild_ui: boolean;
+  last_checked: number;
+  last_update_attempt: number;
+  last_update_status: string;
+  last_update_log: string;
+}
+
 export interface SystemUpdateStatus {
   current_version: string;
   current_commit: string;
@@ -288,6 +299,7 @@ export interface SystemUpdateStatus {
   is_synced: boolean;
   last_checked: number;
   repo_url: string;
+  auto_update?: AutoUpdateConfig;
 }
 
 export interface GitPullResponse {

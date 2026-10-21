@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.3] - 2026-10-21
+
+### 🚀 Autonomous Zero-Touch Auto-Update, Anti-ISP Web Search MCP & Gemini 3 Thought Signature
+
+#### 1. Autonomous Zero-Touch Auto-Update Engine (Metode B)
+- **Zero-Touch Background Sync:** Added automated background worker polling GitHub repository updates at regular intervals (`default: enabled`).
+- **In-Flight & Idle Safety Gate:** Auto-updates only trigger when all accounts report `0 in-flight requests` and the proxy has been completely idle without traffic for $\ge 30$ seconds, preventing LLM streaming interruptions during active coding sessions.
+- **Auto-Rebuild Frontend:** Automatically compiles frontend assets (`npm run build`) whenever UI files are updated.
+- **Automatic Multi-User Database Schema Migration:** Automatically creates `pg_auto_update_ledger` and seeds default configuration in `pg_records` for both new and existing user databases without manual intervention.
+- **Sidebar Live Status & Toggle:** Added real-time Auto-Sync indicator badge and quick-toggle button in Dashboard sidebar.
+
+#### 2. Anti-ISP Blocking Web Search Engine & MCP
+- **Cloudflare DNS-over-HTTPS (DoH 1.1.1.1):** Resolves DuckDuckGo and search endpoints via encrypted DoH, completely bypassing regional ISP DNS filtering.
+- **Standalone MCP Server:** Exposes standard stdio Model Context Protocol `web_search` tool (`scripts/mcp_search.py`) for OpenCode and Claude Code.
+- **Gateway Search API:** Registered `POST /v1/search` and `POST /search` for external tooling.
+
+#### 3. Cryptographic Thought Signature Cache for Gemini 3
+- **Upstream Reasoning Integrity:** Thread-safe cache storing cryptographic `thoughtSignature` tokens returned by Google Antigravity Gemini 3 reasoning models across multi-turn tool calling turns, resolving upstream HTTP 400/502 errors.
+
+---
+
 ## [1.2.2] - 2026-10-18
 
 ### 🧠 Next-Gen Smart & Semantic Vector Caching (Hybrid Engine + Coding Agent Optimization)

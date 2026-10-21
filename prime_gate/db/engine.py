@@ -150,6 +150,24 @@ class BinaryDatabaseEngine:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_timestamp ON pg_request_logs(timestamp DESC);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_model ON pg_request_logs(model);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_req_account ON pg_request_logs(account_email);")
+
+        # Autonomous Zero-Touch Auto-Update Audit Ledger
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_auto_update_ledger (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                triggered_at REAL NOT NULL,
+                status TEXT NOT NULL,
+                from_commit TEXT,
+                to_commit TEXT,
+                from_version TEXT,
+                to_version TEXT,
+                ui_rebuilt INTEGER DEFAULT 0,
+                log TEXT,
+                created_at REAL NOT NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_update_ledger_time ON pg_auto_update_ledger(created_at DESC);")
+
         logger.info(f"Binary Database Engine initialized at: {self.db_path} (WAL Mode enabled)")
 
     def set(self, key: str, payload: Dict[str, Any], record_type: int = REC_SYSTEM) -> bool:
@@ -656,6 +674,95 @@ class BinaryDatabaseEngine:
         success = self.set("cache:config", current)
         event_bus.notify_mutation("CACHE_CONFIG", "cache:config", 0)
         return success
+
+    # =========================================================================
+    # Autonomous Zero-Touch Auto-Update Configuration & Audit Ledger
+    # =========================================================================
+
+    DEFAULT_AUTO_UPDATE_CONFIG: Dict[str, Any] = {
+        "enabled": True,                 # Autonomous zero-touch sync enabled by default
+        "check_interval_seconds": 600,   # Check every 10 minutes (600s)
+        "idle_threshold_seconds": 30,    # Require 30s of 0 in-flight traffic before pulling
+        "auto_rebuild_ui": True,         # Rebuild frontend if ui/ changes
+        "last_checked": 0.0,
+        "last_update_attempt": 0.0,
+        "last_update_status": "idle",
+        "last_update_log": ""
+    }
+
+    def get_auto_update_config(self) -> Dict[str, Any]:
+        """
+        Retrieves current Zero-Touch Auto-Update configuration (defaults to Enabled).
+        Automatically creates and seeds database record for new and existing users.
+        """
+        cfg = self.get("system:auto_update_config")
+        if not cfg or not isinstance(cfg, dict):
+            # Seed default config into DB so it is permanently persisted for new & existing users
+            cfg = dict(self.DEFAULT_AUTO_UPDATE_CONFIG)
+            self.set("system:auto_update_config", cfg)
+            return cfg
+        merged = dict(self.DEFAULT_AUTO_UPDATE_CONFIG)
+        merged.update(cfg)
+        return merged
+
+    def set_auto_update_config(self, config: Dict[str, Any]) -> bool:
+        """Persists Auto-Update configuration and broadcasts mutation event."""
+        current = self.get_auto_update_config()
+        current.update(config)
+        success = self.set("system:auto_update_config", current)
+        event_bus.notify_mutation("AUTO_UPDATE_CONFIG", "system:auto_update_config", 0)
+        return success
+
+    def record_auto_update_event(
+        self,
+        status: str,
+        from_commit: str = "",
+        to_commit: str = "",
+        from_version: str = "",
+        to_version: str = "",
+        ui_rebuilt: bool = False,
+        log: str = ""
+    ) -> int:
+        """Records an entry in pg_auto_update_ledger."""
+        conn = self._get_connection()
+        now = time.time()
+        cursor = conn.execute("""
+            INSERT INTO pg_auto_update_ledger (
+                triggered_at, status, from_commit, to_commit,
+                from_version, to_version, ui_rebuilt, log, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            now, status, from_commit, to_commit,
+            from_version, to_version, 1 if ui_rebuilt else 0, log, now
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+    def get_auto_update_logs(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Retrieves recent auto-update history."""
+        conn = self._get_connection()
+        cursor = conn.execute("""
+            SELECT * FROM pg_auto_update_ledger
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (limit,))
+        rows = cursor.fetchall()
+        entries = []
+        for r in rows:
+            entries.append({
+                "id": r["id"],
+                "triggered_at": r["triggered_at"],
+                "status": r["status"],
+                "from_commit": r["from_commit"],
+                "to_commit": r["to_commit"],
+                "from_version": r["from_version"],
+                "to_version": r["to_version"],
+                "ui_rebuilt": bool(r["ui_rebuilt"]),
+                "log": r["log"],
+                "created_at": r["created_at"],
+                "formatted_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created_at"]))
+            })
+        return entries
 
     def get_cached_response(self, cache_key: str) -> Optional[Dict[str, Any]]:
         """
