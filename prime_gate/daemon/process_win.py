@@ -6,8 +6,8 @@ import subprocess
 from typing import Dict, Any, Optional
 from ..config import PID_FILE, PROJECT_ROOT, DEFAULT_API_PORT, DEFAULT_UI_PORT
 
-# Windows process creation flags to run hidden/detached
-DETACHED_FLAGS = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+# Windows process creation flags to run hidden in background without console window
+DETACHED_FLAGS = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
 
 def get_daemon_status() -> Dict[str, Any]:
     """Check whether daemon is actively running."""
@@ -67,13 +67,17 @@ def start_daemon(api_port: int = DEFAULT_API_PORT, ui_port: int = DEFAULT_UI_POR
         "--host", "127.0.0.1"
     ]
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PROJECT_ROOT) + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
+
     py_proc = subprocess.Popen(
         cmd_py,
         stdout=log_handle,
         stderr=log_handle,
         cwd=str(PROJECT_ROOT),
         creationflags=DETACHED_FLAGS,
-        close_fds=True
+        close_fds=False,
+        env=env
     )
 
     # Command to run Node.js Web UI server in background
@@ -90,7 +94,7 @@ def start_daemon(api_port: int = DEFAULT_API_PORT, ui_port: int = DEFAULT_UI_POR
         stderr=log_handle,
         cwd=str(PROJECT_ROOT),
         creationflags=DETACHED_FLAGS,
-        close_fds=True,
+        close_fds=False,
         shell=True
     )
 

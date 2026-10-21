@@ -758,9 +758,10 @@ class BinaryDatabaseEngine:
         from prime_gate.cache.semantic import SemanticVectorEngine
 
         conn = self._get_connection()
+        sig_val = (tools_signature or "").strip()
         cursor = conn.execute(
-            "SELECT * FROM pg_semantic_cache WHERE model = ? AND embedding IS NOT NULL",
-            (model,)
+            "SELECT * FROM pg_semantic_cache WHERE model = ? AND embedding IS NOT NULL AND tools_signature = ?",
+            (model, sig_val)
         )
         rows = cursor.fetchall()
         if not rows:

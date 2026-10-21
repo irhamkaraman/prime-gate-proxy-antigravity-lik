@@ -15,6 +15,7 @@ from .anthropic_converter import (
     stream_cached_anthropic_sse,
     estimate_anthropic_tokens
 )
+from .thought_cache import thought_sig_cache
 
 __all__ = [
     "clean_schema_for_antigravity",
@@ -32,5 +33,6 @@ __all__ = [
     "stream_anthropic_sse",
     "stream_cached_anthropic_sse",
     "estimate_anthropic_tokens",
+    "thought_sig_cache",
 ]
 

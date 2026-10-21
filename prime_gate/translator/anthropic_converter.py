@@ -18,6 +18,7 @@ from ..db.events import event_bus
 from .schema_cleaner import clean_schema_for_antigravity
 from .request_converter import resolve_model_info
 from .response_converter import extract_text_tool_calls, normalize_tool_call
+from .thought_cache import thought_sig_cache
 from ..quota.monitor import QuotaMonitor
 from ..client_pool import get_shared_client
 
@@ -237,14 +238,22 @@ def transform_anthropic_to_antigravity(
                     if not isinstance(raw_input, dict):
                         raw_input = {"input": raw_input}
 
-                    parts.append({
+                    part_entry = {
                         "functionCall": {
                             "name": fn_name,
                             "args": raw_input,
                             "id": call_id
-                        },
-                        "thoughtSignature": "skip_thought_signature_validator"
-                    })
+                        }
+                    }
+                    sig = (
+                        block.get("thoughtSignature")
+                        or block.get("thought_signature")
+                        or thought_sig_cache.get(call_id)
+                        or thought_sig_cache.get(fn_name)
+                    )
+                    if sig and sig != "skip_thought_signature_validator":
+                        part_entry["thoughtSignature"] = sig
+                    parts.append(part_entry)
 
                 elif b_type == "tool_result":
                     call_id = block.get("tool_use_id", "")
@@ -890,6 +899,12 @@ async def stream_anthropic_sse(
                     cand = candidates[0]
                     content_obj = cand.get("content", {})
                     parts = content_obj.get("parts", [])
+                    cand_sig = None
+                    for p in parts:
+                        s = p.get("thoughtSignature") or p.get("thought_signature")
+                        if s and s != "skip_thought_signature_validator":
+                            cand_sig = s
+                            break
 
                     for part in parts:
                         # Case A: Regular text output or text-based tool call interceptor
@@ -969,6 +984,10 @@ async def stream_anthropic_sse(
                             raw_args = fn.get("args", {})
                             fn_name, fn_args = normalize_tool_call(raw_name, raw_args, declared_tools)
                             call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
+                            sig = part.get("thoughtSignature") or part.get("thought_signature") or cand_sig
+                            if sig and sig != "skip_thought_signature_validator":
+                                thought_sig_cache.store(call_id, sig)
+                                thought_sig_cache.store(fn_name, sig)
                             for ev in emit_tool(fn_name, fn_args, call_id):
                                 yield ev
 

@@ -43,6 +43,8 @@ from .telemetry import telemetry
 from .compactor import ContextCompactor
 from .resilience import AccountFailoverPool
 from .sentinel.loop_guard import AgentLoopGuard
+from .translator.thought_cache import thought_sig_cache
+from .search import search_web
 from .client_pool import get_shared_client, close_shared_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -1337,6 +1339,10 @@ async def stream_antigravity_sse(
                             raw_name = fn_call.get("name", "")
                             raw_args = fn_call.get("args", {})
                             fn_name, args = normalize_tool_call(raw_name, raw_args, declared_tools)
+                            sig = part.get("thoughtSignature") or part.get("thought_signature")
+                            if sig and sig != "skip_thought_signature_validator":
+                                thought_sig_cache.store(call_id, sig)
+                                thought_sig_cache.store(fn_name, sig)
 
                             yield format_sse_chunk(
                                 completion_id, created, model,
@@ -1744,7 +1750,12 @@ async def chat_completions(request: Request):
         if cached_res:
             hit_type = 1
             similarity_score = 1.0
-        elif cache_cfg.get("semantic_enabled", True) and last_user_query:
+        elif (
+            cache_cfg.get("semantic_enabled", True) and
+            not has_tools and
+            len(body.get("messages", [])) <= 2 and
+            last_user_query
+        ):
             # Step B: Vector Cosine Similarity Search (FastEmbed ONNX)
             try:
                 from prime_gate.cache.semantic import SemanticVectorEngine
@@ -1980,6 +1991,10 @@ async def chat_completions(request: Request):
                                     raw_name = fn.get("name", "")
                                     raw_args = fn.get("args", {})
                                     fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
+                                    sig = p.get("thoughtSignature") or p.get("thought_signature")
+                                    if sig and sig != "skip_thought_signature_validator":
+                                        thought_sig_cache.store(call_id, sig)
+                                        thought_sig_cache.store(fn_name, sig)
                                     tool_calls.append({
                                         "id": call_id,
                                         "type": "function",
@@ -2253,7 +2268,12 @@ async def anthropic_messages(request: Request):
         if cached_res:
             hit_type = 1
             similarity_score = 1.0
-        elif cache_cfg.get("semantic_enabled", True) and last_user_query:
+        elif (
+            cache_cfg.get("semantic_enabled", True) and
+            not has_tools and
+            len(body.get("messages", [])) <= 2 and
+            last_user_query
+        ):
             try:
                 from prime_gate.cache.semantic import SemanticVectorEngine
                 q_vec = SemanticVectorEngine.embed_text(last_user_query)
@@ -2490,6 +2510,10 @@ async def anthropic_messages(request: Request):
                                 raw_name = fn.get("name", "tool")
                                 raw_args = fn.get("args", {})
                                 fn_name, fn_args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
+                                sig = p.get("thoughtSignature") or p.get("thought_signature")
+                                if sig and sig != "skip_thought_signature_validator":
+                                    thought_sig_cache.store(call_id, sig)
+                                    thought_sig_cache.store(fn_name, sig)
                                 content_blocks.append({
                                     "type": "tool_use",
                                     "id": call_id,
@@ -2617,6 +2641,28 @@ async def anthropic_messages(request: Request):
             AccountFailoverPool.release(account_email)
 
     raise HTTPException(status_code=502, detail="Failed to connect to upstream Antigravity accounts.")
+
+
+
+
+@app.post("/v1/search")
+@app.post("/search")
+async def handle_custom_search(request: Request):
+    """
+    Desktop search provider endpoint for Claude Code and OpenCode.
+    Accepts JSON {"q": "query"} or {"query": "query"} and returns {"results": [{"title", "url", "snippet"}]}.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    q = body.get("q") or body.get("query") or ""
+    if not q:
+        params = request.query_params
+        q = params.get("q") or params.get("query") or ""
+
+    results = await search_web(q, max_results=8)
+    return JSONResponse(content={"results": results})
 
 
 def main():

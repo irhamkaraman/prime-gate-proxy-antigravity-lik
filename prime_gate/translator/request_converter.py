@@ -4,6 +4,7 @@ from typing import Dict, Any, Tuple, List, Optional
 from ..config import SYSTEM_INSTRUCTION
 from ..db import db
 from .schema_cleaner import clean_schema_for_antigravity
+from .thought_cache import thought_sig_cache
 
 logger = logging.getLogger("prime_gate.translator.request_converter")
 
@@ -254,10 +255,18 @@ def transform_openai_to_antigravity(
                         if call_id:
                             fn_payload["id"] = call_id
 
-                        parts.append({
-                            "functionCall": fn_payload,
-                            "thoughtSignature": "skip_thought_signature_validator"
-                        })
+                        part_entry = {
+                            "functionCall": fn_payload
+                        }
+                        sig = (
+                            tc.get("thoughtSignature")
+                            or tc.get("thought_signature")
+                            or thought_sig_cache.get(call_id)
+                            or thought_sig_cache.get(fn_name)
+                        )
+                        if sig and sig != "skip_thought_signature_validator":
+                            part_entry["thoughtSignature"] = sig
+                        parts.append(part_entry)
             if parts:
                 contents.append({"role": "model", "parts": parts})
 
