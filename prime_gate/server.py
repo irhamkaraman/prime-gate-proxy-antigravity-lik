@@ -956,9 +956,17 @@ def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
     except Exception as e:
         logger.debug(f"GitHub API tag lookup deferred: {e}")
 
-    # 2. Check remote git commit via git ls-remote
+    # 2. Check remote git commit via git ls-remote (anonymous to avoid credential helper conflicts)
     try:
-        r_remote = subprocess.run(["git", "ls-remote", "origin", "refs/heads/main"], capture_output=True, text=True, cwd=repo_root, timeout=6)
+        git_env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        r_remote = subprocess.run(
+            ["git", "-c", "credential.helper=", "ls-remote", "origin", "refs/heads/main"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            timeout=8,
+            env=git_env
+        )
         if r_remote.returncode == 0 and r_remote.stdout.strip():
             remote_sha = r_remote.stdout.strip().split()[0][:7]
             if remote_sha:
@@ -1028,21 +1036,47 @@ async def api_system_git_pull():
     """
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     try:
+        git_env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        # 1. Execute anonymous pull first to bypass stale/unauthorized tokens in Git Credential Manager
         pull_proc = subprocess.run(
-            ["git", "pull", "origin", "main"],
+            ["git", "-c", "credential.helper=", "pull", "origin", "main"],
             capture_output=True,
             text=True,
             cwd=repo_root,
-            timeout=40
+            timeout=40,
+            env=git_env
         )
         stdout = pull_proc.stdout or ""
         stderr = pull_proc.stderr or ""
 
+        # 2. Fallback to standard git pull if anonymous pull was rejected (e.g. customized private fork)
+        if pull_proc.returncode != 0 and "403" not in (stderr + stdout) and "denied" not in (stderr + stdout).lower():
+            fallback_proc = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                capture_output=True,
+                text=True,
+                cwd=repo_root,
+                timeout=40,
+                env=git_env
+            )
+            if fallback_proc.returncode == 0:
+                pull_proc = fallback_proc
+                stdout = pull_proc.stdout or ""
+                stderr = pull_proc.stderr or ""
+
         if pull_proc.returncode != 0:
+            error_details = stderr or stdout
+            user_friendly_msg = "Git pull failed. Check for local modifications or network connection."
+            if "403" in error_details or "denied" in error_details.lower():
+                user_friendly_msg = (
+                    "Git pull failed due to GitHub 403 Forbidden. "
+                    "Your local Git Credential Manager sent an invalid or limited token. "
+                    "Please clear stored credentials in Windows Credential Manager or run 'git -c credential.helper= pull origin main'."
+                )
             return {
                 "success": False,
-                "error": stderr or stdout,
-                "message": "Git pull failed. Check for local modifications or network connection."
+                "error": error_details,
+                "message": user_friendly_msg
             }
 
         ui_rebuilt = False
