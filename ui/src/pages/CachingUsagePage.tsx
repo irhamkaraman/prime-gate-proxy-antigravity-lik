@@ -1284,7 +1284,7 @@ export const CachingUsagePage: React.FC<CachingUsagePageProps> = ({
               </span>
             </div>
             <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 2 }}>
-              Inspect all stored prompt patterns, cached responses, hit counters, and accumulated token savings.
+              Inspect all stored prompt patterns, cached responses, hit counters, and accumulated tokens served from cache.
             </p>
           </div>
 

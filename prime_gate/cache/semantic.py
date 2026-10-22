@@ -1,6 +1,8 @@
 """
 Semantic Vector Embedding and Similarity Engine for Prime Gate.
 Powered by FastEmbed (ONNX Runtime, CPU-only, ultra-lightweight memory footprint).
+Supports multilingual models (Indonesian, English, 50+ languages) and prefix-aware
+embedding for E5 family models ("query: " / "passage: ").
 """
 
 import logging
@@ -10,18 +12,44 @@ import numpy as np
 
 logger = logging.getLogger("prime_gate.cache.semantic")
 
+DEFAULT_MULTILINGUAL_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+FALLBACK_FAST_MODEL = "BAAI/bge-small-en-v1.5"
+
 
 class SemanticVectorEngine:
     """
     High-performance vector embedding and cosine similarity engine.
-    Uses FastEmbed's BAAI/bge-small-en-v1.5 model (384 dimensions, ~67MB, ONNX CPU).
-    Provides microsecond cosine similarity calculation using normalized vector dot products.
+    Defaults to FastEmbed's multilingual MiniLM (384 dimensions, ~117MB, ONNX CPU).
+    Supports E5 family models with automatic 'query: ' and 'passage: ' prefix handling.
     """
 
     _lock = threading.Lock()
     _model_instance = None
     _init_attempted = False
-    _model_name = "BAAI/bge-small-en-v1.5"
+    _model_name = DEFAULT_MULTILINGUAL_MODEL
+    _model_dimension: Optional[int] = None
+
+    @classmethod
+    def set_model_name(cls, name: str) -> bool:
+        """Configures the active embedding model name. Reinitializes if changed."""
+        clean_name = (name or "").strip()
+        if not clean_name:
+            clean_name = DEFAULT_MULTILINGUAL_MODEL
+
+        with cls._lock:
+            if clean_name != cls._model_name:
+                cls._model_name = clean_name
+                cls._model_instance = None
+                cls._init_attempted = False
+                cls._model_dimension = None
+                logger.info(f"Active embedding model changed to '{cls._model_name}'")
+                return True
+        return False
+
+    @classmethod
+    def get_model_name(cls) -> str:
+        """Returns the currently configured model name."""
+        return cls._model_name
 
     @classmethod
     def get_model(cls):
@@ -44,11 +72,19 @@ class SemanticVectorEngine:
                 return cls._model_instance
             except Exception as e:
                 logger.warning(
-                    f"FastEmbed model initialization unavailable ({e}). "
-                    f"Semantic cache will gracefully fallback to Exact Hash matching."
+                    f"FastEmbed model '{cls._model_name}' unavailable ({e}). "
+                    f"Attempting fallback to '{FALLBACK_FAST_MODEL}'..."
                 )
-                cls._model_instance = None
-                return None
+                try:
+                    from fastembed import TextEmbedding
+                    cls._model_instance = TextEmbedding(model_name=FALLBACK_FAST_MODEL)
+                    cls._model_name = FALLBACK_FAST_MODEL
+                    logger.info(f"Loaded fallback model '{FALLBACK_FAST_MODEL}'.")
+                    return cls._model_instance
+                except Exception as fallback_err:
+                    logger.error(f"Fallback FastEmbed model also failed: {fallback_err}")
+                    cls._model_instance = None
+                    return None
 
     @classmethod
     def is_available(cls) -> bool:
@@ -56,33 +92,69 @@ class SemanticVectorEngine:
         return cls.get_model() is not None
 
     @classmethod
-    def embed_text(cls, text: str) -> Optional[np.ndarray]:
+    def get_embedding_dimension(cls) -> int:
+        """Returns the vector dimension for the active model (default: 384)."""
+        if cls._model_dimension is not None:
+            return cls._model_dimension
+
+        # Perform a dummy embedding of 1 word to detect dimension
+        sample = cls.embed_text("probe", is_query=False)
+        if sample is not None:
+            cls._model_dimension = len(sample)
+            return cls._model_dimension
+        return 384
+
+    @classmethod
+    def apply_e5_prefix(cls, text: str, is_query: bool = False) -> str:
+        """Applies E5-family prefixes ('query: ' or 'passage: ') if model requires it."""
+        model_lower = cls._model_name.lower()
+        if "e5" in model_lower:
+            prefix = "query: " if is_query else "passage: "
+            if not text.startswith(prefix):
+                return f"{prefix}{text}"
+        return text
+
+    @classmethod
+    def embed_text(cls, text: str, is_query: bool = False) -> Optional[np.ndarray]:
         """
-        Generates a 384-dimensional normalized float32 vector for the input text.
-        Returns None if text is empty or model is unavailable.
+        Generates a unit-normalized float32 vector for the input text.
+        Applies E5 prefixes automatically if an E5 family model is configured.
         """
         clean_text = text.strip()
         if not clean_text:
             return None
+
+        clean_text = cls.apply_e5_prefix(clean_text, is_query=is_query)
 
         model = cls.get_model()
         if model is None:
             return None
 
         try:
-            # fastembed embed returns a generator of numpy arrays
             embeddings = list(model.embed([clean_text]))
             if not embeddings:
                 return None
             vec = np.array(embeddings[0], dtype=np.float32)
-            # Normalize vector for instant cosine similarity: cos(u, v) = u_norm . v_norm
+            # Normalize vector for instant cosine dot product
             norm = np.linalg.norm(vec)
             if norm > 0:
                 vec /= norm
+            if cls._model_dimension is None:
+                cls._model_dimension = len(vec)
             return vec
         except Exception as e:
-            logger.error(f"Semantic embedding generation failed: {e}")
+            logger.error(f"Semantic embedding generation failed for '{clean_text[:40]}...': {e}")
             return None
+
+    @classmethod
+    def embed_query(cls, text: str) -> Optional[np.ndarray]:
+        """Helper to embed incoming search query (applies 'query: ' prefix for E5)."""
+        return cls.embed_text(text, is_query=True)
+
+    @classmethod
+    def embed_passage(cls, text: str) -> Optional[np.ndarray]:
+        """Helper to embed cached document / prompt (applies 'passage: ' prefix for E5)."""
+        return cls.embed_text(text, is_query=False)
 
     @staticmethod
     def vector_to_blob(vec: np.ndarray) -> bytes:
@@ -120,7 +192,7 @@ class SemanticVectorEngine:
         Finds the candidate with the highest cosine similarity >= threshold.
 
         Args:
-            query_vec: Unit-normalized query vector (384-dim).
+            query_vec: Unit-normalized query vector.
             candidate_entries: List of dicts representing cached records with 'embedding'.
             threshold: Minimum cosine similarity score (0.0 to 1.0) to qualify as a Hit.
 

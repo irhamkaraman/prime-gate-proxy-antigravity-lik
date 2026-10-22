@@ -19,6 +19,11 @@ class AccountFailoverPool:
     def mark_rate_limited(cls, email: str, cooldown_seconds: int = 6):
         """Places an account in cooldown after an upstream 429 response."""
         cls._cooldowns[email] = time.time() + cooldown_seconds
+        try:
+            from .metrics import metrics
+            metrics.record_failover()
+        except Exception:
+            pass
         logger.warning(
             f"[FAILOVER] Account {email} placed in cooldown for {cooldown_seconds}s due to upstream rate limit."
         )
@@ -51,6 +56,11 @@ class AccountFailoverPool:
         return cls._in_flight.get(email, 0)
 
     @classmethod
+    def get_in_flight_count(cls, email: str) -> int:
+        """Alias for get_in_flight."""
+        return cls.get_in_flight(email)
+
+    @classmethod
     def get_total_in_flight(cls) -> int:
         """Returns the total number of in-flight requests across all accounts."""
         return sum(cls._in_flight.values())
@@ -70,7 +80,8 @@ class AccountFailoverPool:
         cls,
         current_email: str,
         accounts: List[Dict[str, Any]],
-        quota_cache: Optional[Dict[str, Any]] = None
+        quota_cache: Optional[Dict[str, Any]] = None,
+        allow_cooling_fallback: bool = True
     ) -> Optional[Dict[str, Any]]:
         """
         Finds the best available candidate account excluding the current failing account.
@@ -81,6 +92,8 @@ class AccountFailoverPool:
             if acc.get("email") != current_email and cls.is_available(acc)
         ]
         if not candidates:
+            if not allow_cooling_fallback:
+                return None
             # Fallback: if all accounts are cooled down, pick the one with earliest cooldown expiry
             other_accs = [acc for acc in accounts if acc.get("email") != current_email]
             if other_accs:

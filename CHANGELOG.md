@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.4] - 2026-10-23
+
+### 🛡️ Client Gateway API Key Policy Enforcement, Dynamic Whitelisting & Cache Scope Isolation (Fase 5.1)
+- **Granular Policy Enforcement:** Penegakan kebijakan akses per Client Gateway API Key (`pg-live-...`): laju request per menit (RPM), kuota konsumsi token LLM per hari (TPD), budget kredit seumur hidup (`quota_credits`), daftar model yang diizinkan (*allowed models whitelist*), dan isolasi cache semantic (*cache scope*).
+- **Respons Error 429 Protokol-Spesifik dengan `Retry-After`:** Pelanggaran batas RPM maupun TPD dikembalikan sebagai HTTP 429 Too Many Requests dengan header `Retry-After: <detik>` dan body JSON yang sesuai format protokol klien (OpenAI vs. Anthropic).
+- **Proteksi Whitelist Model (HTTP 403):** Permintaan model di luar daftar yang diizinkan ditolak seketika dengan HTTP 403 Forbidden (`model_not_allowed` untuk OpenAI, `permission_error` untuk Anthropic).
+- **Isolasi Cache Semantic & Exact (Fase 3A):** Dukungan `cache_scope="key"` yang mempartisi namespace cache per ID kunci klien (`key_<id>:<project>`), mencegah *cache poisoning* dan kebocoran konteks antar-developer/agen, serta opsi `cache_scope="disabled"` untuk melewati cache sepenuhnya.
+- **Buku Besar Penggunaan Token Klien (`pg_api_key_usage`):** Tabel database persisten dengan indeks waktu untuk mencatat metrik konsumsi token prompt, completion, total tokens, dan model per transaksi per kunci.
+- **Pembaruan CLI Mandiri:** Perintah `prime-gate keys create` dengan opsi `--rpm`, `--tpd`, `--quota`, `--models`, `--cache-scope`, `prime-gate keys list` yang menampilkan kolom kebijakan lengkap (aman dari encoding issue Windows cp1252), serta `prime-gate keys revoke`.
+- **Antarmuka Web Dashboard Dinamis (`/keys`):** Modal pembuatan Client API Key dengan input kebijakan lengkap, selector model dinamis dari database (bebas hardcoding), dan indikator badge kebijakan pada tabel daftar kunci.
+- **Pembersihan Terminologi:** Menghapus label statis warisan "Auth API Key" pada fallback HTML dashboard dan menegakkan pemisahan mutlak antara Client API Key (downstream) dan Token Auth Login Akun Google (upstream).
+
+---
+
 ## [1.2.3] - 2026-10-22
 
 ### 🚀 Autonomous Zero-Touch Auto-Update, Anti-ISP Web Search MCP, Git Stale Token Bypass & Gemini 3 Thought Signature
@@ -29,6 +43,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### 4. Cryptographic Thought Signature Cache for Gemini 3
 - **Upstream Reasoning Integrity:** Thread-safe cache storing cryptographic `thoughtSignature` tokens returned by Google Antigravity Gemini 3 reasoning models across multi-turn tool calling turns, resolving upstream HTTP 400/502 errors.
+
+#### 5. Dokumentasi Jujur, Kepatuhan & Transparansi Risiko (Fase 1)
+- **Eliminasi Klaim Absolut:** Menghapus seluruh klaim pemasaran absolut seperti "100% Anti-Banned" dan "Zero Token Waste" dari README, panduan pengguna, dan Web UI.
+- **Transparansi Risiko & Batasan:** Menambahkan bagian eksplisit *Disclaimer & Risiko* (peringatan agar tidak memakai akun primer), *Batasan yang Diketahui (Known Limitations)*, serta *Model Ancaman (Threat Model)*.
+- **Klarifikasi Simulator Nilai Ekonomi:** Mengganti label "Cost Savings" menjadi "Estimasi Nilai Setara Tarif Komersial", menegaskan bahwa pengguna memakai kuota langganan akun Google.
+- **Akurasi Teknis Arsitektur Data:** Meluruskan deskripsi teknis dari "Compiled C Binary" menjadi SQLite WAL dengan binary record obfuscation & pengecekan integritas CRC32.
+- **Pedoman Kontribusi Komunitas:** Menambahkan file panduan kontribusi resmi `CONTRIBUTING.md`.
+
+#### 6. Stabilitas, Kualitas & Observabilitas Produksi (Fase 4)
+- **Rangkaian Uji Konformansi Protokol:** Direktori `tests/conformance/` dengan fixture rekaman interaksi agent nyata (Claude Code, Cline, Cursor, Aider), mock upstream Antigravity, pengujian sekuens SSE 7-event Anthropic, akumulasi JSON delta, thinking blocks, OpenAI SSE chunking/reasoning/tools, dan `count_tokens`.
+- **Manajemen Kunci API UI Terintegrasi (`/keys`):** Halaman dedikasi manajemen kunci API proxy dengan generator token bertanda `pg-live-...`, tab konfigurasi 1-klik untuk Claude Code, OpenCode, Cline, Cursor, Aider, cURL, serta sinkronisasi otomatis ke Prompt Sandbox (`/sandbox`) untuk mengeliminasi error `401 Unauthorized`.
+- **Pengujian Resiliensi & Integrasi:** Pengujian menyeluruh untuk failover 429/503 sebelum token pertama, pemulihan cooldown akun, penanganan bersih ketika seluruh akun habis kuota, cache multi-turn `thoughtSignature` Gemini 3, migrasi skema database SQLite WAL idempoten, pembersihan slot in-flight saat koneksi klien terputus, dan uji konkurensi.
+- **Observabilitas Tingkat Produksi:** Endpoint Prometheus `/metrics` dengan metrik standar (`primegate_requests_total`, `primegate_request_duration_seconds`, `primegate_time_to_first_token_seconds`, `primegate_tokens_total`, `primegate_cache_hits_total`, `primegate_cache_misses_total`, `primegate_active_accounts`, `primegate_account_failovers_total`, `primegate_compactor_tokens_saved_total`).
+- **Health & Readiness Probes:** Endpoint `/health` dengan sub-blok `liveness` dan `readiness`, serta endpoint mandiri `/health/liveness` dan `/health/readiness` untuk probe Kubernetes/Docker.
+- **Pelacakan Terdistribusi (`X-Request-ID`):** Middleware ASGI pelacakan request id end-to-end yang otomatis menghasilkan atau mempropagasi `X-Request-ID` pada header HTTP dan log database.
+- **Structured JSON Logging:** Opsi logging JSON (`LOG_FORMAT=json`) dengan redaksi kredensial otomatis via engine `Redactor`.
+- **Rangkaian Benchmark Reproduksibel:** Skrip `benchmarks/benchmark_proxy.py` dan dokumentasi `benchmarks/METHODOLOGY.md` untuk mengukur latensi (p50/p95/p99), TTFT, throughput (req/s), dan efisiensi cache/kompaktor.
+- **Panduan Pengujian & Observabilitas:** Dokumentasi teknis komprehensif di `docs/testing.md` dan `docs/observability.md`.
+- **CI Pipeline Multi-OS & Multi-Python:** Otomatisasi GitHub Actions (`.github/workflows/ci.yml`) pada Ubuntu, Windows, macOS dengan Python 3.10, 3.11, 3.12, pengujian build frontend Vite/React, dan linter.
+
+---
+
+#### 6. Penguatan Keamanan Sistem Terpadu (Fase 2)
+- **Enkripsi Kredensial At-Rest (AES-256-GCM):** Mengganti masking XOR dengan enkripsi standar AES-256-GCM (library `cryptography`), nonce 12-byte unik per record, AAD binding dengan key record, dan integrasi OS Keyring (Windows DPAPI, macOS Keychain, Linux SecretService) dengan fallback terderivasi Scrypt KDF. CRC32 dipertahankan sebagai checksum integritas bit-rot.
+- **Autentikasi Mandatori & API Key Management:** Wajib API key (`Authorization: Bearer` atau `x-api-key`) untuk semua endpoint proxy `/v1/*`. Kunci disimpan hanya dalam bentuk hash salted SHA-256. CLI `auth create-key`, `list-keys`, `revoke-key` untuk manajemen kunci. Non-loopback bind guard menolak start jika host diubah ke IP eksternal tanpa auth.
+- **Perlindungan Localhost & Web Dashboard:** Host header validation untuk mitigasi DNS Rebinding, strict CORS & Origin validation pada seluruh mutasi state, perlindungan CSRF via cookie double-submit (`pg_csrf` & `x-csrf-token`), serta security headers (`Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`). WebSocket `/sentinel` kini memvalidasi sesi HttpOnly dan Origin.
+- **Auto-Update yang Aman:** Transisi ke tagged GitHub Releases API dengan validasi checksum SHA-256 sebelum pembaruan. Default diubah menjadi "notify only" (`auto_apply: False`), dengan safety gate (idle time & 0 in-flight requests) dan rollback otomatis jika health-check gagal.
+- **Redaksi Log Terpusat:** Modul pembersih regex terpusat (`prime_gate.logging.redactor`) yang menyaring OAuth token, refresh token, API key, header Authorization, cookie sesi, dan payload sensitif dari seluruh stream logging dan respons error.
+- **Migrasi Otomatis & Idempoten V1 ke V2:** Engine database otomatis memigrasikan record V1 lama ke V2 terenkripsi dengan backup SQLite native di `data/backups/`, serta menyediakan perintah CLI `db rotate-key` dan `db rollback`.
+
+---
+
+#### 7. Semantic Cache Berbasis Konteks & Multilingual (Fase 3A)
+- **Model Embedding Multibahasa Terpadu:** Default ke model multibahasa berkinerja tinggi `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (mendukung `intfloat/multilingual-e5-small`) via FastEmbed ONNX Runtime. Menjamin skor kemiripan $\ge 0.93$ (teruji empiris 0.978) untuk parafrase pertanyaan bahasa Indonesia.
+- **Dukungan Asimetris Keluarga E5:** Otomatis menerapkan prefix `"query: "` untuk pencarian vektor dan `"passage: "` saat persistensi cache jika menggunakan model keluarga E5.
+- **Kunci Cache Berbasis Konteks (Anti-Hallucination Invariant):** Cache key turunan `(scope, context_hash, last_user_query, query_hash, tools_sig, has_tools)` di mana `context_hash` mengunci instruksi sistem, riwayat percakapan sebelumnya, parameter generasi (`model`, `temperature`), deklarasi tools, serta isi file kode/tool result yang direferensikan. Dua prompt identik dengan konten file berbeda dipastikan **TIDAK PERNAH HIT** (`MISS`).
+- **Isolasi Scope & Multi-Tenant:** Partisi cache terisolasi per prefix API key (`key_<prefix>`) dan per session/project identifier (`project_id`). Klien berbeda tidak akan mengalami kebocoran data cache.
+- **Lifecycle TTL & LRU Capacity Eviction:** Manajemen masa aktif cache dengan TTL terkonfigurasi (default 24 jam / 86400s), batas kapasitas entries maksimum (default 5000), serta eviksi otomatis berbasis Least-Recently-Used (LRU).
+- **Kebijakan Default Coding Agent yang Ketat:** Request agent/tool-calling dibatasi pada exact-match secara default (semantic opt-in dengan threshold 0.96). Respons yang mengandung `tool_use`/`tool_calls`, pesan error, atau chunk stream terputus secara otomatis dilewati dari cache.
+- **Header Audit Standar Industri:** Menyediakan transparansi komputasi melalui response headers: `X-Cache: HIT|MISS`, `X-Cache-Type: EXACT|SEMANTIC|NONE`, `X-Cache-Similarity: <score>`, dan `X-Cache-Key-Scope: <scope>`.
+- **Verifikasi Latar Belakang & Estimasi False-Hit Rate:** Tabel audit `pg_cache_verifications` dan worker sampling asinkron untuk mencatat perbandingan verifikasi latar belakang dan menghitung false-hit rate pada dashboard `/caching`.
+- **Dashboard UI Caching Terintegrasi:** Menampilkan rincian badge Scope dan Context Hash pada tabel cache, modal detail inspeksi konteks lengkap, visualisasi False-Hit Rate KPI card, serta selector model embedding dinamis.
+
+---
+
+#### 8. Smart Agent Context Compactor Cerdas (Fase 3B)
+- **Konfigurasi Berjenjang (Hierarchical Config):** Mendukung resolusi konfigurasi compactor fleksibel per-klien (berdasarkan `User-Agent` seperti `cline`, `cursor`, `opencode`, `claude-code`) dan per-model target (model dengan context window berbeda dapat memiliki window pangkas berbeda).
+- **Invarian Proteksi Error (Error Log Preservation):** Output eksekusi tool yang memuat kegagalan (exit code non-zero, tracebacks, compiler error, exception, atau Anthropic `is_error=True`) **100% diproteksi dari pemangkasan** agar coding agent tetap memahami akar masalah kegagalan build/test.
+- **Proteksi Re-Referensi Downstream (Downstream Reference Immunity):** Tool execution yang diacu ulang atau dibahas oleh prompt pengguna maupun respons model pada giliran-giliran berikutnya dipertahankan secara utuh untuk menjaga kesinambungan nalar kode.
+- **Integritas Prompt Sistem & Anchor Turn:** Turn awal (`idx <= 1`) dan pesan sistem (`role == "system"`) dijamin tidak tersentuh demi efisiensi prefix caching upstream Google Antigravity.
+- **Penanda Pemangkasan Informatif:** Pemangkasan menyisakan penanda terstruktur `[output dipangkas: ~N token | Historical tool execution output pruned: X chars, Y lines]` agar model mengetahui adanya teks historis yang diringkas.
+- **Mode Non-Invasif Dry-Run:** Menyediakan opsi `dry_run=True` di mana payload request dijamin 100% tidak diubah sama sekali, namun kalkulasi token yang dapat dihemat tetap dihitung dan dicatat pada log serta database telemetri.
+- **Ledger Telemetri Akumulatif:** Fungsi penyimpanan token dihemat `record_compactor_tokens_saved` di SQLite database untuk pemantauan penghematan token kumulatif pada Web UI.
 
 ---
 

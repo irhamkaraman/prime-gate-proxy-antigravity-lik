@@ -14,6 +14,7 @@ import { AccountManagerPage } from './pages/AccountManagerPage';
 import { PromptSandboxPage } from './pages/PromptSandboxPage';
 import { SentinelPage } from './pages/SentinelPage';
 import { DocumentationPage } from './pages/DocumentationPage';
+import { ApiKeysPage } from './pages/ApiKeysPage';
 
 import { Account, TelemetryMetrics, TokenVolumePoint, TimeRange } from './types';
 import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download } from 'lucide-react';
@@ -52,12 +53,65 @@ const MainLayout: React.FC = () => {
   const [lastLedgerUpdate, setLastLedgerUpdate] = useState<number>(Date.now());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [loginKey, setLoginKey] = useState<string>('');
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     timeRangeRef.current = timeRange;
   }, [timeRange]);
+  // Check dashboard session authentication on mount
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const res = await fetch('/api/auth/session/status');
+        if (res.ok) {
+          const data = await res.json();
+          setIsAuthenticated(!!data.authenticated);
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch {
+        setIsAuthenticated(false);
+      }
+    };
+    checkAuthStatus();
+
+    const onAuthRequired = () => setIsAuthenticated(false);
+    window.addEventListener('pg_auth_required', onAuthRequired);
+    return () => window.removeEventListener('pg_auth_required', onAuthRequired);
+  }, []);
+
+  const handleLoginSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!loginKey.trim()) return;
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: loginKey.trim() })
+      });
+      if (res.ok) {
+        setIsAuthenticated(true);
+        setLoginKey('');
+        showToast('Login berhasil! Sesi dashboard aktif.', 'success');
+        fetchAccounts();
+        fetchMetrics(timeRangeRef.current);
+      } else {
+        const err = await res.json();
+        const msg = err.detail?.error?.message || err.detail || 'API Key tidak valid';
+        showToast(msg, 'error');
+      }
+    } catch {
+      showToast('Gagal menghubungi gateway server', 'error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
 
   // Fetch accounts list and real-time active account quota
   const fetchAccounts = useCallback(async () => {
@@ -427,6 +481,99 @@ const MainLayout: React.FC = () => {
     }, 2000);
   };
 
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0a0d14', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{
+          width: '100%',
+          maxWidth: 440,
+          padding: 32,
+          borderRadius: 20,
+          background: 'rgba(15, 23, 42, 0.85)',
+          border: '1px solid rgba(56, 189, 248, 0.25)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(56, 189, 248, 0.1)',
+          backdropFilter: 'blur(20px)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+            <div style={{
+              width: 56,
+              height: 56,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 24px rgba(14, 165, 233, 0.4)'
+            }}>
+              <KeyRound size={28} color="#ffffff" />
+            </div>
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, textAlign: 'center', color: '#f8fafc', marginBottom: 8 }}>
+            Prime Gate Gateway
+          </h2>
+          <p style={{ fontSize: 13, textAlign: 'center', color: '#94a3b8', marginBottom: 24, lineHeight: 1.5 }}>
+            Dashboard ini dilindungi enkripsi AES-256-GCM. Masukkan API Key Anda untuk membuka sesi aman.
+          </p>
+          <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                API Key (Bearer Secret)
+              </label>
+              <input
+                type="password"
+                value={loginKey}
+                onChange={e => setLoginKey(e.target.value)}
+                placeholder="pg-live-..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 12,
+                  background: 'rgba(2, 6, 23, 0.7)',
+                  border: '1px solid rgba(148, 163, 184, 0.2)',
+                  color: '#ffffff',
+                  fontSize: 14,
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isLoggingIn || !loginKey.trim()}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
+                color: '#ffffff',
+                fontWeight: 600,
+                fontSize: 14,
+                border: 'none',
+                cursor: (isLoggingIn || !loginKey.trim()) ? 'not-allowed' : 'pointer',
+                opacity: (isLoggingIn || !loginKey.trim()) ? 0.6 : 1,
+                boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)',
+                transition: 'all 0.2s'
+              }}
+            >
+              {isLoggingIn ? 'Memverifikasi...' : 'Masuk ke Dashboard'}
+            </button>
+          </form>
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid rgba(148, 163, 184, 0.1)', textAlign: 'center' }}>
+            <span style={{ fontSize: 12, color: '#64748b' }}>
+              Belum punya key? Buat via CLI:{' '}
+              <code style={{ color: '#38bdf8', background: 'rgba(15, 23, 42, 0.8)', padding: '2px 6px', borderRadius: 4 }}>
+                prime-gate auth create-key
+              </code>
+            </span>
+          </div>
+        </div>
+        <ToastContainer />
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Left Sidebar */}
@@ -501,6 +648,8 @@ const MainLayout: React.FC = () => {
           )}
 
           {currentRoute === 'sandbox' && <PromptSandboxPage />}
+
+          {currentRoute === 'keys' && <ApiKeysPage />}
 
           {currentRoute === 'sentinel' && <SentinelPage />}
 

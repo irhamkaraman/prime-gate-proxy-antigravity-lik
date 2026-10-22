@@ -1,5 +1,9 @@
 # 📚 Prime Gate Antigravity - Complete User & Integration Guide
 
+> [!WARNING]
+> **Disclaimer & Peringatan Risiko:**
+> Proyek ini adalah implementasi open-source independen yang tidak berafiliasi dengan Google LLC atau Anthropic PBC. Penggunaan proxy ini di luar ekstensi resmi dapat berpotensi melanggar Ketentuan Layanan Google Cloud. Gunakan sepenuhnya dengan risiko Anda sendiri, dan **JANGAN PERNAH** menggunakan akun Google utama/pekerjaan Anda. Gunakan akun sekunder untuk pengujian.
+
 Welcome to the definitive user manual and integration guide for **Prime Gate Antigravity** (`prime-gate-proxy-antigravity-lik`).
 
 This guide details how to install, authenticate, run, and connect Prime Gate with standard AI coding assistants and OpenAI-compatible tools.
@@ -22,7 +26,7 @@ This guide details how to install, authenticate, run, and connect Prime Gate wit
    - [Node.js / TypeScript SDK](#nodejs--typescript-sdk)
    - [cURL / Direct HTTP](#curl--direct-http)
 7. [Real-Time Reasoning & Thinking Mode](#7-real-time-reasoning--thinking-mode)
-8. [Compiled Binary Database & Sentinel Watchdog](#8-compiled-binary-database--sentinel-watchdog)
+8. [SQLite WAL Database & Sentinel Watchdog](#8-sqlite-wal-database--sentinel-watchdog)
 9. [Token Telemetry & Metrics](#9-token-telemetry--metrics)
 10. [Enterprise Engine & Resilience (v1.2.0)](#10-enterprise-engine--resilience-v120)
 11. [CLI Command Reference](#11-cli-command-reference)
@@ -49,9 +53,9 @@ Prime Gate operates as a local proxy gateway that bridges Google's internal Clou
         │                        │
         ▼ (Binary Masked BLOBs)  ▼ (Internal SSE Stream)
 ┌──────────────────────┐ ┌──────────────────────────────────────┐
-│ Compiled Binary DB   │ │ Google Antigravity Cloud             │
+│ SQLite WAL DB        │ │ Google Antigravity Cloud             │
 │ (data/prime_gate.pgdb│ │ (Claude Sonnet 4.6, Opus 4.6,        │
-│  CRC32 Sealed Records│ │  Gemini 3.8 Flash, GPT-OSS 120B)     │
+│  CRC32 Checksummed)  │ │  Gemini 3.8 Flash, GPT-OSS 120B)     │
 └──────────────────────┘ └──────────────────────────────────────┘
         │ (WebSocket Event Bus)
         ▼
@@ -366,19 +370,19 @@ Prime Gate v1.2.0 introduces four enterprise-grade runtime mechanisms designed f
 ### 1. Smart Agent Context Compactor
 - **Problem:** AI coding agents generate multi-turn dialogues with verbose command outputs (`cat`, `read_file`, `git log`), inflating context from 20k to over 100k tokens and causing latency spikes or context truncation.
 - **Solution:** `ContextCompactor` slides over conversation history and prunes verbose tool output blocks older than the active window (default 3 turns; max 40 lines). The first 20 and last 20 lines are preserved, with middle lines compressed.
-- **Safety Guarantee:** User messages, assistant text, system prompts, and recent turns remain strictly 100% unaltered.
+- **Safety Guarantee:** User messages, assistant text, system prompts, and recent turns remain strictly preserved unaltered.
 
 ### 2. Transparent Mid-Flight Account Failover
 - **Problem:** When an account runs out of quota mid-session, upstream Google Antigravity returns HTTP 429 (`RESOURCE_EXHAUSTED`), breaking the client IDE stream.
 - **Solution:** `AccountFailoverPool` intercepts 429/503 errors before the first SSE chunk is yielded to the client. It marks the failing account in cooldown (120–300s) and transparently connects to the next healthy account.
-- **Client Experience:** Zero client crashes, zero dropped streams, zero manual account switching.
+- **Client Experience:** Seamless session continuity, avoiding dropped streams or manual account switching.
 
 ### 3. AI Agent Runaway Loop Sentinel
 - **Problem:** Autonomous agents sometimes repeat failing tool calls indefinitely with identical arguments, draining quota.
 - **Solution:** `AgentLoopGuard` hashes tool call signatures. If $\ge 3$ consecutive identical tool calls are detected, Sentinel injects a surgical system intervention advising the model to stop repeating and re-evaluate.
 
-### 4. Economic Value Delivered Simulator
-- **Live Commercial Cost Equivalents:** Compares token volume against commercial GPT-4o / Claude 3.5 Sonnet API rates (\$2.50 / \$10.00 per 1M tokens) with USD and IDR live currency toggling on the dashboard.
+### 4. Estimasi Nilai Setara Tarif Komersial (Commercial API Tariff Estimator)
+- **Live Commercial Cost Equivalents:** Menghitung estimasi nilai komparatif terhadap tarif resmi API OpenAI/Anthropic (GPT-4o / Claude 3.5 Sonnet benchmark) dalam mata uang USD dan IDR. Pengguna memanfaatkan kuota langganan akun Google aktif.
 
 ---
 
@@ -400,7 +404,7 @@ Prime Gate v1.2.0 introduces four enterprise-grade runtime mechanisms designed f
 | `prime-gate daemon status` | None | Checks background PID, memory, and port health. |
 | `prime-gate daemon stop` | None | Terminates active background proxy processes. |
 | `prime-gate db status` | None | Shows binary DB file size and record counts. |
-| `prime-gate db check` | None | Performs full CRC32 cryptographic audit. |
+| `prime-gate db check` | None | Performs full CRC32 record integrity check against disk corruption. |
 | `prime-gate start` | `--port`, `--host` | Runs FastAPI server in foreground terminal. |
 | `prime-gate ui` | `--port`, `--api-port` | Starts Node.js Web UI server in foreground. |
 

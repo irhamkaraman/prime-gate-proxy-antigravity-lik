@@ -169,7 +169,7 @@ export const SentinelPage: React.FC = () => {
               <span className="badge badge-emerald">Healthy & Verified</span>
             </div>
             <p style={{ fontSize: 13, color: '#a8a29e', marginTop: 4 }}>
-              Compiled binary SQLite database with WAL mode and CRC32 header corruption sentinel (45s audit loop)
+              SQLite WAL mode database with binary record obfuscation & CRC32 integrity checking (45s audit loop)
             </p>
           </div>
         </div>

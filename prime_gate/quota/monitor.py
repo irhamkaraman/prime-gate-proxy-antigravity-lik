@@ -12,7 +12,7 @@ logger = logging.getLogger("prime_gate.quota")
 FRIENDLY_NAMES = {
     "claude-sonnet-4-6": "Claude Sonnet 4.6 (Thinking)",
     "claude-opus-4-6-thinking": "Claude Opus 4.6 (Thinking)",
-    "gemini-3.8-flash": "Gemini 3.8 Flash (Recommended)",
+    "gemini-3.8-flash": "Gemini 3.8 Flash",
     "gemini-3.8-flash-high": "Gemini 3.8 Flash High (Extended Thinking)",
     "gemini-3.8-flash-medium": "Gemini 3.8 Flash Medium",
     "gemini-3.8-flash-low": "Gemini 3.8 Flash Low",
@@ -34,6 +34,7 @@ def build_model_spec(mid: str, raw_m: Optional[Dict[str, Any]] = None, is_recomm
     """Builds a comprehensive, production-grade model specification dictionary from upstream data."""
     raw_m = raw_m or {}
     disp_name = raw_m.get("displayName") or raw_m.get("name") or FRIENDLY_NAMES.get(mid) or mid.replace("-", " ").title()
+    disp_name = disp_name.replace(" (Recommended)", "").replace("(Recommended)", "").strip()
 
     # Provider detection
     model_prov = raw_m.get("modelProvider", "")
@@ -146,8 +147,9 @@ class QuotaMonitor:
     def get_available_models(cls, account: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Dynamically returns models catalog.
-        Prioritizes live models stored in binary database from the user's Google Antigravity account,
-        falling back to static defaults only if no account is configured.
+        Prioritizes live models stored in database from the user's active Google Antigravity account,
+        falling back to latest cached models in the database, then any other account's cached models,
+        and finally bootstrap catalog if no database models exist yet.
         """
         email = account.get("email") if account else None
         if email:
@@ -158,6 +160,12 @@ class QuotaMonitor:
         latest_models = db.get("models:latest")
         if latest_models and latest_models.get("models"):
             return [build_model_spec(m["id"], m) for m in latest_models["models"]]
+
+        for k in db.list_keys("models:"):
+            if k != "models:latest":
+                cached = db.get(k)
+                if cached and cached.get("models"):
+                    return [build_model_spec(m["id"], m) for m in cached["models"]]
 
         if not account:
             return [build_model_spec(m["id"], m) for m in MODELS_CATALOG["google-ai-pro-trial"]]
@@ -219,8 +227,10 @@ class QuotaMonitor:
                                 base_id = mid[:-len(suffix)]
                                 if base_id not in candidate_ids and base_id not in seen:
                                     source_m = models_dict.get(mid, {})
-                                    alias_spec = build_model_spec(base_id, source_m, is_recommended=True)
-                                    alias_spec["name"] = f"{alias_spec.get('name', base_id)} (Recommended)"
+                                    alias_spec = build_model_spec(base_id, source_m, is_recommended=(base_id in recommended_ids or mid in recommended_ids))
+                                    clean_name = alias_spec.get("name", base_id)
+                                    clean_name = clean_name.replace(" (High)", "").replace(" High", "").replace(" (Medium)", "").replace(" Medium", "").replace(" (Low)", "").replace(" Low", "").replace(" (Recommended)", "").strip()
+                                    alias_spec["name"] = clean_name
                                     clean_models.append(alias_spec)
                                     seen.add(base_id)
 
@@ -249,7 +259,7 @@ class QuotaMonitor:
         # Check binary database fallback before static catalog
         db_cached = db.get(f"models:{email}") or db.get("models:latest")
         if db_cached and db_cached.get("models"):
-            models_list = db_cached["models"]
+            models_list = [build_model_spec(m["id"], m) for m in db_cached["models"]]
             cls._models_cache[email] = (models_list, now)
             return models_list
 

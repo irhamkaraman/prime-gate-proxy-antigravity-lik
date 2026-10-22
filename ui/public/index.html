@@ -326,7 +326,7 @@
             <button class="btn-secondary text-xs py-1 px-3" onclick="copyEndpoint()">Copy</button>
           </div>
           <div class="mt-4 flex items-center justify-between text-xs text-[#a8a29e] font-mono-code">
-            <span>Auth API Key: <code class="text-white">prime-gate-proxy</code></span>
+            <span>Client API Key: <a href="#/keys" class="text-[#f59e0b] underline hover:text-[#fbbf24]">Manage in API Keys & Agents</a></span>
             <span>Protocols: <code class="text-white">REST & SSE</code></span>
           </div>
         </div>
@@ -416,7 +416,7 @@
             <select id="sandboxModelSelect" class="w-full bg-[#0f0d0b] border border-[#a8a29e]/20 text-white rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#d97706] font-mono-code">
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Thinking)</option>
               <option value="claude-opus-4-6-thinking">Claude Opus 4.6 (Thinking)</option>
-              <option value="gemini-3.8-flash">Gemini 3.8 Flash (Recommended)</option>
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
               <option value="gemini-3.8-flash-high">Gemini 3.8 Flash High</option>
               <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
               <option value="gpt-oss-120b-medium">GPT-OSS 120B Medium</option>
@@ -820,7 +820,7 @@ print(response.choices[0].message.content)</pre>
               </tr>
               <tr class="hover:bg-white/[0.02]">
                 <td class="p-3 font-bold text-emerald-400">gemini-3.8-flash</td>
-                <td class="p-3 text-white">Gemini 3.8 Flash (Recommended)</td>
+                <td class="p-3 text-white">Gemini 3.8 Flash</td>
                 <td class="p-3 text-[#f59e0b]">✓ Dynamic Thinking</td>
                 <td class="p-3 text-[#a8a29e] font-sans">Primary daily driver. Outstanding throughput with low latency.</td>
               </tr>

@@ -11,19 +11,23 @@ from .binary_codec import (
     REC_ACCOUNT, REC_MODEL, REC_QUOTA, REC_SYSTEM, REC_LOG
 )
 from .events import event_bus
+import struct
+import shutil
+from ..crypto.key_manager import KeyManager
+from ..crypto.auth_manager import AuthManager
 
 logger = logging.getLogger("prime_gate.db.engine")
 
 class BinaryDatabaseEngine:
     """
-    Compiled C binary database engine for Prime Gate.
-    Stores all sensitive accounts, models, quotas, and telemetry as integrity-sealed
-    binary BLOBs using SQLite in Write-Ahead-Logging (WAL) mode.
+    SQLite WAL database engine for Prime Gate.
+    Stores sensitive accounts, models, quotas, and telemetry as binary-obfuscated BLOBs
+    using SQLite in Write-Ahead-Logging (WAL) mode to avoid plaintext credential storage on disk.
     
-    Guarantees:
-    - Zero readable plaintext JSON or strings in storage.
-    - Microsecond query latency with compiled C B-Tree pages.
-    - Automatic 32-bit CRC32 checksum verification on every record read.
+    Key Properties:
+    - Eliminates plaintext JSON or credentials in local file storage via binary obfuscation.
+    - Fast query performance with SQLite Write-Ahead Logging (WAL) concurrency.
+    - Automatic 32-bit CRC32 checksum verification on every record read for storage integrity checking (not cryptographic encryption).
     - Instant real-time WebSocket alert and incident log on data corruption.
     """
 
@@ -128,6 +132,43 @@ class BinaryDatabaseEngine:
             conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN tools_signature TEXT;")
         except Exception:
             pass
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN scope TEXT NOT NULL DEFAULT 'default';")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN context_hash TEXT NOT NULL DEFAULT '';")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN embedding_model TEXT;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN embedding_dim INTEGER;")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE pg_semantic_cache ADD COLUMN expires_at REAL;")
+        except Exception:
+            pass
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_scope_ctx ON pg_semantic_cache(scope, context_hash, model);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cache_expires ON pg_semantic_cache(expires_at);")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_cache_verifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cache_id INTEGER,
+                timestamp REAL NOT NULL,
+                cache_type TEXT NOT NULL,
+                similarity_score REAL NOT NULL,
+                upstream_similarity REAL,
+                is_false_hit INTEGER NOT NULL DEFAULT 0,
+                details TEXT
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_verify_time ON pg_cache_verifications(timestamp DESC);")
 
         # Idempotent column migrations for pg_request_logs
         try:
@@ -168,12 +209,60 @@ class BinaryDatabaseEngine:
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_update_ledger_time ON pg_auto_update_ledger(created_at DESC);")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                prefix TEXT NOT NULL,
+                key_hash TEXT NOT NULL,
+                salt TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                last_used_at REAL,
+                revoked_at REAL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_api_keys_revoked ON pg_api_keys(revoked_at);")
+
+        # Idempotent column migrations for pg_api_keys (Fase 5.1 Client Policy Enforcement)
+        api_key_cols = [
+            ("rate_limit_rpm", "INTEGER NOT NULL DEFAULT 0"),
+            ("rate_limit_tpd", "INTEGER NOT NULL DEFAULT 0"),
+            ("quota_credits", "REAL NOT NULL DEFAULT 0.0"),
+            ("allowed_models", "TEXT NOT NULL DEFAULT '[]'"),
+            ("cache_scope", "TEXT NOT NULL DEFAULT 'shared'")
+        ]
+        for col_name, col_type in api_key_cols:
+            try:
+                conn.execute(f"ALTER TABLE pg_api_keys ADD COLUMN {col_name} {col_type};")
+            except Exception:
+                pass
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_api_key_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key_id INTEGER NOT NULL,
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                model TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (key_id) REFERENCES pg_api_keys(id) ON DELETE CASCADE
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_key_usage_time ON pg_api_key_usage(key_id, created_at);")
+
+        # Auto-migrate legacy V1 records to V2 AES-256-GCM
+        try:
+            self.migrate_v1_to_v2()
+        except Exception as e:
+            logger.warning(f"V1 to V2 migration check deferred: {e}")
+
         logger.info(f"Binary Database Engine initialized at: {self.db_path} (WAL Mode enabled)")
 
     def set(self, key: str, payload: Dict[str, Any], record_type: int = REC_SYSTEM) -> bool:
         """Packs payload into sealed binary BLOB and writes to database."""
         try:
-            blob = BinaryCodec.pack(record_type, payload)
+            blob = BinaryCodec.pack(record_type, payload, key_name=key)
             # Extract CRC32 from packed header for secondary indexing
             _, _, _, _, stored_crc, _ = BinaryCodec.extract_header(blob)
             now = time.time()
@@ -365,6 +454,9 @@ class BinaryDatabaseEngine:
                 "event_type": r["event_type"],
                 "target_key": r["target_key"],
                 "message": r["message"],
+                "scope": r["scope"] if "scope" in r.keys() else "default",
+                "context_hash": r["context_hash"] if "context_hash" in r.keys() else "",
+                "expires_at": r["expires_at"] if "expires_at" in r.keys() else None,
                 "created_at": r["created_at"],
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created_at"]))
             }
@@ -426,12 +518,19 @@ class BinaryDatabaseEngine:
         cache_hit: int = 0,
         tokens_saved: int = 0,
         cache_hit_type: int = 0,
-        similarity_score: float = 0.0
+        similarity_score: float = 0.0,
+        key_id: Optional[int] = None
     ) -> bool:
         """Records a granular API request hit into the persistent database ledger."""
         try:
             total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
             now = time.time()
+
+            if key_id is not None and key_id > 0:
+                try:
+                    self.record_api_key_tokens(key_id, prompt_tokens, completion_tokens, model)
+                except Exception as ex:
+                    logger.debug(f"Could not record key tokens: {ex}")
             quota_json = None
             if quota_snapshot is not None:
                 if isinstance(quota_snapshot, str):
@@ -454,6 +553,31 @@ class BinaryDatabaseEngine:
                 cache_hit, tokens_saved, cache_hit_type, similarity_score
             ))
             event_bus.notify_mutation("REQUEST_HIT", request_id, 0)
+
+            # Record into Prometheus metrics collector
+            try:
+                from ..metrics import metrics
+                proto = "anthropic" if (request_id and request_id.startswith("msg_")) else "openai"
+                metrics.record_request(
+                    protocol=proto,
+                    model=model,
+                    status=status_code,
+                    duration_seconds=latency_ms / 1000.0,
+                    ttft_seconds=(latency_ms / 1000.0) if stream else None
+                )
+                metrics.record_tokens(
+                    prompt=prompt_tokens,
+                    completion=completion_tokens,
+                    reasoning=reasoning_tokens,
+                    saved=tokens_saved
+                )
+                if cache_hit:
+                    metrics.record_cache_hit("exact" if cache_hit_type == 1 else "semantic")
+                else:
+                    metrics.record_cache_miss()
+            except Exception:
+                pass
+
             return True
         except Exception as e:
             logger.error(f"Failed to record request hit for '{request_id}': {e}")
@@ -635,19 +759,33 @@ class BinaryDatabaseEngine:
     def get_cache_config(self) -> Dict[str, Any]:
         """Retrieves current Smart Cache, Compactor & Sentinel configuration."""
         cfg = self.get("cache:config")
+        default_model = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
         if not cfg or not isinstance(cfg, dict):
             return {
                 "enabled": True,
                 "bypass_tools": False,
                 "semantic_enabled": True,
+                "semantic_agent_enabled": False,
                 "semantic_threshold": 0.93,
+                "semantic_threshold_chat": 0.93,
+                "semantic_threshold_agent": 0.96,
+                "embedding_model": default_model,
+                "max_entries": 5000,
+                "verification_sampling_enabled": False,
+                "verification_sampling_rate": 0.05,
                 "cache_mode": "hybrid",
                 "turn_based_keying": True,
                 "min_prompt_length": 5,
-                "ttl_seconds": 86400 * 7,
+                "ttl_seconds": 86400,
                 "compactor_enabled": True,
                 "compactor_window_turns": 3,
+                "compactor_window_tools": 2,
                 "compactor_max_chars": 600,
+                "compactor_dry_run": False,
+                "compactor_preserve_errors": True,
+                "compactor_preserve_re_references": True,
+                "compactor_client_overrides": {},
+                "compactor_model_overrides": {},
                 "loop_guard_enabled": True,
                 "loop_guard_max_repeats": 3,
             }
@@ -655,22 +793,67 @@ class BinaryDatabaseEngine:
             "enabled": bool(cfg.get("enabled", True)),
             "bypass_tools": bool(cfg.get("bypass_tools", False)),
             "semantic_enabled": bool(cfg.get("semantic_enabled", True)),
+            "semantic_agent_enabled": bool(cfg.get("semantic_agent_enabled", False)),
             "semantic_threshold": float(cfg.get("semantic_threshold", 0.93)),
+            "semantic_threshold_chat": float(cfg.get("semantic_threshold_chat", cfg.get("semantic_threshold", 0.93))),
+            "semantic_threshold_agent": float(cfg.get("semantic_threshold_agent", 0.96)),
+            "embedding_model": str(cfg.get("embedding_model", default_model)),
+            "max_entries": int(cfg.get("max_entries", 5000)),
+            "verification_sampling_enabled": bool(cfg.get("verification_sampling_enabled", False)),
+            "verification_sampling_rate": float(cfg.get("verification_sampling_rate", 0.05)),
             "cache_mode": str(cfg.get("cache_mode", "hybrid")),
             "turn_based_keying": bool(cfg.get("turn_based_keying", True)),
             "min_prompt_length": int(cfg.get("min_prompt_length", 5)),
-            "ttl_seconds": int(cfg.get("ttl_seconds", 86400 * 7)),
+            "ttl_seconds": int(cfg.get("ttl_seconds", 86400)),
             "compactor_enabled": bool(cfg.get("compactor_enabled", True)),
             "compactor_window_turns": int(cfg.get("compactor_window_turns", 3)),
+            "compactor_window_tools": int(cfg.get("compactor_window_tools", 2)),
             "compactor_max_chars": int(cfg.get("compactor_max_chars", 600)),
+            "compactor_dry_run": bool(cfg.get("compactor_dry_run", False)),
+            "compactor_preserve_errors": bool(cfg.get("compactor_preserve_errors", True)),
+            "compactor_preserve_re_references": bool(cfg.get("compactor_preserve_re_references", True)),
+            "compactor_client_overrides": cfg.get("compactor_client_overrides") if isinstance(cfg.get("compactor_client_overrides"), dict) else {},
+            "compactor_model_overrides": cfg.get("compactor_model_overrides") if isinstance(cfg.get("compactor_model_overrides"), dict) else {},
             "loop_guard_enabled": bool(cfg.get("loop_guard_enabled", True)),
             "loop_guard_max_repeats": int(cfg.get("loop_guard_max_repeats", 3)),
         }
 
+    def record_compactor_tokens_saved(self, tokens: int) -> int:
+        """Accumulates saved tokens from Context Compactor."""
+        if tokens <= 0:
+            return int(self.get("telemetry:compactor_tokens_saved_total") or 0)
+        curr = int(self.get("telemetry:compactor_tokens_saved_total") or 0)
+        new_total = curr + tokens
+        self.set("telemetry:compactor_tokens_saved_total", new_total)
+        try:
+            from ..metrics import metrics
+            metrics.record_compactor_saved(tokens)
+        except Exception:
+            pass
+        return new_total
+
+    def get_compactor_stats(self) -> Dict[str, Any]:
+        """Returns cumulative compactor statistics for dashboard telemetry."""
+        total_tokens = int(self.get("telemetry:compactor_tokens_saved_total") or 0)
+        return {
+            "compactor_tokens_saved_total": total_tokens,
+        }
+
     def set_cache_config(self, config: Dict[str, Any]) -> bool:
-        """Saves Smart Cache configuration."""
+        """Saves Smart Cache configuration and syncs vector embedding model if changed."""
         current = self.get_cache_config()
+        old_model = current.get("embedding_model")
         current.update(config)
+        new_model = current.get("embedding_model")
+        if new_model and new_model != old_model:
+            try:
+                from prime_gate.cache.semantic import SemanticVectorEngine
+                SemanticVectorEngine.set_model_name(new_model)
+                dim = SemanticVectorEngine.get_embedding_dimension()
+                self.verify_or_rebuild_vector_index(new_model, dim)
+            except Exception as e:
+                logger.warning(f"Vector model sync failed: {e}")
+
         success = self.set("cache:config", current)
         event_bus.notify_mutation("CACHE_CONFIG", "cache:config", 0)
         return success
@@ -684,6 +867,7 @@ class BinaryDatabaseEngine:
         "check_interval_seconds": 600,   # Check every 10 minutes (600s)
         "idle_threshold_seconds": 30,    # Require 30s of 0 in-flight traffic before pulling
         "auto_rebuild_ui": True,         # Rebuild frontend if ui/ changes
+        "auto_apply": False,             # Safe release gate: notify only by default
         "last_checked": 0.0,
         "last_update_attempt": 0.0,
         "last_update_status": "idle",
@@ -759,35 +943,55 @@ class BinaryDatabaseEngine:
                 "to_version": r["to_version"],
                 "ui_rebuilt": bool(r["ui_rebuilt"]),
                 "log": r["log"],
+                "scope": r["scope"] if "scope" in r.keys() else "default",
+                "context_hash": r["context_hash"] if "context_hash" in r.keys() else "",
+                "expires_at": r["expires_at"] if "expires_at" in r.keys() else None,
                 "created_at": r["created_at"],
                 "formatted_time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created_at"]))
             })
         return entries
 
-    def get_cached_response(self, cache_key: str) -> Optional[Dict[str, Any]]:
+    def get_cached_response(self, cache_key: str, scope: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Retrieves cached response by cache_key.
+        Retrieves cached response by cache_key and optional scope.
+        Validates TTL expiration; deletes expired entry and returns None if expired.
         Atomically increments hit_count and tokens_saved_total.
         """
         conn = self._get_connection()
-        cursor = conn.execute("SELECT * FROM pg_semantic_cache WHERE cache_key = ?", (cache_key,))
+        now = time.time()
+
+        if scope:
+            cursor = conn.execute(
+                "SELECT * FROM pg_semantic_cache WHERE cache_key = ? AND (scope = ? OR scope = 'default')",
+                (cache_key, scope)
+            )
+        else:
+            cursor = conn.execute("SELECT * FROM pg_semantic_cache WHERE cache_key = ?", (cache_key,))
+
         row = cursor.fetchone()
         if not row:
             return None
 
-        now = time.time()
+        # Check TTL expiration
+        expires_at = row["expires_at"]
+        if expires_at is not None and expires_at <= now:
+            conn.execute("DELETE FROM pg_semantic_cache WHERE id = ?", (row["id"],))
+            return None
+
         # Increment hit count and accumulate saved tokens
         conn.execute("""
             UPDATE pg_semantic_cache
             SET hit_count = hit_count + 1,
                 tokens_saved_total = tokens_saved_total + total_tokens,
                 last_hit_at = ?
-            WHERE cache_key = ?
-        """, (now, cache_key))
+            WHERE id = ?
+        """, (now, row["id"]))
 
         return {
             "id": row["id"],
             "cache_key": row["cache_key"],
+            "scope": row["scope"] if "scope" in row.keys() else "default",
+            "context_hash": row["context_hash"] if "context_hash" in row.keys() else "",
             "prompt_hash": row["prompt_hash"],
             "prompt_preview": row["prompt_preview"],
             "response_text": row["response_text"],
@@ -799,6 +1003,7 @@ class BinaryDatabaseEngine:
             "hit_count": row["hit_count"] + 1,
             "tokens_saved_total": row["tokens_saved_total"] + row["total_tokens"],
             "created_at": row["created_at"],
+            "expires_at": row["expires_at"] if "expires_at" in row.keys() else None,
             "last_hit_at": now
         }
 
@@ -813,13 +1018,19 @@ class BinaryDatabaseEngine:
         completion_tokens: int,
         reasoning_tokens: int = 0,
         embedding: Optional[bytes] = None,
-        tools_signature: Optional[str] = None
+        tools_signature: Optional[str] = None,
+        scope: str = "default",
+        context_hash: str = "",
+        ttl_seconds: int = 86400,
+        embedding_model: Optional[str] = None,
+        embedding_dim: Optional[int] = None
     ) -> bool:
-        """Stores a generated completion response in the persistent binary cache."""
+        """Stores a generated completion response in the persistent binary cache with TTL & LRU management."""
         try:
             total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
             now = time.time()
             preview = (prompt_preview or "").strip()[:300]
+            expires_at = (now + ttl_seconds) if ttl_seconds > 0 else None
 
             conn = self._get_connection()
             conn.execute("""
@@ -827,8 +1038,9 @@ class BinaryDatabaseEngine:
                     cache_key, prompt_hash, prompt_preview, response_text,
                     model, prompt_tokens, completion_tokens, reasoning_tokens,
                     total_tokens, hit_count, tokens_saved_total, created_at, last_hit_at,
-                    embedding, tools_signature
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, NULL, ?, ?)
+                    embedding, tools_signature, scope, context_hash, expires_at,
+                    embedding_model, embedding_dim
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(cache_key) DO UPDATE SET
                     response_text = excluded.response_text,
                     prompt_tokens = excluded.prompt_tokens,
@@ -836,12 +1048,24 @@ class BinaryDatabaseEngine:
                     reasoning_tokens = excluded.reasoning_tokens,
                     total_tokens = excluded.total_tokens,
                     embedding = COALESCE(excluded.embedding, pg_semantic_cache.embedding),
-                    tools_signature = COALESCE(excluded.tools_signature, pg_semantic_cache.tools_signature)
+                    tools_signature = COALESCE(excluded.tools_signature, pg_semantic_cache.tools_signature),
+                    scope = excluded.scope,
+                    context_hash = excluded.context_hash,
+                    expires_at = excluded.expires_at,
+                    embedding_model = COALESCE(excluded.embedding_model, pg_semantic_cache.embedding_model),
+                    embedding_dim = COALESCE(excluded.embedding_dim, pg_semantic_cache.embedding_dim)
             """, (
                 cache_key, prompt_hash, preview, response_text,
                 model, prompt_tokens, completion_tokens, reasoning_tokens,
-                total_tokens, now, embedding, tools_signature
+                total_tokens, now, embedding, tools_signature,
+                scope, context_hash, expires_at, embedding_model, embedding_dim
             ))
+
+            # Maintain capacity bounds
+            cfg = self.get_cache_config()
+            max_entries = cfg.get("max_entries", 5000)
+            self.enforce_lru_capacity(max_entries)
+
             event_bus.notify_mutation("CACHE_STORE", cache_key, 0)
             return True
         except Exception as e:
@@ -852,12 +1076,15 @@ class BinaryDatabaseEngine:
         self,
         model: str,
         query_vec: Any,
+        scope: str = "default",
+        context_hash: str = "",
         threshold: float = 0.93,
         tools_signature: Optional[str] = None
     ) -> Optional[Tuple[Dict[str, Any], float]]:
         """
-        Scans cached entries for the same model and computes cosine similarity
-        against query_vec. Returns (matched_entry, similarity_score) if score >= threshold.
+        Scans cached entries strictly matching scope, context_hash, and model.
+        Guarantees that differing context_hash will NEVER hit.
+        Returns (matched_entry, similarity_score) if cosine score >= threshold.
         """
         if query_vec is None:
             return None
@@ -865,11 +1092,25 @@ class BinaryDatabaseEngine:
         from prime_gate.cache.semantic import SemanticVectorEngine
 
         conn = self._get_connection()
+        now = time.time()
         sig_val = (tools_signature or "").strip()
-        cursor = conn.execute(
-            "SELECT * FROM pg_semantic_cache WHERE model = ? AND embedding IS NOT NULL AND tools_signature = ?",
-            (model, sig_val)
-        )
+
+        # Context-aware strict partition
+        query_sql = """
+            SELECT * FROM pg_semantic_cache
+            WHERE (scope = ? OR scope = 'default')
+              AND context_hash = ?
+              AND model = ?
+              AND embedding IS NOT NULL
+              AND (expires_at IS NULL OR expires_at > ?)
+        """
+        params = [scope, context_hash, model, now]
+
+        if sig_val:
+            query_sql += " AND tools_signature = ?"
+            params.append(sig_val)
+
+        cursor = conn.execute(query_sql, params)
         rows = cursor.fetchall()
         if not rows:
             return None
@@ -880,7 +1121,6 @@ class BinaryDatabaseEngine:
             return None
 
         row, score = match
-        now = time.time()
         # Atomically increment hit stats
         conn.execute("""
             UPDATE pg_semantic_cache
@@ -894,6 +1134,104 @@ class BinaryDatabaseEngine:
         row["tokens_saved_total"] = row.get("tokens_saved_total", 0) + row.get("total_tokens", 0)
         row["last_hit_at"] = now
         return row, score
+
+    def cleanup_expired_cache(self, ttl_seconds: Optional[int] = None) -> int:
+        """Deletes cache entries that have passed their expiration timestamp."""
+        conn = self._get_connection()
+        now = time.time()
+        deleted = 0
+        if ttl_seconds is not None and ttl_seconds > 0:
+            cutoff = now - ttl_seconds
+            res = conn.execute("DELETE FROM pg_semantic_cache WHERE created_at < ?", (cutoff,))
+            deleted += res.rowcount
+        res2 = conn.execute("DELETE FROM pg_semantic_cache WHERE expires_at IS NOT NULL AND expires_at <= ?", (now,))
+        deleted += res2.rowcount
+        return deleted
+
+    def enforce_lru_capacity(self, max_entries: int = 5000) -> int:
+        """Removes least recently used cache entries when count exceeds max_entries."""
+        conn = self._get_connection()
+        count = conn.execute("SELECT COUNT(*) FROM pg_semantic_cache").fetchone()[0] or 0
+        if count <= max_entries:
+            return 0
+        excess = count - max_entries
+        conn.execute("""
+            DELETE FROM pg_semantic_cache
+            WHERE id IN (
+                SELECT id FROM pg_semantic_cache
+                ORDER BY COALESCE(last_hit_at, created_at) ASC
+                LIMIT ?
+            )
+        """, (excess,))
+        return excess
+
+    def verify_or_rebuild_vector_index(self, active_model: str, active_dim: int) -> bool:
+        """
+        Checks if active embedding model or dimension has changed compared to indexed vectors.
+        If changed, purges incompatible embedding BLOBs so they can be re-embedded cleanly.
+        """
+        meta = self.get("cache:vector_index_metadata")
+        if meta and isinstance(meta, dict):
+            stored_model = meta.get("model_name")
+            stored_dim = meta.get("dimension")
+            if stored_model != active_model or stored_dim != active_dim:
+                logger.warning(
+                    f"[VECTOR INDEX REBUILD] Detected model change from '{stored_model}' ({stored_dim}-dim) "
+                    f"to '{active_model}' ({active_dim}-dim). Purging incompatible vector embeddings..."
+                )
+                conn = self._get_connection()
+                conn.execute("UPDATE pg_semantic_cache SET embedding = NULL WHERE embedding_dim != ? OR (embedding_dim IS NULL AND embedding_model != ?);", (active_dim, active_model))
+                self.set("cache:vector_index_metadata", {
+                    "model_name": active_model,
+                    "dimension": active_dim,
+                    "updated_at": time.time()
+                })
+                return True
+        else:
+            self.set("cache:vector_index_metadata", {
+                "model_name": active_model,
+                "dimension": active_dim,
+                "updated_at": time.time()
+            })
+        return False
+
+    def record_cache_verification(
+        self,
+        cache_id: Optional[int],
+        cache_type: str,
+        similarity_score: float,
+        upstream_similarity: float,
+        is_false_hit: bool,
+        details: str = ""
+    ) -> bool:
+        """Records a background verification sample to evaluate false-hit rate."""
+        try:
+            conn = self._get_connection()
+            now = time.time()
+            conn.execute("""
+                INSERT INTO pg_cache_verifications (
+                    cache_id, timestamp, cache_type, similarity_score,
+                    upstream_similarity, is_false_hit, details
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (cache_id, now, cache_type, similarity_score, upstream_similarity, 1 if is_false_hit else 0, details))
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to record cache verification: {e}")
+            return False
+
+    def get_verification_stats(self) -> Dict[str, Any]:
+        """Returns background verification statistics and estimated false-hit rate."""
+        conn = self._get_connection()
+        total = conn.execute("SELECT COUNT(*) FROM pg_cache_verifications").fetchone()[0] or 0
+        false_hits = conn.execute("SELECT COUNT(*) FROM pg_cache_verifications WHERE is_false_hit = 1").fetchone()[0] or 0
+        avg_upstream_sim = conn.execute("SELECT AVG(upstream_similarity) FROM pg_cache_verifications WHERE upstream_similarity IS NOT NULL").fetchone()[0] or 0.0
+        false_hit_rate = round((false_hits / total * 100), 2) if total > 0 else 0.0
+        return {
+            "total_verifications": total,
+            "false_hits": false_hits,
+            "false_hit_rate_pct": false_hit_rate,
+            "avg_upstream_similarity": round(float(avg_upstream_sim), 4)
+        }
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Calculates global caching efficiency, total tokens saved, and hit ratio."""
@@ -920,8 +1258,12 @@ class BinaryDatabaseEngine:
         idr_saved = int(usd_saved * 16250)
         cfg = self.get_cache_config()
 
+        v_stats = self.get_verification_stats()
+        compactor_total_saved = int(self.get("telemetry:compactor_tokens_saved_total") or 0)
         return {
+            "compactor_tokens_saved_total": compactor_total_saved,
             "total_entries": total_entries,
+            "verification_stats": v_stats,
             "total_hits": final_hits,
             "exact_hits": exact_hits,
             "semantic_hits": semantic_hits,
@@ -973,6 +1315,9 @@ class BinaryDatabaseEngine:
                 "completion_tokens": r["completion_tokens"],
                 "hit_count": r["hit_count"],
                 "tokens_saved_total": r["tokens_saved_total"],
+                "scope": r["scope"] if "scope" in r.keys() else "default",
+                "context_hash": r["context_hash"] if "context_hash" in r.keys() else "",
+                "expires_at": r["expires_at"] if "expires_at" in r.keys() else None,
                 "created_at": r["created_at"],
                 "created_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["created_at"])),
                 "last_hit_formatted": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["last_hit_at"])) if r["last_hit_at"] else "Never"
@@ -1023,5 +1368,268 @@ class BinaryDatabaseEngine:
             self._conn = None
 
 
+    def create_backup(self, label: str = "") -> Path:
+        """Creates a timestamped backup copy of the database using atomic SQLite backup API."""
+        backup_dir = self.db_path.parent / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        label_part = f"_{label}" if label else ""
+        backup_file = backup_dir / f"prime_gate_{timestamp}{label_part}.pgdb"
+
+        dest_conn = sqlite3.connect(str(backup_file))
+        try:
+            self._get_connection().backup(dest_conn)
+        finally:
+            dest_conn.close()
+
+        logger.info(f"Database backup created: {backup_file}")
+        return backup_file
+
+    def rollback_from_backup(self, backup_file: Path) -> bool:
+        """Restores active database from a backup file using atomic SQLite backup API."""
+        target = Path(backup_file)
+        if not target.exists():
+            logger.error(f"Cannot rollback: Backup file '{target}' does not exist.")
+            return False
+
+        src_conn = sqlite3.connect(str(target))
+        try:
+            src_conn.backup(self._get_connection())
+        except Exception as e:
+            logger.error(f"SQLite rollback backup API failed: {e}")
+            return False
+        finally:
+            src_conn.close()
+
+        logger.warning(f"Database rolled back successfully from: {target}")
+        return True
+
+    def rollback_latest_backup(self) -> Tuple[bool, str]:
+        """Finds the most recent backup in data/backups/ and restores it."""
+        backup_dir = self.db_path.parent / "backups"
+        if not backup_dir.exists():
+            return False, "No backups directory found"
+        backups = sorted(backup_dir.glob("*.pgdb"), key=os.path.getmtime, reverse=True)
+        if not backups:
+            return False, "No backup files found"
+        latest = backups[0]
+        success = self.rollback_from_backup(latest)
+        return success, str(latest)
+
+    def migrate_v1_to_v2(self) -> int:
+        """
+        Idempotent automatic migration from legacy V1 (XOR) to V2 (AES-256-GCM).
+        Creates an encrypted/safe backup prior to migration.
+        Returns count of migrated records.
+        """
+        conn = self._get_connection()
+        cursor = conn.execute("SELECT key, record_type, data FROM pg_records")
+        rows = cursor.fetchall()
+        v1_records = []
+        for r in rows:
+            data = r["data"]
+            if len(data) >= 6:
+                magic, version = struct.unpack(">4sH", data[:6])
+                if magic == b"PGDB" and version == 1:
+                    v1_records.append(r)
+
+        if not v1_records:
+            return 0
+
+        logger.info(f"Found {len(v1_records)} legacy V1 record(s). Creating backup before AES-256-GCM migration...")
+        backup_path = self.create_backup("pre_v2_migration")
+        migrated_count = 0
+        try:
+            for r in v1_records:
+                key = r["key"]
+                rec_type = r["record_type"]
+                _, payload, ts = BinaryCodec.unpack(r["data"], key_name=key)
+                new_blob = BinaryCodec.pack(rec_type, payload, key_name=key)
+                _, _, _, _, stored_crc, _ = BinaryCodec.extract_header(new_blob)
+                now = time.time()
+                conn.execute(
+                    "UPDATE pg_records SET data = ?, crc32 = ?, updated_at = ? WHERE key = ?",
+                    (new_blob, stored_crc, now, key)
+                )
+                migrated_count += 1
+            logger.info(f"Successfully migrated {migrated_count} record(s) to AES-256-GCM at rest.")
+            return migrated_count
+        except Exception as e:
+            logger.critical(f"Database V2 migration failed: {e}. Initiating automatic rollback from {backup_path}...")
+            self.rollback_from_backup(backup_path)
+            raise RuntimeError(f"Database migration aborted and rolled back: {e}")
+
+    def rotate_database_key(self, new_key: Optional[bytes] = None) -> bool:
+        """
+        Re-encrypts all database records with a new master key.
+        Creates a backup first.
+        """
+        backup_path = self.create_backup("pre_key_rotation")
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute("SELECT key, record_type, data FROM pg_records")
+            rows = cursor.fetchall()
+
+            decrypted = []
+            for r in rows:
+                key = r["key"]
+                rec_type = r["record_type"]
+                _, payload, _ = BinaryCodec.unpack(r["data"], key_name=key)
+                decrypted.append((key, rec_type, payload))
+
+            rotated_key = KeyManager.rotate_master_key(new_key)
+
+            for key, rec_type, payload in decrypted:
+                new_blob = BinaryCodec.pack(rec_type, payload, key_name=key, key=rotated_key)
+                _, _, _, _, stored_crc, _ = BinaryCodec.extract_header(new_blob)
+                now = time.time()
+                conn.execute(
+                    "UPDATE pg_records SET data = ?, crc32 = ?, updated_at = ? WHERE key = ?",
+                    (new_blob, stored_crc, now, key)
+                )
+            logger.info(f"Database successfully re-encrypted {len(decrypted)} record(s) with rotated master key.")
+            return True
+        except Exception as e:
+            logger.critical(f"Master key rotation failed: {e}. Rolling back...")
+            self.rollback_from_backup(backup_path)
+            raise RuntimeError(f"Key rotation failed and database was restored: {e}")
+
+    def create_api_key(
+        self,
+        name: str = "default",
+        rate_limit_rpm: int = 0,
+        rate_limit_tpd: int = 0,
+        quota_credits: float = 0.0,
+        allowed_models: Any = "[]",
+        cache_scope: str = "shared"
+    ) -> Tuple[str, Dict[str, Any]]:
+        """Generates a new Client Gateway API key, stores SHA-256+salt hash and policies in DB, and returns (raw_key, record)."""
+        raw_key, record = AuthManager.generate_api_key(name)
+        if isinstance(allowed_models, (list, set, tuple)):
+            allowed_models_str = json.dumps(list(allowed_models))
+        elif isinstance(allowed_models, str):
+            allowed_models_str = allowed_models
+        else:
+            allowed_models_str = "[]"
+
+        cache_scope_clean = str(cache_scope).lower().strip()
+        if cache_scope_clean not in ("shared", "key", "disabled"):
+            cache_scope_clean = "shared"
+
+        conn = self._get_connection()
+        cursor = conn.execute("""
+            INSERT INTO pg_api_keys (
+                name, prefix, key_hash, salt, created_at,
+                rate_limit_rpm, rate_limit_tpd, quota_credits, allowed_models, cache_scope
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            record["name"], record["prefix"], record["key_hash"], record["salt"], record["created_at"],
+            int(rate_limit_rpm or 0), int(rate_limit_tpd or 0), float(quota_credits or 0.0),
+            allowed_models_str, cache_scope_clean
+        ))
+        record["id"] = cursor.lastrowid
+        record["rate_limit_rpm"] = int(rate_limit_rpm or 0)
+        record["rate_limit_tpd"] = int(rate_limit_tpd or 0)
+        record["quota_credits"] = float(quota_credits or 0.0)
+        record["allowed_models"] = allowed_models_str
+        record["cache_scope"] = cache_scope_clean
+        return raw_key, record
+
+    def list_api_keys(self) -> List[Dict[str, Any]]:
+        """Lists all Client Gateway API keys with sanitized fields (never outputs salt or key_hash)."""
+        conn = self._get_connection()
+        cursor = conn.execute("""
+            SELECT id, name, prefix, created_at, last_used_at, revoked_at,
+                   rate_limit_rpm, rate_limit_tpd, quota_credits, allowed_models, cache_scope
+            FROM pg_api_keys
+            ORDER BY id ASC
+        """)
+        return [dict(r) for r in cursor.fetchall()]
+
+    def get_active_api_keys(self) -> List[Dict[str, Any]]:
+        """Returns all unrevoked Client Gateway API keys including hash for internal verification."""
+        conn = self._get_connection()
+        cursor = conn.execute("""
+            SELECT id, name, prefix, key_hash, salt, created_at, last_used_at, revoked_at,
+                   rate_limit_rpm, rate_limit_tpd, quota_credits, allowed_models, cache_scope
+            FROM pg_api_keys
+            WHERE revoked_at IS NULL
+        """)
+        return [dict(r) for r in cursor.fetchall()]
+
+    def record_api_key_tokens(self, key_id: int, prompt_tokens: int, completion_tokens: int, model: str):
+        """Records token usage for a Client Gateway API key in pg_api_key_usage."""
+        try:
+            total = int(prompt_tokens or 0) + int(completion_tokens or 0)
+            conn = self._get_connection()
+            conn.execute("""
+                INSERT INTO pg_api_key_usage (key_id, prompt_tokens, completion_tokens, total_tokens, model, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (int(key_id), int(prompt_tokens or 0), int(completion_tokens or 0), total, str(model or ""), time.time()))
+        except Exception as e:
+            logger.warning(f"Failed to record API key usage for key {key_id}: {e}")
+
+    def get_api_key_usage_today(self, key_id: int) -> int:
+        """Returns total LLM tokens used by key_id in the last 24 hours."""
+        try:
+            cutoff = time.time() - 86400.0
+            conn = self._get_connection()
+            cursor = conn.execute("""
+                SELECT SUM(total_tokens) as total
+                FROM pg_api_key_usage
+                WHERE key_id = ? AND created_at >= ?
+            """, (int(key_id), cutoff))
+            row = cursor.fetchone()
+            if row and row["total"] is not None:
+                return int(row["total"])
+            return 0
+        except Exception:
+            return 0
+
+    def get_api_key_lifetime_usage(self, key_id: int) -> int:
+        """Returns cumulative lifetime LLM tokens used by key_id."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute("""
+                SELECT SUM(total_tokens) as total
+                FROM pg_api_key_usage
+                WHERE key_id = ?
+            """, (int(key_id),))
+            row = cursor.fetchone()
+            if row and row["total"] is not None:
+                return int(row["total"])
+            return 0
+        except Exception:
+            return 0
+
+    def revoke_api_key(self, key_id_or_name: str) -> bool:
+        """Revokes an API key by numeric ID or name."""
+        conn = self._get_connection()
+        now = time.time()
+        cursor = conn.execute("""
+            UPDATE pg_api_keys
+            SET revoked_at = ?
+            WHERE (CAST(id AS TEXT) = ? OR name = ?) AND revoked_at IS NULL
+        """, (now, str(key_id_or_name), str(key_id_or_name)))
+        return cursor.rowcount > 0
+
+    def update_api_key_last_used(self, key_id: int):
+        conn = self._get_connection()
+        conn.execute("UPDATE pg_api_keys SET last_used_at = ? WHERE id = ?", (time.time(), key_id))
+
+    def ensure_default_api_key(self) -> Optional[str]:
+        """Creates a default API key if the table is empty and returns the raw key."""
+        conn = self._get_connection()
+        cursor = conn.execute("SELECT COUNT(*) as cnt FROM pg_api_keys")
+        row = cursor.fetchone()
+        if row and row["cnt"] == 0:
+            raw_key, record = self.create_api_key("default")
+            logger.info("Generated initial default API Key.")
+            return raw_key
+        return None
+
+
 # Global Singleton Database Engine
 db = BinaryDatabaseEngine()
+

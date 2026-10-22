@@ -18,10 +18,12 @@ app = typer.Typer(
     add_completion=False
 )
 auth_app = typer.Typer(name="auth", help="Manage Google Antigravity accounts and OAuth authentication.")
+keys_app = typer.Typer(name="keys", help="Manage Client Gateway API Keys and access policies.")
 daemon_app = typer.Typer(name="daemon", help="Manage background daemon service.")
 db_app = typer.Typer(name="db", help="Manage compiled binary database, integrity checks, and corruption diagnostics.")
 
 app.add_typer(auth_app)
+app.add_typer(keys_app)
 app.add_typer(daemon_app)
 app.add_typer(db_app)
 
@@ -61,6 +63,20 @@ def start(
     """Start the proxy server in the foreground."""
     import uvicorn
     from .server import app as fastapi_app
+
+    # Non-loopback Host Bind Guard
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        active_keys = db.get_active_api_keys()
+        if not active_keys:
+            console.print(
+                f"[bold red]CRITICAL SECURITY ERROR: Cannot bind to non-loopback interface '{host}' without active API key authentication configured![/bold red]\n"
+                "[yellow]Refusing to start. Run 'prime-gate auth create-key' first to generate an authorized API key.[/yellow]"
+            )
+            raise typer.Exit(code=1)
+        else:
+            console.print(
+                f"[bold yellow]SECURITY WARNING: Prime Gate is listening on external interface '{host}'. Ensure TLS reverse proxy and firewall rules are active.[/bold yellow]"
+            )
 
     console.print(f"[bold green]Starting Prime Gate Proxy on http://{host}:{port}...[/bold green]")
     uvicorn.run(fastapi_app, host=host, port=port)
@@ -122,16 +138,145 @@ def quota(
         )
 
     console.print(table)
+def _create_key_handler(
+    name: str = "api-client",
+    rpm: int = 0,
+    tpd: int = 0,
+    quota: float = 0.0,
+    models: str = "",
+    cache_scope: str = "shared"
+):
+    import json
+    allowed_list = [m.strip() for m in models.split(",") if m.strip()] if models else []
+    raw_key, record = db.create_api_key(
+        name=name,
+        rate_limit_rpm=rpm,
+        rate_limit_tpd=tpd,
+        quota_credits=quota,
+        allowed_models=json.dumps(allowed_list),
+        cache_scope=cache_scope
+    )
+    models_display = ", ".join(allowed_list) if allowed_list else "All models allowed (*)"
+    console.print(Panel(
+        f"[bold green]Client Gateway API Key Created Successfully![/bold green]\n\n"
+        f"[bold white]Key Secret:[/bold white] [bold yellow]{raw_key}[/bold yellow]\n\n"
+        f"[bold red]IMPORTANT:[/bold red] Copy this key now! This is the ONLY time it will ever be shown.\n"
+        f"Stored securely in database as salted SHA-256 hash.\n\n"
+        f"[bold cyan]Policies Configured:[/bold cyan]\n"
+        f"  • Name: [white]{record['name']}[/white] | ID: {record['id']} | Prefix: {record['prefix']}...\n"
+        f"  • Rate Limit (RPM): [white]{'Unlimited' if rpm == 0 else f'{rpm} req/min'}[/white]\n"
+        f"  • Daily Token Limit (TPD): [white]{'Unlimited' if tpd == 0 else f'{tpd:,} tokens/day'}[/white]\n"
+        f"  • Lifetime Quota Credits: [white]{'Unlimited' if quota == 0.0 else f'{quota:,.2f}'}[/white]\n"
+        f"  • Allowed Models: [white]{models_display}[/white]\n"
+        f"  • Cache Scope: [white]{cache_scope}[/white]",
+        title="Prime Gate Client Gateway API Key",
+        border_style="green"
+    ))
 
-    model_table = Table(title=f"Active Model Catalog ({len(models)} Models)", border_style="magenta")
-    model_table.add_column("Model ID", style="bold green")
-    model_table.add_column("Display Name", style="white")
-    model_table.add_column("Provider", style="dim")
+@keys_app.command("create")
+def keys_create(
+    name: str = typer.Option("api-client", "--name", "-n", help="Name or label for this API key."),
+    rpm: int = typer.Option(0, "--rpm", help="Rate limit requests per minute (0 = unlimited)."),
+    tpd: int = typer.Option(0, "--tpd", help="Daily LLM token quota in tokens/day (0 = unlimited)."),
+    quota: float = typer.Option(0.0, "--quota", help="Lifetime credits quota (0.0 = unlimited)."),
+    models: str = typer.Option("", "--models", "-m", help="Comma-separated allowed models whitelist (empty = all)."),
+    cache_scope: str = typer.Option("shared", "--cache-scope", help="Cache scope: shared, key, or disabled.")
+):
+    """Generate a new secure Client Gateway API key with granular policies."""
+    _create_key_handler(name, rpm, tpd, quota, models, cache_scope)
 
-    for m in models:
-        model_table.add_row(m["id"], m["name"], m.get("owned_by", "google-antigravity"))
+@auth_app.command("create-key")
+def auth_create_key(
+    name: str = typer.Option("api-client", "--name", "-n", help="Name or label for this API key."),
+    rpm: int = typer.Option(0, "--rpm", help="Rate limit requests per minute (0 = unlimited)."),
+    tpd: int = typer.Option(0, "--tpd", help="Daily LLM token quota in tokens/day (0 = unlimited)."),
+    quota: float = typer.Option(0.0, "--quota", help="Lifetime credits quota (0.0 = unlimited)."),
+    models: str = typer.Option("", "--models", "-m", help="Comma-separated allowed models whitelist (empty = all)."),
+    cache_scope: str = typer.Option("shared", "--cache-scope", help="Cache scope: shared, key, or disabled.")
+):
+    """Generate a new secure API key (legacy alias for `prime-gate keys create`)."""
+    _create_key_handler(name, rpm, tpd, quota, models, cache_scope)
 
-    console.print(model_table)
+def _list_keys_handler():
+    import json
+    import datetime
+    keys = db.list_api_keys()
+    if not keys:
+        console.print("[yellow]No API keys found. Run 'prime-gate keys create' to generate one.[/yellow]")
+        return
+
+    table = Table(title="Prime Gate Client Gateway API Keys", border_style="cyan")
+    table.add_column("ID", justify="right")
+    table.add_column("Name", style="bold white")
+    table.add_column("Key Preview", style="dim")
+    table.add_column("RPM", justify="right")
+    table.add_column("TPD (Daily)", justify="right")
+    table.add_column("Cache", style="magenta")
+    table.add_column("Models", style="yellow")
+    table.add_column("Created", style="cyan")
+    table.add_column("Last Used", style="green")
+    table.add_column("Status", style="bold")
+
+    for k in keys:
+        created_str = datetime.datetime.fromtimestamp(k["created_at"]).strftime("%Y-%m-%d %H:%M")
+        used_str = datetime.datetime.fromtimestamp(k["last_used_at"]).strftime("%Y-%m-%d %H:%M") if k.get("last_used_at") else "Never"
+        status = "[red]Revoked[/red]" if k.get("revoked_at") else "[green]Active[/green]"
+        rpm_str = "unlimited" if not k.get("rate_limit_rpm") else str(k["rate_limit_rpm"])
+        tpd_str = "unlimited" if not k.get("rate_limit_tpd") else f"{k['rate_limit_tpd']:,}"
+        cache_str = k.get("cache_scope", "shared")
+        
+        allowed_raw = k.get("allowed_models", "[]")
+        try:
+            allowed = json.loads(allowed_raw) if isinstance(allowed_raw, str) else allowed_raw
+        except Exception:
+            allowed = []
+        models_str = "*" if not allowed else f"{len(allowed)} models"
+
+        table.add_row(
+            str(k["id"]),
+            k["name"],
+            f"{k['prefix']}...",
+            rpm_str,
+            tpd_str,
+            cache_str,
+            models_str,
+            created_str,
+            used_str,
+            status
+        )
+
+    console.print(table)
+
+@keys_app.command("list")
+def keys_list():
+    """List all registered Client Gateway API keys with policy limits."""
+    _list_keys_handler()
+
+@auth_app.command("list-keys")
+def auth_list_keys():
+    """List all registered API keys (legacy alias for `prime-gate keys list`)."""
+    _list_keys_handler()
+
+def _revoke_key_handler(target: str):
+    success = db.revoke_api_key(target)
+    if success:
+        console.print(f"[bold green]API Key '{target}' has been successfully revoked.[/bold green]")
+    else:
+        console.print(f"[bold red]Failed to revoke key '{target}'. Key not found or already revoked.[/bold red]")
+
+@keys_app.command("revoke")
+def keys_revoke(
+    target: str = typer.Argument(..., help="Numeric ID or exact name of the API key to revoke.")
+):
+    """Revoke an active API key immediately."""
+    _revoke_key_handler(target)
+
+@auth_app.command("revoke-key")
+def auth_revoke_key(
+    target: str = typer.Argument(..., help="Numeric ID or exact name of the API key to revoke.")
+):
+    """Revoke an active API key immediately."""
+    _revoke_key_handler(target)
 
 @app.command("check-models")
 @app.command("models")
@@ -457,7 +602,26 @@ def db_test_corrupt(
     db.simulate_corruption(key)
     console.print(f"[bold green][OK] Corruption successfully simulated! Check the logs above for [DATABASE_CORRUPT] alerts.[/bold green]")
 
-@db_app.command("daemon")
+@db_app.command("rotate-key")
+def db_rotate_key():
+    """Rotate the AES-256-GCM master database encryption key and re-encrypt all records."""
+    console.print("[yellow]Rotating database master encryption key...[/yellow]")
+    try:
+        db.rotate_database_key()
+        console.print("[bold green][OK] Master encryption key successfully rotated and all records re-encrypted with AES-256-GCM![/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Key rotation failed: {e}[/bold red]")
+
+@db_app.command("rollback")
+def db_rollback():
+    """Roll back the database to the most recent backup."""
+    success, detail = db.rollback_latest_backup()
+    if success:
+        console.print(f"[bold green][OK] Database successfully rolled back from backup: {detail}[/bold green]")
+    else:
+        console.print(f"[bold red]Rollback failed: {detail}[/bold red]")
+
+db_app.command("daemon")
 def db_daemon_run(
     interval: int = typer.Option(30, "--interval", "-i", help="Audit interval in seconds.")
 ):

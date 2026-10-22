@@ -11,8 +11,8 @@ import argparse
 from typing import Dict, Any, List, Optional, AsyncGenerator
 
 import httpx
-from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from fastapi.responses import JSONResponse, StreamingResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -21,6 +21,7 @@ from .config import (
     DEFAULT_HOST, DEFAULT_API_PORT, ANTIGRAVITY_ENDPOINT,
     MODELS_CATALOG
 )
+from .cache import ContextKeyExtractor, SemanticVectorEngine
 from .auth import AccountManager, get_access_token
 from .quota import QuotaMonitor
 from .translator import (
@@ -46,15 +47,42 @@ from .sentinel.loop_guard import AgentLoopGuard
 from .translator.thought_cache import thought_sig_cache
 from .search import search_web
 from .client_pool import get_shared_client, close_shared_client
+from urllib.parse import urlparse
+from .logging.redactor import Redactor, RedactingLogFilter, RedactingFormatter, RedactingJsonFormatter
+from .security.middleware import (
+    HostValidationMiddleware,
+    StrictOriginMiddleware,
+    CSRFMiddleware,
+    SecurityHeadersMiddleware,
+    RequestTracingMiddleware,
+    _get_allowed_hosts
+)
+from .metrics import metrics as prom_metrics
+from .security.rate_limiter import KeyRateLimiter
+from .crypto.auth_manager import (
+    AuthManager,
+    COOKIE_SESSION_NAME,
+    COOKIE_CSRF_NAME,
+    HEADER_CSRF_NAME
+)
 
+is_json_log = os.getenv("LOG_FORMAT", "").lower() == "json"
+root_fmt = RedactingJsonFormatter() if is_json_log else RedactingFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+# Connect Python logging directly to WebSocket real-time broadcast with redaction filter
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("prime_gate.server")
 
-# Connect Python logging directly to WebSocket real-time broadcast
+for h in logging.getLogger().handlers:
+    h.setFormatter(root_fmt)
+    h.addFilter(RedactingLogFilter())
+
 ws_handler = WebSocketLogHandler(event_bus)
 ws_handler.setLevel(logging.INFO)
-ws_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+ws_handler.addFilter(RedactingLogFilter())
+ws_handler.setFormatter(root_fmt)
 logging.getLogger().addHandler(ws_handler)
+logging.getLogger().addFilter(RedactingLogFilter())
 
 app = FastAPI(
     title="Prime Gate Antigravity Proxy",
@@ -62,9 +90,25 @@ app = FastAPI(
     description="High-performance OpenAI-compatible gateway for Google Antigravity"
 )
 
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    headers = exc.headers or {}
+    if isinstance(exc.detail, dict) and 'error' in exc.detail:
+        return JSONResponse(status_code=exc.status_code, content=exc.detail, headers=headers)
+    elif isinstance(exc.detail, dict):
+        return JSONResponse(status_code=exc.status_code, content={'error': exc.detail}, headers=headers)
+    else:
+        return JSONResponse(status_code=exc.status_code, content={'error': {'message': str(exc.detail)}}, headers=headers)
+
+app.add_middleware(RequestTracingMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CSRFMiddleware)
+app.add_middleware(StrictOriginMiddleware)
+app.add_middleware(HostValidationMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,12 +118,259 @@ account_mgr = AccountManager()
 START_TIME = time.time()
 _last_traffic_timestamp: float = time.time()
 
+
+# -------------------------------------------------------------
+# Authentication & Authorization Guards
+# -------------------------------------------------------------
+async def require_proxy_api_key(request: Request) -> Dict[str, Any]:
+    """
+    Validates API key for proxy endpoints (/v1/*).
+    Accepts Authorization: Bearer <key>, x-api-key header, or active dashboard session cookie.
+    Validates using constant-time hash comparison against active keys in database.
+    """
+    # 1. Allow authenticated dashboard sessions (UI calling proxy routes /v1/*)
+    session_id = request.cookies.get(COOKIE_SESSION_NAME)
+    if session_id and AuthManager.validate_session(session_id):
+        return {"type": "session", "session_id": session_id, "name": "dashboard-user"}
+
+    # 2. Check API key via headers
+    auth_header = request.headers.get("authorization", "")
+    api_key_header = request.headers.get("x-api-key", "")
+    raw_key = ""
+    if auth_header.lower().startswith("bearer "):
+        raw_key = auth_header[7:].strip()
+    elif api_key_header:
+        raw_key = api_key_header.strip()
+
+    if not raw_key:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "message": "Unauthorized: Valid API key required. Provide via 'Authorization: Bearer <key>' or 'x-api-key' header.",
+                    "type": "authentication_error",
+                    "code": "missing_api_key"
+                }
+            }
+        )
+
+    active_keys = db.get_active_api_keys()
+    matched = AuthManager.verify_api_key(raw_key, active_keys)
+    if not matched:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "error": {
+                    "message": "Unauthorized: Invalid or revoked API key.",
+                    "type": "authentication_error",
+                    "code": "invalid_api_key"
+                }
+            }
+        )
+
+    # Policy Enforcement: RPM, TPD, and Quota check for Client Gateway API Key
+    limiter_err = KeyRateLimiter.check_limits(matched, request.url.path)
+    if limiter_err:
+        raise limiter_err
+
+    db.update_api_key_last_used(matched["id"])
+    return matched
+
+
+async def require_dashboard_session(request: Request) -> Dict[str, Any]:
+    """
+    Validates dashboard session cookie or API key for /api/* administrative endpoints.
+    """
+    session_id = request.cookies.get(COOKIE_SESSION_NAME)
+    if session_id and AuthManager.validate_session(session_id):
+        return {"type": "session", "session_id": session_id}
+
+    # Fallback: check if API key was provided
+    auth_header = request.headers.get("authorization", "")
+    api_key_header = request.headers.get("x-api-key", "")
+    raw_key = ""
+    if auth_header.lower().startswith("bearer "):
+        raw_key = auth_header[7:].strip()
+    elif api_key_header:
+        raw_key = api_key_header.strip()
+
+    if raw_key:
+        active_keys = db.get_active_api_keys()
+        matched = AuthManager.verify_api_key(raw_key, active_keys)
+        if matched:
+            db.update_api_key_last_used(matched["id"])
+            return {"type": "api_key", "record": matched}
+
+    raise HTTPException(
+        status_code=401,
+        detail={
+            "error": {
+                "message": "Authentication required. Please log in with your API key.",
+                "type": "authentication_error",
+                "code": "session_expired"
+            }
+        }
+    )
+
+
+# -------------------------------------------------------------
+# Dashboard Session Management Endpoints
+# -------------------------------------------------------------
+@app.post("/api/auth/session")
+async def api_auth_session_login(request: Request):
+    """
+    Logs into the Dashboard using an API Key.
+    Issues HttpOnly SameSite=Strict session cookie and double-submit CSRF token.
+    Enforces brute-force rate limiting.
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    is_limited, remaining = AuthManager.is_rate_limited(client_ip)
+    if is_limited:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "message": f"Too many failed login attempts. Please wait {remaining} seconds.",
+                    "type": "rate_limit_error",
+                    "code": "rate_limited"
+                }
+            }
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    api_key = (body.get("api_key") or "").strip()
+    if not api_key:
+        AuthManager.record_login_attempt(client_ip, False)
+        raise HTTPException(status_code=400, detail={"error": {"message": "api_key is required", "code": "missing_key"}})
+
+    active_keys = db.get_active_api_keys()
+    matched = AuthManager.verify_api_key(api_key, active_keys)
+    if not matched:
+        AuthManager.record_login_attempt(client_ip, False)
+        raise HTTPException(status_code=401, detail={"error": {"message": "Invalid API Key", "code": "invalid_key"}})
+
+    AuthManager.record_login_attempt(client_ip, True)
+    session_id, csrf_token = AuthManager.create_session()
+    is_secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+    response = JSONResponse(content={
+        "success": True,
+        "message": "Dashboard session established successfully",
+        "csrf_token": csrf_token,
+        "key_name": matched.get("name")
+    })
+    response.set_cookie(
+        key=COOKIE_SESSION_NAME,
+        value=session_id,
+        httponly=True,
+        samesite="strict",
+        secure=is_secure,
+        path="/",
+        max_age=86400
+    )
+    response.set_cookie(
+        key=COOKIE_CSRF_NAME,
+        value=csrf_token,
+        httponly=False,
+        samesite="strict",
+        secure=is_secure,
+        path="/",
+        max_age=86400
+    )
+    return response
+
+
+@app.post("/api/auth/session/logout")
+async def api_auth_session_logout(request: Request):
+    """Logs out and clears session cookies."""
+    session_id = request.cookies.get(COOKIE_SESSION_NAME)
+    AuthManager.destroy_session(session_id)
+    response = JSONResponse(content={"success": True, "message": "Logged out successfully"})
+    response.delete_cookie(key=COOKIE_SESSION_NAME, path="/")
+    response.delete_cookie(key=COOKIE_CSRF_NAME, path="/")
+    return response
+
+
+@app.get("/api/auth/session/status")
+async def api_auth_session_status(request: Request):
+    """Returns whether the current dashboard session is valid."""
+    session_id = request.cookies.get(COOKIE_SESSION_NAME)
+    is_valid = AuthManager.validate_session(session_id)
+    csrf = AuthManager.get_csrf_token_for_session(session_id) if is_valid else None
+    return {
+        "authenticated": is_valid,
+        "csrf_token": csrf
+    }
+
+
+@app.get("/api/auth/keys")
+async def api_auth_list_keys(auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)):
+    """Lists registered API keys with redacted secrets."""
+    return {"keys": db.list_api_keys()}
+
+
+@app.post("/api/auth/keys")
+async def api_auth_create_key(request: Request, auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)):
+    """Creates a new Client Gateway API key with granular policies and returns the raw key once."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    name = body.get("name", "api-client")
+    rate_limit_rpm = int(body.get("rate_limit_rpm", 0) or 0)
+    rate_limit_tpd = int(body.get("rate_limit_tpd", 0) or 0)
+    quota_credits = float(body.get("quota_credits", 0.0) or 0.0)
+    allowed_models = body.get("allowed_models", "[]")
+    cache_scope = body.get("cache_scope", "shared")
+
+    raw_key, record = db.create_api_key(
+        name=name,
+        rate_limit_rpm=rate_limit_rpm,
+        rate_limit_tpd=rate_limit_tpd,
+        quota_credits=quota_credits,
+        allowed_models=allowed_models,
+        cache_scope=cache_scope
+    )
+    return {
+        "success": True,
+        "raw_key": raw_key,
+        "key": {
+            "id": record["id"],
+            "name": record["name"],
+            "prefix": record["prefix"],
+            "created_at": record["created_at"],
+            "rate_limit_rpm": record.get("rate_limit_rpm", 0),
+            "rate_limit_tpd": record.get("rate_limit_tpd", 0),
+            "quota_credits": record.get("quota_credits", 0.0),
+            "allowed_models": record.get("allowed_models", "[]"),
+            "cache_scope": record.get("cache_scope", "shared")
+        }
+    }
+
+
+@app.delete("/api/auth/keys/{key_id}")
+async def api_auth_revoke_key(key_id: str, auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)):
+    """Revokes an API key."""
+    success = db.revoke_api_key(key_id)
+    return {"success": success}
+
 @app.on_event("startup")
 async def on_startup():
     import asyncio
     event_bus.set_loop(asyncio.get_running_loop())
     await sentinel.start()
-    logger.info("Prime Gate Engine active with Compiled Binary Database (WAL Mode + CRC32 Sentinel)")
+    # Ensure default API key is present
+    initial_key = db.ensure_default_api_key()
+    if initial_key:
+        logger.info("=" * 68)
+        logger.info("INITIAL SETUP: Generated default Prime Gate API Key:")
+        logger.info(f"API Key: {initial_key}")
+        logger.info("=" * 68)
+    logger.info("Prime Gate Engine active with SQLite WAL Database (CRC32 Record Integrity Checking)")
 
     # Auto-load models & verify quota on daemon startup if user is logged in
     active_acc = account_mgr.get_active_account()
@@ -91,7 +382,7 @@ async def on_startup():
             try:
                 models = await QuotaMonitor.fetch_live_models_from_antigravity(active_acc, force_refresh=True)
                 quota = await QuotaMonitor.fetch_live_quota_from_antigravity(active_acc, force_refresh=True)
-                logger.info(f"[STARTUP SYNC] Successfully loaded {len(models)} live models and {len(quota)} quota buckets into binary DB for {email}.")
+                logger.info(f"[STARTUP SYNC] Successfully loaded {len(models)} live models and {len(quota)} quota buckets into database for {email}.")
                 try:
                     event_bus.broadcast_sync({
                         "type": "MODELS_UPDATED",
@@ -102,7 +393,22 @@ async def on_startup():
                 except Exception:
                     pass
             except Exception as e:
-                logger.warning(f"[STARTUP SYNC] Startup sync deferred (will use binary DB cached models): {e}")
+                logger.warning(f"[STARTUP SYNC] Startup sync deferred (will use DB cached models): {e}")
+
+            # Background refresh any other configured accounts so all DB snapshots remain fresh
+            try:
+                all_accs = account_mgr.load_accounts()
+                for acc in all_accs:
+                    acc_email = acc.get("email")
+                    if acc_email and acc_email != email:
+                        try:
+                            await QuotaMonitor.fetch_live_models_from_antigravity(acc, force_refresh=True)
+                            await QuotaMonitor.fetch_live_quota_from_antigravity(acc, force_refresh=True)
+                            logger.info(f"[STARTUP SYNC] Background refreshed models & quota for {acc_email}")
+                        except Exception as acc_err:
+                            logger.debug(f"[STARTUP SYNC] Background sync for {acc_email} deferred: {acc_err}")
+            except Exception:
+                pass
 
         asyncio.create_task(_startup_sync())
 
@@ -160,7 +466,8 @@ async def root_index():
 async def v1_health_check(
     limit: int = 50,
     level: Optional[str] = None,
-    refresh: bool = False
+    refresh: bool = False,
+    probe: Optional[str] = None
 ):
     """
     Comprehensive gateway health & telemetry endpoint:
@@ -169,10 +476,33 @@ async def v1_health_check(
     - Compiled binary database state and integrity verification
     - In-memory token telemetry KPIs and throughput
     - Structured chronological log history of gateway and upstream API events
+    - Kubernetes / Docker liveness & readiness probe responses
     """
     now = time.time()
     active_acc = account_mgr.get_active_account()
     accounts = account_mgr.load_accounts()
+    uptime_s = int(now - START_TIME)
+
+    db_status = db.get_status()
+    db_writable = db_status.get("size_bytes", 0) > 0 or db_status.get("accessible", True)
+
+    liveness_info = {
+        "status": "ok",
+        "uptime_seconds": uptime_s,
+        "pid": os.getpid()
+    }
+    readiness_info = {
+        "status": "ready" if (len(accounts) > 0 and db_writable) else "degraded",
+        "active_accounts": len(accounts),
+        "primary_account": active_acc.get("email") if active_acc else None,
+        "db_wal_writable": db_writable
+    }
+
+    if probe == "liveness":
+        return JSONResponse(status_code=200, content=liveness_info)
+    elif probe == "readiness":
+        status_code = 200 if (len(accounts) > 0 or db_writable) else 503
+        return JSONResponse(status_code=status_code, content=readiness_info)
 
     # 1. Evaluate Model Health across all models
     models_health = await QuotaMonitor.get_models_health(active_acc, force_refresh=refresh)
@@ -185,12 +515,9 @@ async def v1_health_check(
         quota_summary = []
         tier_label = "Unauthenticated"
 
-    # 3. Database status & integrity
-    db_status = db.get_status()
-
     # 4. Telemetry metrics snapshot
-    metrics = telemetry.get_metrics(time_range="1h")
-    telemetry_summary = metrics.get("summary", {})
+    telem_snap = telemetry.get_metrics(time_range="1h")
+    telemetry_summary = telem_snap.get("summary", {})
 
     # 5. Recent Logs from memory ring buffer
     safe_limit = max(1, min(limit, 500))
@@ -207,7 +534,9 @@ async def v1_health_check(
         "status": overall_status,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
         "epoch": round(now, 3),
-        "uptime_seconds": int(now - START_TIME),
+        "uptime_seconds": uptime_s,
+        "liveness": liveness_info,
+        "readiness": readiness_info,
         "gateway": {
             "service": "prime-gate-proxy-antigravity-lik",
             "version": __version__,
@@ -236,9 +565,42 @@ async def v1_health_check(
         "recent_logs": recent_logs
     }
 
+
+@app.get("/health/liveness")
+async def health_liveness_endpoint():
+    """Liveness probe: verifies server process is alive and responding."""
+    return JSONResponse(status_code=200, content={
+        "status": "ok",
+        "uptime_seconds": int(time.time() - START_TIME),
+        "pid": os.getpid()
+    })
+
+
+@app.get("/health/readiness")
+async def health_readiness_endpoint():
+    """Readiness probe: verifies at least 1 account is configured and DB is writable."""
+    accounts = account_mgr.load_accounts()
+    db_status = db.get_status()
+    db_writable = db_status.get("size_bytes", 0) > 0 or db_status.get("accessible", True)
+    ready = bool(accounts) and db_writable
+    status_code = 200 if (ready or db_writable) else 503
+    return JSONResponse(status_code=status_code, content={
+        "status": "ready" if ready else "degraded",
+        "active_accounts": len(accounts),
+        "db_wal_writable": db_writable
+    })
+
+
+@app.get("/metrics")
+async def prometheus_metrics_endpoint():
+    """Prometheus exposition format /metrics endpoint."""
+    prom_metrics.set_active_accounts(len(account_mgr.load_accounts()))
+    content = prom_metrics.render_prometheus_text()
+    return Response(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
+
 @app.get("/v1/models")
 @app.get("/models")
-async def list_models(request: Request, refresh: bool = False, format: Optional[str] = None):
+async def list_models(request: Request, refresh: bool = False, format: Optional[str] = None, _auth: Dict[str, Any] = Depends(require_proxy_api_key)):
     """Dynamically resolved models list endpoint supporting both OpenAI and Anthropic schemas."""
     active_acc = account_mgr.get_active_account()
     if active_acc:
@@ -322,7 +684,7 @@ async def api_models_list(refresh: bool = False):
 
 @app.get("/v1/models/{model_id:path}")
 @app.get("/models/{model_id:path}")
-async def get_model(model_id: str):
+async def get_model(model_id: str, _auth: Dict[str, Any] = Depends(require_proxy_api_key)):
     """OpenAI standard retrieve model endpoint."""
     active_acc = account_mgr.get_active_account()
     if active_acc:
@@ -549,6 +911,19 @@ async def _background_auto_update_worker():
             db.set_auto_update_config({"last_checked": time.time()})
 
             if sync_status.get("update_available"):
+                try:
+                    event_bus.broadcast_sync({
+                        "type": "SYSTEM_UPDATE_AVAILABLE",
+                        "status": sync_status
+                    })
+                except Exception:
+                    pass
+
+                # Default is Notify-Only. Auto-apply requires explicit user opt-in.
+                if not cfg.get("auto_apply", False):
+                    logger.info("[AUTO-UPDATE] Update available (Notify-Only mode). Auto-apply is disabled by default.")
+                    await asyncio.sleep(interval)
+                    continue
                 logger.info(
                     f"[AUTO-UPDATE] Update available! Local: #{sync_status.get('current_commit')} "
                     f"vs Remote: #{sync_status.get('latest_commit')} ({sync_status.get('commits_behind')} behind). "
@@ -719,6 +1094,7 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
     models_count = 0
     quota_count = 0
     tier_label = QuotaMonitor.get_tier_label(switched)
+    models = []
     quota = []
     try:
         models = await QuotaMonitor.fetch_live_models_from_antigravity(switched, force_refresh=True)
@@ -727,6 +1103,15 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
         quota_count = len(quota)
     except Exception as e:
         logger.warning(f"Live sync on switch account {target_email} deferred: {e}")
+        db_models = db.get(f"models:{target_email}")
+        if db_models and db_models.get("models"):
+            models = [QuotaMonitor.build_model_spec(m["id"], m) for m in db_models["models"]]
+            models_count = len(models)
+            db.set("models:latest", db_models, REC_MODEL)
+        db_quota = db.get(f"quota:{target_email}")
+        if db_quota and db_quota.get("quota"):
+            quota = db_quota["quota"]
+            quota_count = len(quota)
 
     try:
         event_bus.broadcast_sync({
@@ -735,13 +1120,15 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
             "tier": tier_label,
             "models_count": models_count,
             "quota_count": quota_count,
-            "quota": quota
+            "quota": quota,
+            "models": models
         })
         event_bus.broadcast_sync({
             "type": "MODELS_UPDATED",
             "account": switched.get("email"),
             "models_count": models_count,
-            "tier": tier_label
+            "tier": tier_label,
+            "models": models
         })
     except Exception:
         pass
@@ -752,7 +1139,9 @@ async def api_auth_switch(request: Request, email: Optional[str] = None):
         "active_account": switched.get("email"),
         "tier": tier_label,
         "models_count": models_count,
-        "quota_count": quota_count
+        "quota_count": quota_count,
+        "models": models,
+        "quota": quota
     }
 
 @app.post("/api/auth/remove")
@@ -815,6 +1204,22 @@ async def api_auth_clear():
 @app.websocket("/ws/live")
 @app.websocket("/ws/db")
 async def websocket_live_endpoint(websocket: WebSocket):
+    # 1. Validate Origin header (mitigates cross-site WebSocket hijacking from localhost)
+    origin = websocket.headers.get("origin")
+    if origin:
+        parsed = urlparse(origin)
+        allowed = _get_allowed_hosts()
+        if (parsed.hostname or "").lower() not in allowed:
+            await websocket.close(code=4003)
+            return
+
+    # 2. Validate session cookie or token query parameter
+    session_id = websocket.cookies.get(COOKIE_SESSION_NAME)
+    if not (session_id and AuthManager.validate_session(session_id)):
+        query_token = websocket.query_params.get("session_id")
+        if not (query_token and AuthManager.validate_session(query_token)):
+            await websocket.close(code=4001)
+            return
     """
     Real-time bidirectional WebSocket stream:
     - Broadcasts live database mutations & health snapshots
@@ -1246,62 +1651,26 @@ async def api_set_cache_config(request: Request):
 def compute_cache_key(
     model: str,
     messages: List[Dict[str, Any]],
-    tools: Optional[List[Dict[str, Any]]] = None
-) -> tuple[str, str, str, str, str]:
+    system_prompt: Optional[Any] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    generation_params: Optional[Dict[str, Any]] = None,
+    api_key_prefix: str = "default",
+    project_id: Optional[str] = None
+) -> tuple[str, str, str, str, str, str, bool]:
     """
-    Computes a deterministic SHA256 cache key from model name and conversation messages,
-    extracts the last user query for semantic embedding, and extracts a normalized tools signature.
-    Returns: (cache_key, prompt_hash, prompt_preview, last_user_query, tools_signature)
+    Computes deterministic context-aware cache key tuple using ContextKeyExtractor.
+    Returns: (cache_key, context_hash, last_user_query, query_hash, tools_sig, scope, has_tools)
     """
-    norm_messages = []
-    preview = ""
-    last_user_query = ""
-
-    for m in messages:
-        role = m.get("role", "")
-        content = m.get("content", "")
-        if isinstance(content, list):
-            c_str = ""
-            for p in content:
-                if isinstance(p, dict) and p.get("type") == "text":
-                    c_str += p.get("text", "")
-                elif isinstance(p, str):
-                    c_str += p
-            content = c_str
-        elif not isinstance(content, str):
-            content = str(content)
-        
-        clean_content = content.strip()
-        norm_messages.append({"role": role, "content": clean_content})
-
-        if role == "user":
-            last_user_query = clean_content
-            if not preview:
-                preview = clean_content[:200]
-
-    if not preview and norm_messages:
-        preview = str(norm_messages[-1].get("content", ""))[:200]
-    if not last_user_query and norm_messages:
-        last_user_query = str(norm_messages[-1].get("content", ""))
-
-    tools_sig = ""
-    if tools and isinstance(tools, list):
-        tool_names = []
-        for t in tools:
-            if isinstance(t, dict):
-                fn = t.get("function") if isinstance(t.get("function"), dict) else t
-                tool_names.append(fn.get("name", ""))
-        tools_sig = ",".join(sorted(filter(None, tool_names)))
-
-    payload_dict = {
-        "model": model,
-        "messages": norm_messages,
-        "tools_sig": tools_sig
-    }
-    canonical_repr = json.dumps(payload_dict, sort_keys=True, separators=(',', ':'))
-    prompt_hash = hashlib.sha256(canonical_repr.encode("utf-8")).hexdigest()
-    cache_key = f"cache:{model}:{prompt_hash[:32]}"
-    return cache_key, prompt_hash, preview, last_user_query, tools_sig
+    from prime_gate.cache.context_key import ContextKeyExtractor
+    return ContextKeyExtractor.compute(
+        model=model,
+        messages=messages,
+        system_prompt=system_prompt,
+        tools=tools,
+        generation_params=generation_params,
+        api_key_prefix=api_key_prefix,
+        project_id=project_id
+    )
 
 async def stream_cached_response_sse(
     completion_id: str,
@@ -1335,7 +1704,8 @@ async def stream_antigravity_sse(
     created: int,
     declared_tools: Optional[List[Dict[str, Any]]] = None,
     cache_meta: Optional[Dict[str, Any]] = None,
-    acquired_email: Optional[str] = None
+    acquired_email: Optional[str] = None,
+    key_id: Optional[int] = None
 ) -> AsyncGenerator[str, None]:
     """Stream SSE chunks from Google Antigravity with transparent mid-flight failover."""
     start_t = time.time()
@@ -1728,7 +2098,7 @@ async def stream_antigravity_sse(
                     last_q = cache_meta.get("last_user_query")
                     if last_q:
                         from prime_gate.cache.semantic import SemanticVectorEngine
-                        q_vec = SemanticVectorEngine.embed_text(last_q)
+                        q_vec = SemanticVectorEngine.embed_passage(last_q)
                         if q_vec is not None:
                             emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
 
@@ -1742,7 +2112,11 @@ async def stream_antigravity_sse(
                         completion_tokens=completion_tokens,
                         reasoning_tokens=reasoning_tokens,
                         embedding=emb_bytes,
-                        tools_signature=cache_meta.get("tools_sig")
+                        tools_signature=cache_meta.get("tools_sig"),
+                        scope=cache_meta.get("scope", "default"),
+                        context_hash=cache_meta.get("context_hash", ""),
+                        ttl_seconds=cache_meta.get("ttl", 86400),
+                        embedding_model=cache_meta.get("embedding_model")
                     )
                     event_bus.broadcast_sync({
                         "type": "CACHE_STORED",
@@ -1779,8 +2153,16 @@ async def stream_antigravity_sse(
                     stream=1,
                     quota_snapshot=quota_snap,
                     cache_hit=0,
-                    tokens_saved=0
+                    tokens_saved=0,
+                    key_id=key_id
                 )
+                if key_id:
+                    db.record_api_key_tokens(
+                        key_id=key_id,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        model=model
+                    )
             except Exception as e:
                 logger.error(f"Failed to record request hit to db: {e}")
 
@@ -1840,7 +2222,7 @@ async def stream_antigravity_sse(
 
 @app.post("/v1/chat/completions")
 @app.post("/chat/completions")
-async def chat_completions(request: Request):
+async def chat_completions(request: Request, _auth: Dict[str, Any] = Depends(require_proxy_api_key)):
     global _last_traffic_timestamp
     _last_traffic_timestamp = time.time()
     accounts = account_mgr.load_accounts()
@@ -1860,19 +2242,45 @@ async def chat_completions(request: Request):
     # -------------------------------------------------------------
     # 1. Smart Agent Context Compactor
     # -------------------------------------------------------------
+    user_agent = request.headers.get("user-agent", "")
+    target_model = str(body.get("model", ""))
+
+    # Policy Enforcement: Model whitelist check for Client Gateway API Key
+    model_err = KeyRateLimiter.check_model_allowed(_auth, target_model, request.url.path)
+    if model_err:
+        raise model_err
+
+    compactor_tokens_saved = 0
+    compactor_is_dry_run = bool(cache_cfg.get("compactor_dry_run", False))
+
     raw_messages = body.get("messages", [])
     if cache_cfg.get("compactor_enabled", True) and isinstance(raw_messages, list):
         compacted_messages, compactor_stats = ContextCompactor.compact_messages(
             messages=raw_messages,
+            config=cache_cfg,
             keep_recent_user_turns=cache_cfg.get("compactor_window_turns", cache_cfg.get("compactor_window", 3)),
-            max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40)
+            max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40),
+            client_name=user_agent,
+            model_name=target_model,
+            dry_run=compactor_is_dry_run,
+            preserve_errors=cache_cfg.get("compactor_preserve_errors", True),
+            preserve_re_references=cache_cfg.get("compactor_preserve_re_references", True),
         )
+        compactor_tokens_saved = compactor_stats.get("tokens_saved", 0)
+        compactor_is_dry_run = compactor_stats.get("dry_run", False)
         if compactor_stats.get("compacted"):
+            mode_lbl = " (DRY-RUN)" if compactor_is_dry_run else ""
             logger.info(
-                f"[COMPACTOR] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
-                f"saved ~{compactor_stats['chars_saved']} chars across {len(compacted_messages)} messages."
+                f"[COMPACTOR{mode_lbl}] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
+                f"saved ~{compactor_stats['tokens_saved']} tokens (~{compactor_stats['chars_saved']} chars)."
             )
-            body["messages"] = compacted_messages
+            if not compactor_is_dry_run:
+                body["messages"] = compacted_messages
+            if compactor_tokens_saved > 0:
+                try:
+                    db.record_compactor_tokens_saved(compactor_tokens_saved)
+                except Exception:
+                    pass
 
     # -------------------------------------------------------------
     # 2. AI Agent Runaway Loop Killer & Sentinel Guard
@@ -1911,17 +2319,40 @@ async def chat_completions(request: Request):
     body_no_cache = bool(body.get("cache") is False or body.get("no_cache") is True)
     has_tools = bool(body.get("tools"))
 
-    cache_key, prompt_hash, prompt_preview, last_user_query, tools_sig = compute_cache_key(
-        model, body.get("messages", []), tools=body.get("tools")
+    key_cache_scope = _auth.get("cache_scope", "shared") if isinstance(_auth, dict) else "shared"
+    if key_cache_scope == "key":
+        api_key_prefix = f"key_{_auth.get('id', 'default')}"
+    else:
+        api_key_prefix = _auth.get("prefix", "default") if isinstance(_auth, dict) else "default"
+    project_id = request.headers.get("x-project-id") or request.headers.get("x-primegate-project") or body.get("user")
+
+    cache_key, context_hash, last_user_query, query_hash, tools_sig, scope, has_tools = compute_cache_key(
+        model=model,
+        messages=body.get("messages", []),
+        system_prompt=None,
+        tools=body.get("tools"),
+        generation_params={
+            "temperature": body.get("temperature"),
+            "top_p": body.get("top_p"),
+            "max_tokens": body.get("max_tokens")
+        },
+        api_key_prefix=api_key_prefix,
+        project_id=project_id
     )
+    prompt_hash = query_hash
+    prompt_preview = last_user_query[:200]
 
     bypass_tools = cache_cfg.get("bypass_tools", False)
+    semantic_agent_enabled = cache_cfg.get("semantic_agent_enabled", False)
+    semantic_allowed = (not has_tools) or semantic_agent_enabled
+
     cache_eligible = (
         cache_cfg.get("enabled", True) and
+        key_cache_scope != "disabled" and
         not headers_no_cache and
         not body_no_cache and
         not (bypass_tools and has_tools) and
-        len(prompt_preview) >= cache_cfg.get("min_prompt_length", 5)
+        len(last_user_query) >= cache_cfg.get("min_prompt_length", 5)
     )
 
     cached_res = None
@@ -1929,26 +2360,28 @@ async def chat_completions(request: Request):
     similarity_score = 0.0
 
     if cache_eligible:
-        # Step A: 0ms Exact SHA-256 Hash Lookup
-        cached_res = db.get_cached_response(cache_key)
+        # Step A: 0ms Context-Aware Exact Hash Lookup
+        cached_res = db.get_cached_response(cache_key, scope=scope)
         if cached_res:
             hit_type = 1
             similarity_score = 1.0
         elif (
             cache_cfg.get("semantic_enabled", True) and
-            not has_tools and
-            len(body.get("messages", [])) <= 2 and
+            semantic_allowed and
             last_user_query
         ):
-            # Step B: Vector Cosine Similarity Search (FastEmbed ONNX)
+            # Step B: Context-Bound Vector Cosine Similarity Search
             try:
                 from prime_gate.cache.semantic import SemanticVectorEngine
-                q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                q_vec = SemanticVectorEngine.embed_query(last_user_query)
+                threshold = cache_cfg.get("semantic_threshold_agent", 0.96) if has_tools else cache_cfg.get("semantic_threshold_chat", cache_cfg.get("semantic_threshold", 0.93))
                 if q_vec is not None:
                     sem_match = db.find_semantic_match(
                         model=model,
                         query_vec=q_vec,
-                        threshold=cache_cfg.get("semantic_threshold", 0.93),
+                        scope=scope,
+                        context_hash=context_hash,
+                        threshold=threshold,
                         tools_signature=tools_sig
                     )
                     if sem_match:
@@ -2016,6 +2449,8 @@ async def chat_completions(request: Request):
         cache_headers = {
             "X-Cache": "HIT",
             "X-Cache-Type": "EXACT" if hit_type == 1 else "SEMANTIC",
+            "X-Cache-Similarity": f"{similarity_score:.4f}",
+            "X-Cache-Key-Scope": scope,
             "X-Similarity": f"{similarity_score:.3f}",
             "X-Tokens-Saved": str(tokens_saved)
         }
@@ -2076,7 +2511,8 @@ async def chat_completions(request: Request):
                     created=created,
                     declared_tools=body.get("tools"),
                     cache_meta=cache_meta,
-                    acquired_email=primary_email
+                    acquired_email=primary_email,
+                    key_id=_auth.get("id") if isinstance(_auth, dict) else None
                 ),
                 media_type="text/event-stream"
             )
@@ -2214,7 +2650,7 @@ async def chat_completions(request: Request):
                         emb_bytes = None
                         if last_user_query:
                             from prime_gate.cache.semantic import SemanticVectorEngine
-                            q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                            q_vec = SemanticVectorEngine.embed_passage(last_user_query)
                             if q_vec is not None:
                                 emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
 
@@ -2228,7 +2664,11 @@ async def chat_completions(request: Request):
                             completion_tokens=completion_tokens,
                             reasoning_tokens=reasoning_tokens,
                             embedding=emb_bytes,
-                            tools_signature=tools_sig
+                            tools_signature=tools_sig,
+                            scope=scope,
+                            context_hash=context_hash,
+                            ttl_seconds=cache_cfg.get("ttl_seconds", 86400),
+                            embedding_model=cache_cfg.get("embedding_model")
                         )
                         event_bus.broadcast_sync({
                             "type": "CACHE_STORED",
@@ -2265,8 +2705,16 @@ async def chat_completions(request: Request):
                         stream=0,
                         quota_snapshot=quota_snap,
                         cache_hit=0,
-                        tokens_saved=0
+                        tokens_saved=0,
+                        key_id=_auth.get("id") if isinstance(_auth, dict) else None
                     )
+                    if isinstance(_auth, dict) and _auth.get("id"):
+                        db.record_api_key_tokens(
+                            key_id=_auth["id"],
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
+                            model=model
+                        )
                 except Exception as e:
                     logger.error(f"Failed to record request hit to db: {e}")
 
@@ -2324,7 +2772,7 @@ async def chat_completions(request: Request):
                         "reasoning_tokens": reasoning_tokens
                     }
                 )
-                return JSONResponse(content=resp_json, headers={"X-Cache": "MISS"})
+                return JSONResponse(content=resp_json, headers={"X-Cache": "MISS", "X-Cache-Type": "NONE", "X-Cache-Similarity": "0.0", "X-Cache-Key-Scope": scope})
 
         except Exception as e:
             last_error = e
@@ -2342,7 +2790,7 @@ async def chat_completions(request: Request):
 
 @app.post("/v1/messages/count_tokens")
 @app.post("/messages/count_tokens")
-async def count_tokens(request: Request):
+async def count_tokens(request: Request, _auth: Dict[str, Any] = Depends(require_proxy_api_key)):
     """Calculates input tokens before generation (used by Cline, Claude Code CLI, etc.)."""
     try:
         body = await request.json()
@@ -2354,7 +2802,7 @@ async def count_tokens(request: Request):
 
 @app.post("/v1/messages")
 @app.post("/messages")
-async def anthropic_messages(request: Request):
+async def anthropic_messages(request: Request, _auth: Dict[str, Any] = Depends(require_proxy_api_key)):
     global _last_traffic_timestamp
     _last_traffic_timestamp = time.time()
     """
@@ -2383,24 +2831,60 @@ async def anthropic_messages(request: Request):
     internal_msgs = anthropic_to_openai_messages(body)
 
     # 2. Smart Agent Context Compactor
+    user_agent = request.headers.get("user-agent", "")
+    target_model = str(body.get("model", ""))
+
+    # Policy Enforcement: Model whitelist check for Client Gateway API Key
+    model_err = KeyRateLimiter.check_model_allowed(_auth, target_model, request.url.path)
+    if model_err:
+        raise model_err
+
+    compactor_tokens_saved = 0
+    compactor_is_dry_run = bool(cache_cfg.get("compactor_dry_run", False))
+
     if cache_cfg.get("compactor_enabled", True) and internal_msgs:
         compacted_msgs, compactor_stats = ContextCompactor.compact_messages(
             messages=internal_msgs,
+            config=cache_cfg,
             keep_recent_user_turns=cache_cfg.get("compactor_window_turns", cache_cfg.get("compactor_window", 3)),
-            max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40)
+            max_tool_output_lines=cache_cfg.get("compactor_max_tool_lines", 40),
+            client_name=user_agent,
+            model_name=target_model,
+            dry_run=compactor_is_dry_run,
+            preserve_errors=cache_cfg.get("compactor_preserve_errors", True),
+            preserve_re_references=cache_cfg.get("compactor_preserve_re_references", True),
         )
+        compactor_tokens_saved = compactor_stats.get("tokens_saved", 0)
+        compactor_is_dry_run = compactor_stats.get("dry_run", False)
         if compactor_stats.get("compacted"):
+            mode_lbl = " (DRY-RUN)" if compactor_is_dry_run else ""
             logger.info(
-                f"[COMPACTOR (ANTHROPIC)] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
-                f"saved ~{compactor_stats['chars_saved']} chars."
+                f"[COMPACTOR (ANTHROPIC){mode_lbl}] Compacted {compactor_stats['pruned_tool_messages']} tool outputs, "
+                f"saved ~{compactor_stats['tokens_saved']} tokens (~{compactor_stats['chars_saved']} chars)."
             )
+            if not compactor_is_dry_run:
+                internal_msgs = compacted_msgs
+            if compactor_tokens_saved > 0:
+                try:
+                    db.record_compactor_tokens_saved(compactor_tokens_saved)
+                except Exception:
+                    pass
+
         # Apply compaction to native Anthropic request body messages
         if isinstance(body.get("messages"), list):
-            body["messages"] = ContextCompactor.compact_anthropic_body_messages(
+            compacted_anthropic = ContextCompactor.compact_anthropic_body_messages(
                 body.get("messages", []),
+                config=cache_cfg,
                 window_tools=cache_cfg.get("compactor_window_tools", 2),
-                max_tool_chars=cache_cfg.get("compactor_max_chars", 600)
+                max_tool_chars=cache_cfg.get("compactor_max_chars", 600),
+                client_name=user_agent,
+                model_name=target_model,
+                dry_run=compactor_is_dry_run,
+                preserve_errors=cache_cfg.get("compactor_preserve_errors", True),
+                preserve_re_references=cache_cfg.get("compactor_preserve_re_references", True),
             )
+            if not compactor_is_dry_run:
+                body["messages"] = compacted_anthropic
 
     # 3. AI Agent Runaway Loop Guard
     if cache_cfg.get("loop_guard_enabled", True) and internal_msgs:
@@ -2432,17 +2916,44 @@ async def anthropic_messages(request: Request):
     body_no_cache = bool(body.get("cache") is False or body.get("no_cache") is True)
     has_tools = bool(body.get("tools"))
 
-    cache_key, prompt_hash, prompt_preview, last_user_query, tools_sig = compute_cache_key(
-        model, internal_msgs, tools=body.get("tools")
+    key_cache_scope = _auth.get("cache_scope", "shared") if isinstance(_auth, dict) else "shared"
+    if key_cache_scope == "key":
+        api_key_prefix = f"key_{_auth.get('id', 'default')}"
+    else:
+        api_key_prefix = _auth.get("prefix", "default") if isinstance(_auth, dict) else "default"
+    project_id = (
+        request.headers.get("x-project-id") or
+        request.headers.get("x-primegate-project") or
+        (body.get("metadata", {}).get("user_id") if isinstance(body.get("metadata"), dict) else None)
     )
 
+    cache_key, context_hash, last_user_query, query_hash, tools_sig, scope, has_tools = compute_cache_key(
+        model=model,
+        messages=internal_msgs,
+        system_prompt=body.get("system"),
+        tools=body.get("tools"),
+        generation_params={
+            "temperature": body.get("temperature"),
+            "top_p": body.get("top_p"),
+            "max_tokens": body.get("max_tokens")
+        },
+        api_key_prefix=api_key_prefix,
+        project_id=project_id
+    )
+    prompt_hash = query_hash
+    prompt_preview = last_user_query[:200]
+
     bypass_tools = cache_cfg.get("bypass_tools", False)
+    semantic_agent_enabled = cache_cfg.get("semantic_agent_enabled", False)
+    semantic_allowed = (not has_tools) or semantic_agent_enabled
+
     cache_eligible = (
         cache_cfg.get("enabled", True) and
+        key_cache_scope != "disabled" and
         not headers_no_cache and
         not body_no_cache and
         not (bypass_tools and has_tools) and
-        len(prompt_preview) >= cache_cfg.get("min_prompt_length", 5)
+        len(last_user_query) >= cache_cfg.get("min_prompt_length", 5)
     )
 
     cached_res = None
@@ -2450,24 +2961,26 @@ async def anthropic_messages(request: Request):
     similarity_score = 0.0
 
     if cache_eligible:
-        cached_res = db.get_cached_response(cache_key)
+        cached_res = db.get_cached_response(cache_key, scope=scope)
         if cached_res:
             hit_type = 1
             similarity_score = 1.0
         elif (
             cache_cfg.get("semantic_enabled", True) and
-            not has_tools and
-            len(body.get("messages", [])) <= 2 and
+            semantic_allowed and
             last_user_query
         ):
             try:
                 from prime_gate.cache.semantic import SemanticVectorEngine
-                q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                q_vec = SemanticVectorEngine.embed_query(last_user_query)
+                threshold = cache_cfg.get("semantic_threshold_agent", 0.96) if has_tools else cache_cfg.get("semantic_threshold_chat", cache_cfg.get("semantic_threshold", 0.93))
                 if q_vec is not None:
                     sem_match = db.find_semantic_match(
                         model=model,
                         query_vec=q_vec,
-                        threshold=cache_cfg.get("semantic_threshold", 0.93),
+                        scope=scope,
+                        context_hash=context_hash,
+                        threshold=threshold,
                         tools_signature=tools_sig
                     )
                     if sem_match:
@@ -2574,9 +3087,12 @@ async def anthropic_messages(request: Request):
         "cache_key": cache_key,
         "prompt_hash": prompt_hash,
         "preview": prompt_preview,
-        "ttl": cache_cfg.get("ttl_seconds", 86400 * 7),
+        "ttl": cache_cfg.get("ttl_seconds", 86400),
         "last_user_query": last_user_query,
-        "tools_sig": tools_sig
+        "tools_sig": tools_sig,
+        "scope": scope,
+        "context_hash": context_hash,
+        "embedding_model": cache_cfg.get("embedding_model")
     }
 
     if stream:
@@ -2590,7 +3106,8 @@ async def anthropic_messages(request: Request):
                     created=created,
                     declared_tools=body.get("tools"),
                     cache_meta=cache_meta,
-                    acquired_email=primary_email
+                    acquired_email=primary_email,
+                    key_id=_auth.get("id") if isinstance(_auth, dict) else None
                 ),
                 media_type="text/event-stream",
                 headers={
@@ -2746,7 +3263,7 @@ async def anthropic_messages(request: Request):
                     emb_bytes = None
                     if last_user_query:
                         from prime_gate.cache.semantic import SemanticVectorEngine
-                        q_vec = SemanticVectorEngine.embed_text(last_user_query)
+                        q_vec = SemanticVectorEngine.embed_passage(last_user_query)
                         if q_vec is not None:
                             emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
 
@@ -2760,7 +3277,11 @@ async def anthropic_messages(request: Request):
                         completion_tokens=completion_tokens,
                         reasoning_tokens=0,
                         embedding=emb_bytes,
-                        tools_signature=tools_sig
+                        tools_signature=tools_sig,
+                        scope=scope,
+                        context_hash=context_hash,
+                        ttl_seconds=cache_cfg.get("ttl_seconds", 86400),
+                        embedding_model=cache_cfg.get("embedding_model")
                     )
                     event_bus.broadcast_sync({
                         "type": "CACHE_STORED",
@@ -2786,8 +3307,16 @@ async def anthropic_messages(request: Request):
                     stream=0,
                     quota_snapshot=quota_snap,
                     cache_hit=0,
-                    tokens_saved=0
+                    tokens_saved=0,
+                    key_id=_auth.get("id") if isinstance(_auth, dict) else None
                 )
+                if isinstance(_auth, dict) and _auth.get("id"):
+                    db.record_api_key_tokens(
+                        key_id=_auth["id"],
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        model=model
+                    )
             except Exception as e:
                 logger.error(f"Failed to record Anthropic request hit: {e}")
 
@@ -2833,7 +3362,7 @@ async def anthropic_messages(request: Request):
 
 @app.post("/v1/search")
 @app.post("/search")
-async def handle_custom_search(request: Request):
+async def handle_custom_search(request: Request, _auth: Dict[str, Any] = Depends(require_proxy_api_key)):
     """
     Desktop search provider endpoint for Claude Code and OpenCode.
     Accepts JSON {"q": "query"} or {"query": "query"} and returns {"results": [{"title", "url", "snippet"}]}.

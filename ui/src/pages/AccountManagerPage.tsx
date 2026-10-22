@@ -56,7 +56,7 @@ export const AccountManagerPage: React.FC<AccountManagerPageProps> = ({
     else setIsLoadingModels(true);
 
     try {
-      const url = forceRefresh ? '/api/models/refresh' : '/v1/models';
+      const url = forceRefresh ? '/api/models/refresh' : '/api/models';
       const method = forceRefresh ? 'POST' : 'GET';
       const res = await fetch(url, { method });
       if (res.ok) {

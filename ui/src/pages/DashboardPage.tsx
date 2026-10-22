@@ -16,6 +16,7 @@ import {
   BarChart3,
   ArrowRight,
   Flame,
+  KeyRound,
 } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -163,7 +164,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Value Delivered</span>
+            <span style={{ fontSize: 13, color: '#a8a29e', fontWeight: 500 }}>Nilai Setara API Komersial</span>
             <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255, 255, 255, 0.06)', borderRadius: 6, padding: '2px 4px', gap: 2 }}>
               <button
                 onClick={() => setCurrency('IDR')}
@@ -214,9 +215,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               })()}
             </span>
           </div>
-          <div style={{ fontSize: 12, color: '#78716c', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="badge badge-emerald" style={{ fontSize: 9, padding: '1px 5px' }}>Free Tier</span>
-            <span>Commercial API savings</span>
+          <div style={{ fontSize: 11, color: '#78716c', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', overflow: 'hidden' }}>
+            <span className="badge badge-emerald" style={{ fontSize: 10, padding: '2px 7px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              Estimasi Tarif
+            </span>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#a8a29e', fontSize: 11 }} title="Nilai setara tarif resmi API">
+              Tarif resmi provider API
+            </span>
           </div>
         </div>
 
@@ -562,35 +567,49 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </div>
 
-            {/* API Key Display */}
-            <div style={{ marginTop: 12 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: '#78716c', textTransform: 'uppercase' }}>
-                Auth API Key
-              </label>
-              <div
+            {/* Client API Keys & Agents Banner */}
+            <div
+              style={{
+                marginTop: 16,
+                padding: '12px 14px',
+                borderRadius: 8,
+                background: 'rgba(217, 119, 6, 0.08)',
+                border: '1px solid rgba(217, 119, 6, 0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <KeyRound size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#f59e0b', whiteSpace: 'nowrap' }}>
+                    Client API Keys & Agents
+                  </div>
+                  <div style={{ fontSize: 11, color: '#a8a29e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Kelola dan buat API key untuk Claude Code, OpenCode, Cursor, dan Continue.
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('keys')}
+                className="btn btn-primary btn-sm"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  background: 'rgba(0, 0, 0, 0.4)',
-                  border: '1px solid rgba(168, 162, 158, 0.2)',
-                  borderRadius: 8,
-                  padding: '8px 12px',
-                  marginTop: 4,
+                  gap: 6,
+                  whiteSpace: 'nowrap',
+                  padding: '6px 12px',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  flexShrink: 0,
+                  cursor: 'pointer',
                 }}
               >
-                <code style={{ fontSize: 12, color: '#d6d3d1', fontFamily: 'var(--font-mono)' }}>
-                  {apiKey}
-                </code>
-                <button
-                  onClick={() => copyToClipboard(apiKey, 'key')}
-                  className="btn btn-secondary btn-sm"
-                  style={{ padding: '3px 8px' }}
-                >
-                  {copiedKey ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
-                  <span>{copiedKey ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
+                <span>Kelola Keys</span>
+                <ArrowRight size={13} />
+              </button>
             </div>
           </div>
 

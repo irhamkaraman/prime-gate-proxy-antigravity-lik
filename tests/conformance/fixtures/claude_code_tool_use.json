@@ -1,0 +1,48 @@
+{
+  "client": "Claude Code",
+  "protocol": "anthropic",
+  "request": {
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 4096,
+    "system": "You are Claude Code, an expert agentic software engineer.",
+    "tools": [
+      {
+        "name": "bash",
+        "description": "Execute a bash shell command",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "command": {"type": "string", "description": "Command to run"}
+          },
+          "required": ["command"]
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "List files in the current repository."
+      }
+    ]
+  },
+  "mock_upstream_response": {
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "functionCall": {
+                "name": "bash",
+                "args": {
+                  "command": "ls -la"
+                }
+              }
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ]
+  }
+}

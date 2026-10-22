@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ModelInfo } from '../types';
 import { useToast } from '../context/ToastContext';
-import { Play, Square, Sparkles, Copy, Check, Terminal, Cpu } from 'lucide-react';
+import { useNavigation } from '../context/NavigationContext';
+import { Play, Square, Sparkles, Copy, Check, Terminal, Cpu, KeyRound, AlertTriangle } from 'lucide-react';
 
 export const PromptSandboxPage: React.FC = () => {
   const { showToast } = useToast();
+  const { navigate } = useNavigation();
+  const [activeApiKey, setActiveApiKey] = useState<string>(() => localStorage.getItem('pg_active_api_key') || '');
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [apiProtocol, setApiProtocol] = useState<'openai' | 'anthropic'>('openai');
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-3.8-flash');
+  const [selectedModel, setSelectedModel] = useState<string>(() => sessionStorage.getItem('selected_sandbox_model') || '');
   const [systemPrompt, setSystemPrompt] = useState<string>('You are an expert AI software engineer. Provide clear, precise, and practical code solutions.');
   const [userPrompt, setUserPrompt] = useState<string>('Write a Python function to compute the SHA-256 hash of a file efficiently using chunks.');
   const [temperature, setTemperature] = useState<number>(0.7);
@@ -29,19 +32,37 @@ export const PromptSandboxPage: React.FC = () => {
       sessionStorage.removeItem('selected_sandbox_model');
     }
 
-    fetch('/v1/models')
+    // Load dynamic models catalog from database for active account
+    fetch('/api/models')
       .then(res => res.json())
       .then(data => {
-        if (data && Array.isArray(data.data)) {
-          setModels(data.data);
-          if (preselected && data.data.some((m: ModelInfo) => m.id === preselected)) {
+        const list: ModelInfo[] = Array.isArray(data)
+          ? data
+          : data.models || data.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setModels(list);
+          if (preselected && list.some((m: ModelInfo) => m.id === preselected)) {
             setSelectedModel(preselected);
-          } else if (data.data.length > 0 && !data.data.some((m: ModelInfo) => m.id === (preselected || selectedModel))) {
-            setSelectedModel(data.data[0].id);
+          } else if (!list.some((m: ModelInfo) => m.id === (preselected || selectedModel))) {
+            setSelectedModel(list[0].id);
           }
         }
       })
-      .catch(err => console.error('Failed to load models for sandbox:', err));
+      .catch(err => {
+        console.error('Failed to load models from /api/models, falling back to /v1/models:', err);
+        fetch('/v1/models')
+          .then(res => res.json())
+          .then(data => {
+            const list: ModelInfo[] = Array.isArray(data) ? data : data.data || data.models || [];
+            if (Array.isArray(list) && list.length > 0) {
+              setModels(list);
+              if (!list.some((m: ModelInfo) => m.id === selectedModel)) {
+                setSelectedModel(list[0].id);
+              }
+            }
+          })
+          .catch(e => console.error('Failed to load fallback /v1/models:', e));
+      });
   }, []);
 
   const handleSendPrompt = async () => {
@@ -63,10 +84,17 @@ export const PromptSandboxPage: React.FC = () => {
     abortControllerRef.current = new AbortController();
 
     try {
+      const keyToUse = activeApiKey.trim() || localStorage.getItem('pg_active_api_key') || '';
+      if (!keyToUse) {
+        showToast('API Key is required. Please create or set an API Key in API Keys & Agents.', 'error');
+        setIsLoading(false);
+        return;
+      }
+
       let endpointUrl = '/v1/chat/completions';
       let headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer prime-gate-proxy',
+        'Authorization': `Bearer ${keyToUse}`,
       };
       let requestBody: Record<string, any> = {};
 
@@ -74,7 +102,7 @@ export const PromptSandboxPage: React.FC = () => {
         endpointUrl = '/v1/messages';
         headers = {
           'Content-Type': 'application/json',
-          'x-api-key': 'prime-gate-proxy',
+          'x-api-key': keyToUse,
           'anthropic-version': '2023-06-01',
         };
         requestBody = {
@@ -203,6 +231,70 @@ export const PromptSandboxPage: React.FC = () => {
 
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* API Key Auth Banner */}
+      {!activeApiKey ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 18px',
+          borderRadius: 10,
+          background: 'rgba(239, 68, 68, 0.12)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#f87171',
+          fontSize: 13
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertTriangle size={20} />
+            <span><strong>Authentication Required:</strong> Sandbox requires an active API key to test endpoints without 401 Unauthorized errors.</span>
+          </div>
+          <button
+            onClick={() => navigate('keys')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 6,
+              background: '#ef4444',
+              color: '#ffffff',
+              fontSize: 12,
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            Configure API Key
+          </button>
+        </div>
+      ) : (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 16px',
+          borderRadius: 8,
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.2)',
+          color: '#34d399',
+          fontSize: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <KeyRound size={16} />
+            <span>Active Sandbox API Key: <code style={{ fontFamily: 'var(--font-mono)' }}>{activeApiKey.slice(0, 12)}...</code></span>
+          </div>
+          <button
+            onClick={() => navigate('keys')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#34d399',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontSize: 12
+            }}
+          >
+            Manage Keys
+          </button>
+        </div>
+      )}
       <div
         style={{
           display: 'grid',
@@ -295,16 +387,13 @@ export const PromptSandboxPage: React.FC = () => {
               {models.length > 0 ? (
                 models.map(m => (
                   <option key={m.id} value={m.id}>
-                    {m.id} ({m.owned_by || 'google-antigravity'})
+                    {m.name ? `${m.name} (${m.id})` : m.id}
                   </option>
                 ))
               ) : (
-                <>
-                  <option value="gemini-3.8-flash">gemini-3.8-flash</option>
-                  <option value="gemini-3.8-flash-high">gemini-3.8-flash-high</option>
-                  <option value="gemini-3.8-pro">gemini-3.8-pro</option>
-                  <option value="claude-3-7-sonnet">claude-3-7-sonnet</option>
-                </>
+                <option value="" disabled>
+                  No models cached for active account. Please click 'Refresh Models' in Account Manager.
+                </option>
               )}
             </select>
           </div>

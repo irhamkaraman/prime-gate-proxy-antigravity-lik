@@ -1,4 +1,4 @@
-export type RoutePath = 'dashboard' | 'benchmarks' | 'caching' | 'accounts' | 'sandbox' | 'sentinel' | 'docs';
+export type RoutePath = 'dashboard' | 'benchmarks' | 'caching' | 'accounts' | 'sandbox' | 'keys' | 'sentinel' | 'docs';
 
 export type TimeRange = '1h' | '1d' | '7d' | '1m';
 
@@ -74,7 +74,14 @@ export interface CacheConfig {
   min_prompt_length: number;
   ttl_seconds: number;
   semantic_enabled?: boolean;
+  semantic_agent_enabled?: boolean;
   semantic_threshold?: number;
+  semantic_threshold_chat?: number;
+  semantic_threshold_agent?: number;
+  embedding_model?: string;
+  max_entries?: number;
+  verification_sampling_enabled?: boolean;
+  verification_sampling_rate?: number;
   cache_mode?: 'exact' | 'semantic' | 'hybrid' | string;
   turn_based_keying?: boolean;
   compactor_enabled?: boolean;
@@ -95,6 +102,12 @@ export interface CacheStats {
   estimated_seconds_saved: number;
   usd_value_saved?: number;
   idr_value_saved?: number;
+  verification_stats?: {
+    total_verifications: number;
+    false_hits: number;
+    false_hit_rate_pct: number;
+    avg_upstream_similarity: number;
+  };
   config: CacheConfig;
 }
 
@@ -102,6 +115,8 @@ export interface CacheStats {
 export interface CacheEntry {
   id: number;
   cache_key: string;
+  scope?: string;
+  context_hash?: string;
   prompt_hash: string;
   prompt_preview: string;
   response_preview?: string;
@@ -113,6 +128,7 @@ export interface CacheEntry {
   total_tokens: number;
   hit_count: number;
   tokens_saved_total: number;
+  expires_at?: number | null;
   created_at: number;
   created_at_formatted?: string;
   last_hit_at: number | null;

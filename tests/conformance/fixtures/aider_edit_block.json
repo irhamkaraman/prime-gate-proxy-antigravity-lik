@@ -1,0 +1,38 @@
+{
+  "client": "Aider",
+  "protocol": "openai",
+  "request": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are Aider, an AI pair programmer. Return changes in unified SEARCH/REPLACE format."
+      },
+      {
+        "role": "user",
+        "content": "Add docstring to calculate_sum function."
+      }
+    ],
+    "stream": false
+  },
+  "mock_upstream_response": {
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "Here is the SEARCH/REPLACE block:\n\n```python\n<<<<<<< SEARCH\ndef calculate_sum(a, b):\n    return a + b\n=======\ndef calculate_sum(a, b):\n    \"\"\"Calculates sum of two numbers.\"\"\"\n    return a + b\n>>>>>>> REPLACE\n```"
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 42,
+      "candidatesTokenCount": 58,
+      "totalTokenCount": 100
+    }
+  }
+}

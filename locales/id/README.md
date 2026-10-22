@@ -10,8 +10,9 @@
 **Gateway Proksi Mandiri (Self-Hosted) Tingkat Perusahaan Kompatibel OpenAI & Anthropic untuk Google Antigravity.**
 
 [![Versi](https://img.shields.io/badge/version-1.2.3-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
-[![Anti-Banned](https://img.shields.io/badge/Keamanan-100%25%20Anti--Banned-10b981.svg?style=for-the-badge&logo=shield)](README.md#-arsitektur-keamanan-akun--100-anti-banned)
-[![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](README.md#-next-gen-smart--semantic-vector-caching-hybrid-engine)
+[![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=githubactions&logoColor=white)](../../.github/workflows/ci.yml)
+[![Anti-Banned](https://img.shields.io/badge/Keamanan-Penyelarasan%20Klien-blue.svg?style=for-the-badge&logo=shield)](../../README.md#-arsitektur-keamanan-akun--penyelarasan-klien)
+[![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](../../README.md#-next-gen-smart--semantic-vector-caching-hybrid-engine)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Lisensi: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
@@ -19,17 +20,30 @@
 
 ---
 
-### 🌐 Pilih Bahasa / Select Language
+### 🌐 Pilih Bahasa & Dokumentasi
 
-[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md) • [📖 Panduan Lengkap](../../docs/USER_GUIDE.md)
+[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md)
+
+📚 **Panduan:** [Panduan Pengguna](../../docs/USER_GUIDE.md) • [Pengujian & Konformansi](../../docs/testing.md) • [Observabilitas & Metrik](../../docs/observability.md) • [Metodologi Benchmark](../../benchmarks/METHODOLOGY.md)
 
 ---
 
 </div>
 
+## ⚠️ Disclaimer & Risiko (Ketentuan & Batasan Tanggung Jawab)
+
+> [!WARNING]
+> **Proyek Tidak Resmi & Penggunaan Atas Risiko Sendiri:**
+> - **Prime Gate Antigravity Proxy** adalah proyek open-source independen dan **TIDAK berafiliasi, didukung, atau disetujui** oleh Google LLC maupun Anthropic PBC.
+> - Penggunaan proxy ini untuk mengakses layanan internal Google Cloud AI Companion / Antigravity di luar ekstensi resmi VS Code **dapat berpotensi melanggar Ketentuan Layanan (Terms of Service)** Google Cloud.
+> - Seluruh risiko penggunaan berada pada pengguna sepenuhnya. Pengembang/maintainer tidak bertanggung jawab atas segala konsekuensi, termasuk pembatasan kuota, penangguhan, atau penutupan akun Google yang digunakan.
+> - **PERINGATAN KEAMANAN AKUN:** **JANGAN PERNAH** menggunakan akun Google utama, akun email pribadi penting, atau akun pekerjaan/organisasi Anda. Sangat disarankan hanya menggunakan akun Google sekunder atau akun khusus untuk eksperimen.
+
+---
+
 ## 📖 Ringkasan Proyek
 
-**Prime Gate** adalah jembatan API enterprise dual-protokol yang membungkus layanan internal Google Cloud AI Companion / Antigravity menjadi endpoint REST & SSE yang **100% patuh pada standar OpenAI** (`/v1/chat/completions`) dan **protokol asli Anthropic Messages API** (`/v1/messages`).
+**Prime Gate** adalah jembatan API enterprise dual-protokol yang membungkus layanan internal Google Cloud AI Companion / Antigravity menjadi endpoint REST & SSE yang **patuh pada standar OpenAI** (`/v1/chat/completions`) dan **protokol asli Anthropic Messages API** (`/v1/messages`).
 
 Alat ini memungkinkan Anda memanfaatkan kuota Google Antigravity Anda—termasuk **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)**, dan **Gemini 3.8 Flash**—secara langsung di dalam berbagai alat AI coding modern seperti **Claude Code CLI**, **Cline**, **Roo Code**, **OpenCode**, **Cursor**, **Continue.dev**, **Aider**, dan **SillyTavern**.
 
@@ -73,7 +87,7 @@ graph LR
    Dibangun dengan Vite dan TypeScript ketat, rute navigasi khusus (`/dashboard`, `/accounts`, `/sandbox`, `/caching`, `/sentinel`, `/docs`), telemetri throughput token real-time, sandbox interaktif dengan saklar OpenAI/Anthropic, dan diagnostik Database Sentinel.
 9. **Suite CLI Terminal Interaktif:**
    Perintah terminal lengkap meliputi `--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, dan daemon Windows background.
-10. **Database C Binary Terenkripsi (Zero Plaintext JSON):**
+10. **Database SQLite WAL dengan Obfuscation Record & Integritas CRC32:**
     Menggantikan file JSON biasa dengan mesin biner SQLite WAL berperforma tinggi. Kredensial dan token terlindungi dengan verifikasi checksum CRC32 32-bit.
 11. **Smart Agent Context Compactor:**
     Memangkas riwayat output tool yang panjang di luar 3 turn aktif terakhir sambil mempertahankan instruksi sistem dan turn awal, menghemat 50% hingga 70% token prompt agent coding.
@@ -81,22 +95,22 @@ graph LR
     Mencegah error HTTP 429 (`RESOURCE_EXHAUSTED`) / 503 dari server Google dan merotasi akun ke akun cadangan terbaik sebelum chunk token pertama dikirim ke pengguna—tanpa memutus koneksi client.
 13. **Sentinel Pembasmi Loop Otonom (Runaway Loop Killer):**
     Mendeteksi pemanggilan tool berulang tanpa kemajuan ($\ge 3$ kali berturut-turut) dan menyuntikkan instruksi korektif untuk menghentikan pemborosan kuota.
-14. **Simulator Nilai Ekonomis (USD & IDR):**
+14. **Estimasi Nilai Setara Tarif Komersial (USD & IDR):**
     Menghitung estimasi penghematan biaya API komersial (benchmark GPT-4o / Claude 3.5 Sonnet) langsung dalam mata uang USD dan Rupiah (IDR).
-15. **100% Anti-Banned & Arsitektur Keamanan Akun:**
-    Bukan scraper web, tidak ada risiko suspend. Prime Gate meniru persis signature klien resmi Google Cloud Code / Antigravity, menggunakan token resmi OAuth 2.0 PKCE, dan memuluskan burst traffic.
-16. **Next-Gen Smart & Semantic Vector Caching (Hybrid Engine):**
-    Menghilangkan masalah 100% cache-miss pada AI coding agent dengan memisahkan deklarasi tools dari eksekusinya. Dilengkapi embedding vektor FastEmbed ONNX (`BAAI/bge-small-en-v1.5`), pencarian kemiripan kosinus di SQLite WAL, ekstraksi kunci berbasis turn, dan replay streaming bertahap.
+15. **Keamanan Permintaan & Penyelarasan Klien:**
+    Bukan scraper web. Prime Gate menyelaraskan header dengan pola klien resmi. Prime Gate meniru persis signature klien resmi Google Cloud Code / Antigravity, menggunakan token resmi OAuth 2.0 PKCE, dan memuluskan burst traffic.
+16. **Next-Gen Smart & Multilingual Semantic Vector Caching (Hybrid Engine):**
+    Mengatasi cache-miss pada coding agent dengan pemisahan deklarasi tools dari eksekusi. Dilengkapi model embedding multibahasa FastEmbed ONNX (`paraphrase-multilingual-MiniLM-L12-v2` / `multilingual-e5-small`) dengan akurasi parafrase bahasa Indonesia tinggi (skor $\ge 0.93$), isolasi kunci berbasis konteks (anti-halusinasi), isolasi scope multi-tenant, manajemen TTL & LRU, serta header audit standar industri.
 
 ---
 
-## 🛡️ Arsitektur Keamanan Akun & 100% Anti-Banned
+## 🛡️ Keamanan Permintaan & Penyelarasan Klien (Request Safety & Client Alignment)
 
-Prime Gate dirancang dengan **kepatuhan enterprise yang ketat** dan **keamanan akun tanpa risiko**. Berbeda dari alat web scraping atau proksi reverse tidak resmi yang rentan diblokir Google Cloud, Prime Gate beroperasi sebagai **proksi pendamping resmi yang identik dengan klien Google**:
+Prime Gate dirancang dengan **kepatuhan enterprise yang ketat** dan **penyelarasan protokol klien**. Berbeda dari alat web scraping atau proksi reverse tidak resmi yang rentan diblokir Google Cloud, Prime Gate beroperasi sebagai **proksi pendamping resmi yang identik dengan klien Google**:
 
-| Lapisan Keamanan | Mekanisme Implementasi | Proteksi Anti-Ban |
+| Lapisan Keamanan | Mekanisme Implementasi | Tujuan & Perilaku |
 | :--- | :--- | :--- |
-| **1. Emulasi Klien Resmi** | Header protokol, metadata, dan framing HTTP/gRPC identik 100% dengan ekstensi resmi VS Code Google Cloud Code. | Google Cloud mendeteksi aktivitas Anda murni sebagai developer IDE resmi. |
+| **1. Emulasi Klien Resmi** | Header protokol, metadata, dan framing HTTP/gRPC menyerupai pola ekstensi resmi VS Code Google Cloud Code. | Struktur metadata disesuaikan agar dapat diproses oleh upstream API. |
 | **2. Native OAuth 2.0 PKCE** | Pertukaran token kriptografis resmi dengan refresh token berkala dan penyimpanan aman lokal. | Tidak menggunakan cookie browser curian atau sesi web yang mencurigakan. |
 | **3. Pacing & Jitter Request** | Distribusi latensi alami, backoff eksponensial, dan pemulusan traffic burst. | Menghilangkan pola bot otomatis dan anomali statistik traffic. |
 | **4. Failover Cerdas Mid-Flight** | Merotasi akun secara otomatis *sebelum* kuota habis atau memicu blokir keras 429/403. | Mencegah penandaan lonjakan penggunaan ekstrem pada satu akun Google. |
@@ -112,34 +126,44 @@ Prime Gate dilengkapi **Mesin Caching Hybrid** kelas enterprise yang menggabungk
 ```mermaid
 graph TD
     Request["Request Masuk (OpenAI / Anthropic)"]
-    --> Extract["Ekstraksi Berbasis Turn & Pembersihan Noise"]
+    --> Extract["Ekstraksi Kunci Konteks & Scope (API Key / Proyek / Sistem / Riwayat / File)"]
     
-    Extract --> StepA{"Langkah A: Cek Hash SHA-256"}
-    StepA -->|"Ditemukan (0ms)"| ExactHit["Exact Cache Hit (~3ms TTFT)"]
+    Extract --> StepA{"Langkah A: Cek Exact Hash SHA-256?"}
+    StepA -->|"Ditemukan (0ms)"| ExactHit["Exact Cache Hit (~2ms TTFT)<br/>X-Cache: HIT (EXACT)"]
     
     StepA -->|"Miss"| StepB{"Semantic Vector Engine Aktif?"}
     StepB -->|"Tidak"| Upstream["Kirim ke Google Antigravity"]
     
-    StepB -->|"Ya"| FastEmbed["FastEmbed ONNX (BAAI/bge-small-en-v1.5)"]
-    FastEmbed --> Vector["Hitung Vektor 384-Dimensi"]
-    Vector --> Cosine["Scan Cosine Similarity di Memori"]
+    StepB -->|"Ya"| ContextCheck{"Hash Konteks Sama?"}
+    ContextCheck -->|"Beda Konteks / File"| Upstream
     
-    Cosine --> Check{"Skor >= Ambang Batas (contoh: 93%)?"}
-    Check -->|"Ya"| SemanticHit["Semantic Cache Hit (~12ms TTFT)"]
+    ContextCheck -->|"Konteks Sama"| FastEmbed["FastEmbed Multilingual ONNX<br/>(paraphrase-multilingual-MiniLM / multilingual-e5)"]
+    FastEmbed --> Vector["Hitung Vektor 384-Dimensi (dengan prefix E5 jika sesuai)"]
+    Vector --> Cosine["Scan Cosine Similarity Terisolasi Scope"]
+    
+    Cosine --> Check{"Skor >= Ambang Batas (Chat: 0.93 / Agent: 0.96)?"}
+    Check -->|"Ya"| SemanticHit["Semantic Cache Hit (~12ms TTFT)<br/>X-Cache: HIT (SEMANTIC)"]
     Check -->|"Tidak"| Upstream
     
     Upstream --> Stream["Streaming Token ke Klien"]
-    Stream --> Save{"Ada Pemanggilan Tool Aktif?"}
-    Save -->|"Tidak (Output Teks)"| Store["Simpan Cache & Vektor di SQLite WAL"]
-    Save -->|"Ya"| Skip["Bypass Penyimpanan Cache"]
+    Stream --> Save{"Ada Tool Calls atau Error?"}
+    Save -->|"Tidak (Output Teks Bersih)"| Store["Simpan Passage Vector, TTL & LRU di SQLite WAL"]
+    Save -->|"Ya (tool_use / error)"| Skip["Bypass Penyimpanan Cache"]
 ```
 
 ### ⚡ Keunggulan Caching:
-1. **Solusi 100% Cache Miss pada Coding Agent:** Tool coding (Cursor, OpenCode, Claude Code, Cline) selalu menyertakan definisi tools. Prime Gate memisahkan *deklarasi tools* dengan *eksekusi tools*: respons teks biasa tetap di-cache 100%, menghemat ribuan token per sesi.
-2. **Embedding Vektor Lokal (`fastembed` + ONNX Runtime):** Menggunakan model `BAAI/bge-small-en-v1.5` pada CPU dengan footprint RAM ~100MB tanpa perlu GPU atau PyTorch.
-3. **Pembersihan Noise Dinamis:** Membersihkan timestamp dan ID unik pesan untuk menghasilkan cache key yang konsisten antar percakapan.
-4. **Replay SSE Bertahap:** Menghasilkan ulang streaming cache dalam potongan 4 kata per 3ms untuk animasi mengetik yang mulus di IDE.
-5. **Optimasi Prefix Caching Upstream:** Mengurutkan deklarasi fungsi tools secara alfabetis dan mengunci turn awal percakapan, menjamin pemanfaatan prefix cache di server Google.
+1. **Akurasi Model Embedding Multibahasa (Optimal Bahasa Indonesia):** Ditenagai `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (atau `intfloat/multilingual-e5-small`) via FastEmbed ONNX (~100MB RAM, CPU-only). Teruji empiris mencapai skor kemiripan 0.978 pada parafrase percakapan bahasa Indonesia dengan penanganan prefix asimetris keluarga E5 (`query: ` / `passage: `).
+2. **Kunci Cache Berbasis Konteks (Pencegahan Halusinasi Kode):** Menghasilkan kunci tuple `(scope, context_hash, last_user_query, query_hash, tools_sig, has_tools)`. Variabel `context_hash` mengunci instruksi sistem, riwayat percakapan, isi file kode yang direferensikan, dan parameter generasi. Dua pertanyaan serupa dengan file kode berbeda dipastikan **tidak akan hit**.
+3. **Isolasi Scope & Multi-Tenant:** Partisi cache terisolasi per prefix API key (`key_<prefix>`) dan per project/session ID, mencegah kebocoran jawaban antar pengguna atau antar proyek.
+4. **Kebijakan Ketat untuk Coding Agent:** Memisahkan deklarasi tool dengan pemanggilannya. Mode agent default exact-match (semantic opt-in dengan threshold 0.96). Respons yang mengandung `tool_use`/`tool_calls`, chunk error, atau stream terputus tidak akan pernah disimpan ke cache.
+5. **Manajemen Siklus TTL & Eviksi LRU:** Dilengkapi TTL yang dapat diatur (default 24 jam), batas entri maksimum (default 5.000 entri), serta eviksi otomatis Least-Recently-Used (LRU). Otomatis meregenerasi indeks vektor jika konfigurasi model atau dimensi berubah.
+6. **Header Audit Lengkap:** Menyediakan header transparansi diagnostik:
+   - `X-Cache: HIT | MISS`
+   - `X-Cache-Type: EXACT | SEMANTIC | NONE`
+   - `X-Cache-Similarity: <0.0000 - 1.0000>`
+   - `X-Cache-Key-Scope: <scope_id>`
+7. **Radar False-Hit Rate Melalui Verification Sampling:** Audit latar belakang (`pg_cache_verifications`) secara berkala memverifikasi akurasi cache terhadap respons upstream untuk menghitung rasio false-hit di Web UI.
+8. **Replay SSE Bertahap & Optimasi Prefix Caching Upstream:** Memutar ulang respons streaming ter-cache dalam potongan 4 kata per 3ms demi animasi yang realistis di IDE, dengan urutan deklarasi fungsi tools alfabetis guna memaksimalkan upstream prefix cache Google.
 
 ---
 

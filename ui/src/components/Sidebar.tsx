@@ -10,6 +10,7 @@ import {
   Terminal,
   ShieldCheck,
   BookOpen,
+  KeyRound,
   ArrowRightLeft,
   ChevronRight,
   RefreshCw,
@@ -157,6 +158,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <Terminal size={18} />,
     },
     {
+      id: 'keys',
+      label: 'API Keys & Agents',
+      icon: <KeyRound size={18} />,
+    },
+    {
       id: 'sentinel',
       label: 'System & Sentinel',
       icon: <ShieldCheck size={18} />,
@@ -278,9 +284,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               fontFamily: 'monospace',
               letterSpacing: '0.02em',
             }}
-            title={`Version: v${updateInfo?.current_version || '1.2.3'}`}
+            title={`Version: v${updateInfo?.current_version || '1.2.4'}`}
           >
-            v{updateInfo?.current_version || '1.2.3'}
+            v{updateInfo?.current_version || '1.2.4'}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

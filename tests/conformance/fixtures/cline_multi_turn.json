@@ -1,0 +1,64 @@
+{
+  "client": "Cline",
+  "protocol": "anthropic",
+  "request": {
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 8192,
+    "system": "You are Cline, an autonomous software development assistant.",
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read file contents",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {"type": "string"}
+          },
+          "required": ["path"]
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Check package.json dependencies."
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "toolu_01_read_pkg",
+            "name": "read_file",
+            "input": {"path": "package.json"}
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "toolu_01_read_pkg",
+            "content": "{\"dependencies\": {\"react\": \"^18.2.0\"}}"
+          }
+        ]
+      }
+    ]
+  },
+  "mock_upstream_response": {
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "text": "The project uses React 18.2.0 as its primary front-end library."
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ]
+  }
+}

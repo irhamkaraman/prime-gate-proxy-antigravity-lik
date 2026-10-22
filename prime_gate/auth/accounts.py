@@ -79,12 +79,20 @@ class AccountManager:
         
         # Also maintain a sanitized/synced state in local accounts.json if needed
         # but binary DB remains the single source of truth
+        # Maintain sanitized mirror without raw credentials (credentials stored strictly in AES-256-GCM DB)
         if target_file or LOCAL_ACCOUNTS_FILE.exists():
             dest = target_file or LOCAL_ACCOUNTS_FILE
             try:
+                sanitized_accounts = []
+                for acc in accounts:
+                    acc_copy = dict(acc)
+                    if "refreshToken" in acc_copy:
+                        acc_copy["refreshToken"] = "[ENCRYPTED_IN_DB]"
+                    sanitized_accounts.append(acc_copy)
+                sanitized_payload = {**payload, "accounts": sanitized_accounts}
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with open(dest, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, indent=2)
+                    json.dump(sanitized_payload, f, indent=2)
             except Exception as e:
                 logger.warning(f"Could not sync accounts.json mirror: {e}")
 

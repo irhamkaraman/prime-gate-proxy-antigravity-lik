@@ -618,7 +618,8 @@ async def stream_anthropic_sse(
     created: int,
     declared_tools: Optional[List[Dict[str, Any]]] = None,
     cache_meta: Optional[Dict[str, Any]] = None,
-    acquired_email: Optional[str] = None
+    acquired_email: Optional[str] = None,
+    key_id: Optional[int] = None
 ) -> AsyncGenerator[str, None]:
     """
     Connects to Google Antigravity upstream with transparent mid-flight failover,
@@ -1040,10 +1041,12 @@ async def stream_anthropic_sse(
                     last_q = cache_meta.get("last_user_query")
                     if last_q:
                         from ..cache.semantic import SemanticVectorEngine
-                        q_vec = SemanticVectorEngine.embed_text(last_q)
+                        q_vec = SemanticVectorEngine.embed_passage(last_q)
                         if q_vec is not None:
                             emb_bytes = SemanticVectorEngine.vector_to_blob(q_vec)
 
+                    from ..cache.semantic import SemanticVectorEngine
+                    active_dim = SemanticVectorEngine.get_embedding_dimension()
                     db.store_cached_response(
                         cache_key=cache_meta.get("cache_key") or cache_meta.get("key"),
                         prompt_hash=cache_meta.get("prompt_hash") or cache_meta.get("hash"),
@@ -1054,7 +1057,12 @@ async def stream_anthropic_sse(
                         completion_tokens=completion_tokens,
                         reasoning_tokens=0,
                         embedding=emb_bytes,
-                        tools_signature=cache_meta.get("tools_sig")
+                        tools_signature=cache_meta.get("tools_sig"),
+                        scope=cache_meta.get("scope", "default"),
+                        context_hash=cache_meta.get("context_hash", ""),
+                        ttl_seconds=cache_meta.get("ttl", 86400),
+                        embedding_model=cache_meta.get("embedding_model"),
+                        embedding_dim=cache_meta.get("embedding_dim", active_dim)
                     )
                 except Exception as e:
                     logger.warning(f"Failed to cache Anthropic response: {e}")
@@ -1075,8 +1083,16 @@ async def stream_anthropic_sse(
                     stream=1,
                     quota_snapshot=quota_snap,
                     cache_hit=0,
-                    tokens_saved=0
+                    tokens_saved=0,
+                    key_id=key_id
                 )
+                if key_id:
+                    db.record_api_key_tokens(
+                        key_id=key_id,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        model=model
+                    )
             except Exception as e:
                 logger.error(f"Failed to record Anthropic request hit: {e}")
 

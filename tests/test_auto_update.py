@@ -11,6 +11,7 @@ class TestAutoUpdate(unittest.TestCase):
         self.assertEqual(cfg.get("check_interval_seconds"), 600)
         self.assertEqual(cfg.get("idle_threshold_seconds"), 30)
         self.assertTrue(cfg.get("auto_rebuild_ui"))
+        self.assertFalse(cfg.get("auto_apply", False))
 
     def test_auto_update_config_mutation(self):
         # Mutate config

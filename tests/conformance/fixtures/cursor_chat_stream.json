@@ -1,0 +1,49 @@
+{
+  "client": "Cursor",
+  "protocol": "openai",
+  "request": {
+    "model": "gpt-4o",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are Cursor AI, an intelligent coding pair programmer."
+      },
+      {
+        "role": "user",
+        "content": "How do I reverse a string in Python efficiently?"
+      }
+    ],
+    "temperature": 0.2,
+    "stream": true
+  },
+  "mock_upstream_chunks": [
+    {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "thought": true,
+                "text": "The user is asking for idiomatic string reversal in Python."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "candidates": [
+        {
+          "content": {
+            "parts": [
+              {
+                "text": "The fastest and most idiomatic way in Python is slice syntax: `s[::-1]`."
+              }
+            ]
+          },
+          "finishReason": "STOP"
+        }
+      ]
+    }
+  ]
+}

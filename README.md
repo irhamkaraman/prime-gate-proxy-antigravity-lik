@@ -10,7 +10,8 @@
 **A Production-Grade, Self-Hosted OpenAI & Anthropic Compatible Proxy Gateway for Google Antigravity.**
 
 [![Version](https://img.shields.io/badge/version-1.2.3-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
-[![Anti-Banned](https://img.shields.io/badge/Security-100%25%20Anti--Banned-10b981.svg?style=for-the-badge&logo=shield)](README.md#-100-anti-banned--account-safety-architecture)
+[![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![Security](https://img.shields.io/badge/Security-Client%20Alignment-blue.svg?style=for-the-badge&logo=shield)](#-keamanan-permintaan--penyelarasan-klien-request-safety--client-alignment)
 [![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](README.md#-next-gen-smart--semantic-vector-caching-hybrid-engine)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
@@ -19,19 +20,56 @@
 
 ---
 
-### 🌐 Select Language
+### 🌐 Select Language & Documentation
 
-[🇺🇸 English](README.md) • [🇮🇩 Bahasa Indonesia](locales/id/README.md) • [🇨🇳 简体中文](locales/zh/README.md) • [🇷🇺 Русский](locales/ru/README.md) • [🇯🇵 日本語](locales/ja/README.md) • [🇩🇪 Deutsch](locales/de/README.md) • [🇫🇷 Français](locales/fr/README.md) • [📖 Full User Guide](docs/USER_GUIDE.md)
+[🇺🇸 English](README.md) • [🇮🇩 Bahasa Indonesia](locales/id/README.md) • [🇨🇳 简体中文](locales/zh/README.md) • [🇷🇺 Русский](locales/ru/README.md) • [🇯🇵 日本語](locales/ja/README.md) • [🇩🇪 Deutsch](locales/de/README.md) • [🇫🇷 Français](locales/fr/README.md)
+
+📚 **Guides:** [User Guide](docs/USER_GUIDE.md) • [Testing & Conformance](docs/testing.md) • [Observability & Metrics](docs/observability.md) • [Benchmark Methodology](benchmarks/METHODOLOGY.md)
 
 ---
 
 </div>
+
+## ⚠️ Disclaimer & Risiko (Terms & Disclaimer)
+
+> [!WARNING]
+> **Proyek Tidak Resmi & Penggunaan Atas Risiko Sendiri:**
+> - **Prime Gate Antigravity Proxy** adalah proyek open-source independen dan **TIDAK berafiliasi, didukung, atau disetujui** oleh Google LLC maupun Anthropic PBC.
+> - Penggunaan proxy ini untuk mengakses layanan internal Google Cloud AI Companion / Antigravity di luar ekstensi resmi VS Code **dapat berpotensi melanggar Ketentuan Layanan (Terms of Service)** Google Cloud.
+> - Seluruh risiko penggunaan berada pada pengguna sepenuhnya. Pengembang/maintainer tidak bertanggung jawab atas segala konsekuensi, termasuk pembatasan kuota, penangguhan, atau penutupan akun Google yang digunakan.
+> - **PERINGATAN KEAMANAN AKUN:** **JANGAN PERNAH** menggunakan akun Google utama, akun email pribadi penting, atau akun pekerjaan/organisasi Anda. Sangat disarankan hanya menggunakan akun Google sekunder atau akun khusus untuk eksperimen.
+
+---
 
 ## 📖 Overview
 
 **Prime Gate** is an enterprise-ready, dual-protocol API bridge that wraps Google's internal Cloud AI Companion / Antigravity service into both **100% OpenAI-compliant** (`/v1/chat/completions`) and **native Anthropic Messages API compliant** (`/v1/messages`) REST & SSE endpoints.
 
 It allows you to use your Google Antigravity quotas—including **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)**, and **Gemini 3.8 Flash**—directly inside any standard AI coding tool, such as **Claude Code CLI**, **Cline**, **Roo Code**, **OpenCode**, **Cursor**, **Continue.dev**, **Aider**, and **SillyTavern**.
+
+---
+
+## 🔍 Batasan yang Diketahui (Known Limitations)
+
+1. **Ketergantungan Kuota Upstream:** Kuota inferensi, ketersediaan model, dan batas frekuensi request (*rate limits*) sepenuhnya diatur oleh kebijakan server Google Cloud.
+2. **Perubahan Skema API Internal:** Karena beroperasi di atas API internal Google Antigravity, perubahan skema mendadak dari upstream dapat memengaruhi fungsi translasi hingga update adaptasi dirilis.
+3. **Pencarian Web Publik:** MCP Web Search (`scripts/mcp_search.py`) mengandalkan resolver publik DoH (Cloudflare 1.1.1.1) dan parser DuckDuckGo yang dapat mengalami perubahan format sewaktu-waktu.
+4. **Bukan Pengganti Layanan API Komersial Resmi:** Proyek ini ditujukan untuk kebutuhan pengembang personal, bukan untuk beban sistem produksi berskala besar.
+
+---
+
+## 🛡️ Model Ancaman (Threat Model)
+
+Untuk menjaga transparansi teknis, tabel berikut mendefinisikan apa yang dilindungi dan apa yang berada di luar kendali sistem:
+
+| Area / Komponen | Apa yang Dilindungi (In-Scope) | Apa yang TIDAK Dilindungi (Out-of-Scope) |
+| :--- | :--- | :--- |
+| **Kredensial & Token Lokal** | Enkripsi terotentikasi AES-256-GCM dengan nonce 12-byte acak unik per record dan AAD binding. Kunci enkripsi diisolasi dalam OS Keyring (Windows DPAPI, macOS Keychain, Linux SecretService) dengan fallback terderivasi Scrypt KDF. Token otomatis diabaikan dari git tracking. | Perlindungan terhadap malware atau proses dengan hak akses root/administrator pada sistem operasi lokal Anda. |
+| **Integritas Database** | Checksum 32-bit CRC32 mendeteksi kerusakan fisik bit (*bit-rot* / disk corruption), sementara Authentication Tag AES-256-GCM mendeteksi modifikasi atau manipulasi data yang disengaja. Backup otomatis dibuat di `data/backups/`. | Kerusakan fisik media penyimpanan yang tidak dapat dipulihkan (*hardware failure*). Perintah `prime-gate db rollback` disediakan untuk pemulihan dari backup lokal. |
+| **Autentikasi & Batas Akses** | Seluruh endpoint proxy (`/v1/*`) mewajibkan API Key (`Authorization: Bearer` atau `x-api-key`). Kunci disimpan hanya dalam bentuk hash salted SHA-256. Non-loopback host binding dilindungi dari risiko paparan tanpa autentikasi. | Pembagian kunci API yang tidak disengaja oleh pengguna ke pihak luar. |
+| **Perlindungan Dashboard & Localhost** | Mitigasi DNS Rebinding (validasi header `Host`), validasi `Origin`, double-submit CSRF token, sesi `HttpOnly` `SameSite=Strict`, dan security headers (CSP, nosniff, DENY, Referrer-Policy). Handshake WebSocket `/sentinel` memvalidasi sesi dan origin. | Ekstensi browser pihak ketiga yang memiliki izin istimewa untuk membaca cookie atau memodifikasi DOM secara lokal. |
+| **Pola Lalu Lintas Klien** | Normalisasi header HTTP/gRPC menyerupai format IDE resmi, humanized pacing, dan Sentinel Loop Guard (memutus loop tool $\ge 3$ kali). | Analisis pola trafik sisi server Google (pemeriksaan IP, audit perilaku, dsb). **Tidak ada jaminan kebal deteksi atau anti-ban.** |
+| **Konsumsi Kuota** | Cache vektor semantik lokal (~12ms) mengurangi panggilan duplikat ke upstream. | Penyesuaian kuota, batas harian, atau kebijakan langganan oleh pihak Google. |
 
 ---
 
@@ -73,38 +111,35 @@ graph LR
    Built with Vite and strict TypeScript, featuring dedicated page routes (`/dashboard`, `/accounts`, `/sandbox`, `/caching`, `/sentinel`, `/docs`), instant HMR, sourcemap debugging, real-time token telemetry, interactive Prompt Sandbox with OpenAI/Anthropic protocol toggle, and Database Sentinel diagnostics.
 9. **Rich Terminal CLI Suite:**
    Modern terminal interface featuring `--version`, `quota`, `auth list|import|login|remove|clear`, `db status|check|test-corrupt`, and headless Windows background `daemon` management.
-10. **Compiled C Binary Database (Zero Plaintext JSON):**
-    Replaces human-readable JSON storage with a high-performance compiled C binary engine (SQLite WAL + Sealed BLOBs). Sensitive tokens, credentials, models, and quotas are binary-masked with strict 32-bit CRC32 checksum validation.
+10. **SQLite WAL Database with AES-256-GCM Encryption & CRC32 Integrity Checking:**
+    Stores configuration and session records in an SQLite database with Write-Ahead-Logging (WAL) mode. Sensitive OAuth tokens and credentials are encrypted at-rest using AES-256-GCM with hardware-backed OS Keyring key management (DPAPI/Keychain/SecretService) and 32-bit CRC32 checksums for disk integrity verification.
 11. **Smart Agent Context Compactor:**
     Automatically prunes verbose tool output history older than 3 active turns while preserving system instructions and recent context, reducing 30k–100k agent prompts by 50% to 70%.
 12. **Mid-Flight Transparent Account Failover:**
     Catches upstream Google Antigravity HTTP 429 (`RESOURCE_EXHAUSTED`) / 503 errors and rotates to the next healthiest account before emitting the first stream token—zero client drops.
 13. **AI Agent Runaway Loop Killer & Sentinel Guard:**
     Detects infinite repetitive tool calls ($\ge 3$ consecutive identical calls) and injects corrective system instructions to stop execution loops and halt quota drain.
-14. **Economic Value Delivered Simulator:**
-    Calculates equivalent commercial API savings (GPT-4o / Claude 3.5 Sonnet benchmark) in both USD and IDR directly on the live dashboard and caching views.
-15. **100% Anti-Banned & Account Safety Architecture:**
-    Zero scraping, zero account bans. Prime Gate strictly mirrors official Google Cloud Code / Antigravity client protocol signatures, uses genuine OAuth 2.0 PKCE tokens, normalizes request headers, and prevents burst anomalies via intelligent pacing and circuit breakers.
+14. **Estimasi Nilai Setara Tarif Komersial (Commercial API Tariff Equivalent Estimator):**
+    Calculates estimated comparative value against official OpenAI/Anthropic commercial rates (GPT-4o / Claude 3.5 Sonnet benchmarks) in USD and IDR. Note: Users utilize their own active Google subscription quotas.
+15. **Request Normalization & Companion Client Alignment:**
+    Aligns request structure and headers with official Google Cloud Code client patterns, uses standard OAuth 2.0 PKCE token refresh, normalizes payloads, and implements request pacing to avoid burst flags.
 16. **Next-Gen Smart & Semantic Vector Caching (Hybrid Engine):**
     Eliminates the 100% cache miss on AI coding agents by separating tool declarations from tool executions. Features local FastEmbed ONNX vector embeddings (`BAAI/bge-small-en-v1.5`), high-speed cosine similarity scanning in SQLite WAL, turn-based key extraction, smooth token-chunked SSE replay, and upstream prefix caching optimization.
 
 ---
 
-## 🛡️ 100% Anti-Banned & Account Safety Architecture
+## 🛡️ Keamanan Permintaan & Penyelarasan Klien (Request Safety & Client Alignment)
 
-Prime Gate is engineered from the ground up with **strict enterprise compliance** and **zero-risk account safety**. Unlike web scrapers or unauthorized reverse proxies that get flagged and banned by Google Cloud, Prime Gate operates as an **indistinguishable, legitimate companion proxy**:
+Prime Gate mengimplementasikan mekanisme penanganan request terstruktur untuk menjaga keselarasan protokol dengan layanan Google Cloud:
 
-| Security Layer | Implementation Mechanism | Anti-Ban Protection |
+| Lapisan Teknis | Mekanisme Implementasi | Tujuan & Perilaku |
 | :--- | :--- | :--- |
-| **1. Official Client Emulation** | Exact VS Code Cloud Code / Antigravity protocol headers, gRPC/HTTP framing, and client metadata. | Google Cloud sees 100% authentic developer activity from an IDE. |
-| **2. Native OAuth 2.0 PKCE** | Cryptographically secure token exchange with local encrypted keyring storage and auto-refresh. | No stolen session cookies, no hijacked browser sessions, zero security alerts. |
-| **3. Request Pacing & Jitter Smoothing** | Humanized latency distribution, exponential backoff, and burst-rate smoothing. | Eliminates automated bot patterns and statistical traffic anomalies. |
-| **4. Mid-Flight Account Failover** | Rotates to healthy accounts *before* exhausting quotas or hitting hard 429/403 blocks. | Prevents abusive spike flags on any single Google account. |
-| **5. Sentinel Runaway Loop Killer** | Detects and terminates repetitive recursive agent loops ($\ge 3$ identical iterations). | Prevents accidental quota exhaustion and spam detection. |
-| **6. Clean Schema Sanitization** | Recursively strips non-compliant OpenAPI attributes before sending to Google AI engines. | Prevents repeated `400 Bad Request` validation flags. |
-
-> [!IMPORTANT]
-> **Safety Guarantee:** Prime Gate never alters the underlying authentication handshake, never uses unofficial API keys, and never bypasses Google's infrastructure firewalls. Your Google accounts remain **100% safe, clean, and in full compliance**.
+| **1. Client Header Alignment** | Menyelaraskan format header HTTP/gRPC menyerupai ekstensi resmi VS Code Cloud Code. | Memastikan struktur metadata dapat diproses oleh upstream API secara standar. |
+| **2. Native OAuth 2.0 PKCE** | Pertukaran token kriptografis standar dengan auto-refresh berkala. | Mencegah pembajakan sesi atau penggunaan cookie browser tidak resmi. |
+| **3. Request Pacing & Jitter Smoothing** | Distribusi jeda waktu alami, exponential backoff, dan penghalusan traffic. | Mencegah lonjakan burst traffic beruntun yang dapat memicu rate limiting. |
+| **4. Mid-Flight Account Failover** | Rotasi otomatis ke akun aktif berikutnya jika akun saat ini mengalami limit 429/503. | Menjaga kontinuitas sesi inferensi pengguna sebelum token pertama dikirim. |
+| **5. Sentinel Runaway Loop Killer** | Mendeteksi dan memutus perulangan tool identik berulang ($\ge 3$ kali). | Mencegah pengurasan kuota akibat agen yang macet dalam loop. |
+| **6. Clean Schema Sanitization** | Membersihkan atribut OpenAPI yang tidak kompatibel sebelum dikirim ke upstream. | Mencegah kegagalan validasi `400 Bad Request`. |
 
 ---
 
@@ -201,7 +236,22 @@ Execute commands using `python -m prime_gate.cli` or `bin\prime-gate.cmd`:
 | `prime-gate daemon start` | Launch proxy & web UI in the background (headless). |
 | `prime-gate daemon status` | Check background process PID, memory, and ports. |
 | `prime-gate daemon stop` | Terminate all active background proxy services. |
+| `prime-gate auth create-key [--name NAME]` | Generate a new random API key (displayed once, saved as salted SHA-256). |
+| `prime-gate auth list-keys` | Display registered API key IDs, names, prefixes, and last used timestamps. |
+| `prime-gate auth revoke-key <ID|NAME>` | Immediately revoke an API key by ID or name. |
+| `prime-gate auth create-key [--name NAME]` | Generate a new random API key (displayed once, saved as salted SHA-256). |
+
+| `prime-gate auth list-keys` | Display registered API key IDs, names, prefixes, and last used timestamps. |
+
+| `prime-gate auth revoke-key <ID|NAME>` | Immediately revoke an API key by ID or name. |
+
 | `prime-gate db check` | Run 32-bit CRC32 cryptographic audit on binary database. |
+
+| `prime-gate db rotate-key` | Rotate AES-256-GCM master database key and re-encrypt all records. |
+
+| `prime-gate db rollback` | Roll back SQLite database to the most recent pre-migration or manual backup. |
+| `prime-gate db rotate-key` | Rotate AES-256-GCM master database key and re-encrypt all records. |
+| `prime-gate db rollback` | Roll back SQLite database to the most recent pre-migration or manual backup. |
 | `prime-gate start` | Run API server in foreground with live request logs. |
 | `prime-gate ui` | Start and open the Node.js Web UI Dashboard. |
 
@@ -243,7 +293,7 @@ Prime Gate provides a dual-protocol high-performance gateway:
 - **Anthropic Messages Protocol:** `http://127.0.0.1:52111/v1/messages` (Native SSE streaming, tool-calling, extended thinking)
 - **OpenAI Compatible Protocol:** `http://127.0.0.1:52111/v1` (Chat completions, model listing, health telemetry)
 
-Use API Key `prime-gate-proxy` (or any non-empty string).
+Use an authorized API key generated via `prime-gate auth create-key` (e.g. `pg-live-...`) or the default key generated on initial startup.
 
 ---
 
@@ -255,14 +305,14 @@ Prime Gate includes native Anthropic Messages API support engineered specificall
 - **Windows PowerShell:**
   ```powershell
   $env:ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
-  $env:ANTHROPIC_API_KEY="prime-gate-proxy"
+  $env:ANTHROPIC_API_KEY="pg-live-your-key-here"
   $env:ANTHROPIC_MODEL="gemini-3.8-flash"  # or claude-sonnet-4-6
   claude
   ```
 - **macOS / Linux (Bash / Zsh):**
   ```bash
   export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"
-  export ANTHROPIC_API_KEY="prime-gate-proxy"
+  export ANTHROPIC_API_KEY="pg-live-your-key-here"
   export ANTHROPIC_MODEL="gemini-3.8-flash"  # or claude-sonnet-4-6
   claude
   ```
@@ -277,7 +327,7 @@ Prime Gate includes native Anthropic Messages API support engineered specificall
 - **macOS / Linux (Add to `~/.bashrc` or `~/.zshrc`):**
   ```bash
   echo 'export ANTHROPIC_BASE_URL="http://127.0.0.1:52111"' >> ~/.bashrc
-  echo 'export ANTHROPIC_API_KEY="prime-gate-proxy"' >> ~/.bashrc
+  echo 'export ANTHROPIC_API_KEY="pg-live-your-key-here"' >> ~/.bashrc
   echo 'export ANTHROPIC_MODEL="gemini-3.8-flash"' >> ~/.bashrc
   source ~/.bashrc
   ```
@@ -321,7 +371,7 @@ Add or merge the `antigravity` provider in your OpenCode configuration:
   "providers": {
     "antigravity": {
       "baseUrl": "http://127.0.0.1:52111/v1",
-      "apiKey": "prime-gate-proxy",
+      "apiKey": "pg-live-your-key-here",
       "models": [
         "claude-sonnet-4-6",
         "claude-opus-4-6-thinking",
@@ -347,14 +397,14 @@ Add Prime Gate into your `models` list:
       "provider": "openai",
       "model": "claude-sonnet-4-6",
       "apiBase": "http://127.0.0.1:52111/v1",
-      "apiKey": "prime-gate-proxy"
+      "apiKey": "pg-live-your-key-here"
     },
     {
       "title": "Gemini 3.8 Flash (Prime Gate)",
       "provider": "openai",
       "model": "gemini-3.8-flash",
       "apiBase": "http://127.0.0.1:52111/v1",
-      "apiKey": "prime-gate-proxy"
+      "apiKey": "pg-live-your-key-here"
     }
   ]
 }
@@ -438,7 +488,7 @@ main();
 ```bash
 curl -X POST http://127.0.0.1:52111/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer prime-gate-proxy" \
+  -H "Authorization: Bearer pg-live-your-key-here" \
   -d '{
     "model": "claude-sonnet-4-6",
     "messages": [{"role": "user", "content": "Hello Prime Gate!"}],
@@ -485,12 +535,12 @@ For models with extended thinking capabilities (**Claude Sonnet 4.6**, **Claude 
 
 ---
 
-## 🛡️ Compiled Binary Database & Sentinel Watchdog
+## 🛡️ SQLite WAL Database & Sentinel Integrity Watchdog
 
-Unlike traditional proxies that store OAuth tokens and credentials in unencrypted `accounts.json` files, Prime Gate uses a **compiled C binary storage engine** (`data/prime_gate.pgdb`):
+Unlike traditional proxies that store OAuth tokens and credentials in unencrypted `accounts.json` files, Prime Gate uses an **SQLite database in Write-Ahead-Logging (WAL) mode** (`data/prime_gate.pgdb`):
 
-- **Zero Plaintext JSON:** Sensitive tokens and quotas are sealed in binary BLOB records (`REC_ACCOUNT`, `REC_MODEL`, `REC_QUOTA`).
-- **32-Bit CRC32 Integrity Checksums:** Every binary block is protected against tampering. If a file corruption occurs, the Sentinel Watchdog detects it within 5 seconds.
+- **Binary Record Obfuscation:** Sensitive tokens and quotas are obfuscated in binary BLOB records (`REC_ACCOUNT`, `REC_MODEL`, `REC_QUOTA`) to prevent plaintext leakage on disk.
+- **32-Bit CRC32 Integrity Checksums:** Every binary block includes a 32-bit CRC32 checksum for storage corruption detection. If corruption occurs, Sentinel Watchdog alerts the user.
 - **SQLite WAL Mode:** Supports ultra-low latency, concurrent reads and writes without file-locking bottlenecks.
 - **WebSocket Event Bus (`/ws/live`):** Live database mutations and error logs are broadcast in real-time to the Web UI dashboard terminal.
 
@@ -504,7 +554,7 @@ Prime Gate queries Google's internal APIs dynamically to detect your account's e
 | :--- | :---: | :---: | :---: |
 | **Claude Sonnet 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 | ✓ Up to 64k tokens |
 | **Claude Opus 4.6 (Thinking)** | ✅ Available | ❌ Replaced by 5.5 | ✓ Deep reasoning |
-| **Gemini 3.8 Flash (Recommended)** | ✅ Available | ✅ Available | ✓ Fast thinking |
+| **Gemini 3.8 Flash** | ✅ Available | ✅ Available | ✓ Fast thinking |
 | **Gemini 3.8 Flash High / Med / Low** | ✅ Available | ✅ Available | ✓ Configurable budget |
 | **Gemini 3.1 Flash Lite** | ✅ Available | ✅ Available | Standard |
 | **GPT-OSS 120B (Medium)** | ✅ Available | ✅ Available | Standard |
@@ -522,34 +572,44 @@ Prime Gate features an enterprise-grade **Hybrid Caching Engine** that combines 
 ```mermaid
 graph TD
     Request["Incoming Request (OpenAI / Anthropic)"]
-    --> Extract["Turn-Based Extraction & Noise Stripping"]
+    --> Extract["Context-Key & Scope Extraction (API Key / Project / System / History / Files)"]
     
-    Extract --> StepA{"Step A: Exact SHA-256 Hash"}
-    StepA -->|"Found (0ms)"| ExactHit["Exact Cache Hit (~3ms TTFT)"]
+    Extract --> StepA{"Step A: Exact SHA-256 Hash Hit?"}
+    StepA -->|"Found (0ms)"| ExactHit["Exact Cache Hit (~2ms TTFT)<br/>X-Cache: HIT (EXACT)"]
     
     StepA -->|"Miss"| StepB{"Semantic Vector Engine Enabled?"}
     StepB -->|"No"| Upstream["Upstream Google Antigravity"]
     
-    StepB -->|"Yes"| FastEmbed["FastEmbed ONNX (BAAI/bge-small-en-v1.5)"]
-    FastEmbed --> Vector["Compute 384-dim Query Vector"]
-    Vector --> Cosine["In-Memory Cosine Similarity Scan"]
+    StepB -->|"Yes"| ContextCheck{"Context Hash Match?"}
+    ContextCheck -->|"Diff Context / Files"| Upstream
     
-    Cosine --> Check{"Score >= Threshold (e.g. 93%)?"}
-    Check -->|"Yes"| SemanticHit["Semantic Cache Hit (~12ms TTFT)"]
+    ContextCheck -->|"Same Context"| FastEmbed["Multilingual FastEmbed ONNX<br/>(paraphrase-multilingual-MiniLM / multilingual-e5)"]
+    FastEmbed --> Vector["Compute 384-dim Query Vector (with E5 prefix if applicable)"]
+    Vector --> Cosine["In-Memory Scope-Isolated Cosine Scan"]
+    
+    Cosine --> Check{"Score >= Threshold (Chat: 0.93 / Agent: 0.96)?"}
+    Check -->|"Yes"| SemanticHit["Semantic Cache Hit (~12ms TTFT)<br/>X-Cache: HIT (SEMANTIC)"]
     Check -->|"No"| Upstream
     
     Upstream --> Stream["Stream Tokens to Client"]
-    Stream --> Save{"Active Tool Calls?"}
-    Save -->|"No (Text Output)"| Store["Persist Cache & Vector in SQLite WAL"]
-    Save -->|"Yes"| Skip["Bypass Cache Storage"]
+    Stream --> Save{"Active Tool Calls or Error?"}
+    Save -->|"No (Clean Text Output)"| Store["Persist Passage Vector, TTL & LRU in SQLite WAL"]
+    Save -->|"Yes (tool_use / error)"| Skip["Bypass Cache Storage"]
 ```
 
 ### ⚡ Key Capabilities:
-1. **Fixing 100% Cache Miss on Coding Agents:** Coding tools (Cursor, OpenCode, Claude Code, Cline) always send dynamic tools definitions. Prime Gate cleanly distinguishes between *tool declaration* and *tool execution*: responses producing standard text are 100% cached, saving thousands of tokens per session.
-2. **Local Vector Embeddings (`fastembed` + ONNX Runtime):** Uses `BAAI/bge-small-en-v1.5` on CPU with ~100MB RAM footprint—zero GPU/PyTorch requirements.
-3. **Turn-Based Noise Stripping:** Strips dynamic timestamps and randomized message IDs to create canonical turn keys.
-4. **Smooth Chunked SSE Replay:** Replays cached streaming responses in 4-word / 3ms micro-sleep chunks, providing a fluid animation for IDEs.
-5. **Native Upstream Prefix Caching Optimization:** Deterministically sorts tool function declarations alphabetically and anchors initial conversation turns, guaranteeing Google upstream prefix caching reuse.
+1. **Multilingual Embedding Accuracy (Indonesian Paraphrase Optimization):** Powered by `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (or `intfloat/multilingual-e5-small`) via FastEmbed CPU ONNX Runtime (~100MB RAM, zero PyTorch/CUDA). Tested to achieve $\ge 0.93$ (0.978 empirical) similarity on Indonesian colloquial paraphrases while properly prefixing E5 queries/passages.
+2. **Context-Aware Cache Key (Anti-Hallucination Isolation):** Generates tuple keys `(scope, context_hash, last_user_query, query_hash, tools_sig, has_tools)`. The `context_hash` digests system prompts, full conversation history, referenced file contents, and generation settings (`model`, `temperature`). Two identical questions referencing different source code will **never hit** the cache.
+3. **Multi-Tenant Scope Isolation:** Partitions cached vectors per API key prefix (`key_<prefix>`) and per session/project identifier (`project_id`), strictly preventing cross-user cache contamination.
+4. **Strict Coding Agent Policy:** Separates tool declaration from execution. Agent requests default to exact matching; semantic matching for agent turns is opt-in with a heightened threshold (0.96). Responses containing `tool_use` / `tool_calls`, streaming errors, or partial chunks are never cached.
+5. **Configurable TTL & Automatic LRU Eviction:** Manages cache lifecycle with customizable TTL (default 24 hours), maximum entry capacity (default 5,000 entries), and Least-Recently-Used eviction. Automatically purges/rebuilds vector indexes if embedding model or dimensions change.
+6. **Industry Standard Audit Headers:** Every response provides diagnostic headers:
+   - `X-Cache: HIT | MISS`
+   - `X-Cache-Type: EXACT | SEMANTIC | NONE`
+   - `X-Cache-Similarity: <0.0000 - 1.0000>`
+   - `X-Cache-Key-Scope: <scope_id>`
+7. **Verification Sampling & False-Hit Rate Radar:** Background sampling ledger (`pg_cache_verifications`) continuously measures cache fidelity against upstream outputs to report empirical false-hit rates on the Web UI.
+8. **Smooth Chunked SSE Replay & Upstream Prefix Caching:** Replays cached streaming responses in 4-word / 3ms micro-sleep chunks for realistic IDE animations, with alphabetically sorted function declarations to maximize Google Antigravity prefix cache reuse.
 
 ---
 
@@ -614,3 +674,65 @@ Contributions, bug reports, and feature pull requests are warmly welcome!
 <div align="center">
 <b>Built with ❤️ for the Global AI & Open-Source Developer Community.</b>
 </div>
+
+
+---
+
+## 🔒 Arsitektur Keamanan & Panduan Migrasi (Security & Migration Guide)
+
+Prime Gate v1.2.3 (Fase 2) mengimplementasikan penguatan keamanan komprehensif tingkat enterprise untuk melindungi kredensial, komunikasi lokal, dan integritas proxy:
+
+### 1. Enkripsi Kredensial At-Rest (AES-256-GCM)
+- **Kriptografi Standar Industri:** Kredensial OAuth, refresh token, dan data sesi disimpan menggunakan enkripsi terotentikasi **AES-256-GCM** (library `cryptography`) dengan nonce acak 12-byte unik per record dan Additional Authenticated Data (AAD) yang terikat pada key record.
+- **Isolasi Kunci Master:** Kunci enkripsi 256-bit disimpan secara aman pada hardware-backed **OS Keyring** (`keyring`):
+  - Windows: DPAPI (Data Protection API)
+  - macOS: Keychain
+  - Linux: SecretService / libsecret
+  - *Fallback Terproteksi:* Jika OS keyring tidak tersedia, sistem menggunakan kunci turunan KDF **Scrypt** dengan salt tersimpan lokal disertai peringatan keamanan transparan.
+- **Integritas Berlapis:** Checksum 32-bit CRC32 tetap dipertahankan murni sebagai verifikasi integritas data (*bit-rot detection*), sementara keaslian dan anti-tampering ditangani penuh oleh tag autentikasi AES-GCM.
+- **Rotasi Kunci:** Admin dapat merotasi kunci master enkripsi kapan pun dengan perintah:
+  ```bash
+  python -m prime_gate.cli db rotate-key
+  ```
+
+### 2. Autentikasi Mandatori & API Key Management
+- **Proteksi Endpoint Proxy:** Seluruh panggilan ke `/v1/chat/completions`, `/v1/messages`, `/v1/messages/count_tokens`, dan `/v1/models` wajib menyertakan API Key yang valid melalui header:
+  ```http
+  Authorization: Bearer pg-live-...
+  # atau
+  x-api-key: pg-live-...
+  ```
+- **Penyimpanan Kunci yang Aman:** Kunci API mentah (`pg-live-<32 hex chars>`) hanya ditampilkan **satu kali** saat dibuat dan tidak pernah disimpan dalam bentuk plaintext. Database hanya menyimpan hash **salted SHA-256**.
+- **Verifikasi Constant-Time:** Verifikasi kunci dilakukan dengan perbandingan waktu konstan (`hmac.compare_digest`) guna mencegah serangan *timing attack*.
+- **Rate-Limiting Percobaan Gagal:** Upaya login atau verifikasi kredensial yang gagal dibatasi maksimum 5 kali dalam 5 menit. Jika terlampaui, client IP akan dikunci sementara selama 5 menit (`HTTP 429 Too Many Requests`).
+- **Non-Loopback Bind Guard:** Menjalankan proxy pada host non-loopback (`0.0.0.0` atau IP eksternal) akan ditolak secara otomatis kecuali autentikasi API key telah dikonfigurasi aktif, disertai peringatan keamanan jaringan.
+
+### 3. Perlindungan Dashboard dari Serangan Localhost
+- **Mitigasi DNS Rebinding:** Middleware `HostValidationMiddleware` memvalidasi header `Host` pada setiap request masuk. Request dengan host mencurigakan (misalnya domain eksternal yang di-resolve ke `127.0.0.1`) langsung ditolak dengan `HTTP 403 Forbidden`.
+- **Validasi Origin Ketat:** Mutasi state (`POST`, `PUT`, `DELETE`) divalidasi ketat agar hanya berasal dari dashboard lokal yang sah.
+- **Perlindungan CSRF (Double-Submit Cookie):** Dashboard menggunakan cookie `pg_csrf` yang wajib dicocokkan dengan header `x-csrf-token` pada setiap permintaan yang mengubah state.
+- **Security Headers Komprehensif:** Setiap respons menyertakan header keamanan modern:
+  - `Content-Security-Policy: default-src 'self'; ...`
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+- **Handshake WebSocket Terotentikasi:** Endpoint WebSocket `/sentinel` memvalidasi cookie sesi dashboard `pg_session` dan mencocokkan origin sebelum mengizinkan koneksi audit real-time.
+
+### 4. Auto-Update yang Aman (Safe Auto-Update)
+- **Tagged Release Verification:** Pembaruan ditarik secara terstruktur dari GitHub Releases API berbasis tag rilis resmi (bukan blind pull dari branch pengembangan).
+- **Validasi Checksum SHA-256:** Integritas paket rilis diverifikasi dengan hash SHA-256 sebelum diterapkan ke sistem.
+- **Default "Notify Only":** Pengaturan pembaruan otomatis default adalah *pemberitahuan saja* (`auto_apply: False`). Pengguna memiliki kendali penuh untuk menyetujui pembaruan.
+- **Safety Gate & Rollback Otomatis:** Pembaruan hanya dieksekusi saat proxy berada dalam status idle (0 in-flight request dan tanpa trafik $\ge 30$ detik). Jika health check gagal setelah update, sistem secara otomatis melakukan rollback ke versi cadangan sebelumnya.
+- **Zero Shell Injection:** Tidak ada perintah shell arbitrer yang dijalankan dari string jaringan (`shell=False`).
+
+### 5. Redaksi Log Terpusat (Log Redaction)
+- Modul pembersih regex terpusat (`prime_gate.logging.redactor`) menyaring token OAuth Google, refresh token, Bearer header, cookie sesi, dan API key dari seluruh output konsol, file log, WebSocket audit, dan pesan kesalahan HTTP.
+
+### 6. Panduan Migrasi Database V1 -> V2
+Bagi pengguna yang telah menggunakan Prime Gate versi sebelumnya:
+1. **Migrasi Otomatis:** Saat Prime Gate v1.2.3 dijalankan, sistem secara otomatis mendeteksi record database V1 (format XOR lama), membuat snapshot backup di `data/backups/backup_pre_v2_<timestamp>.pgdb`, dan mengonversinya secara idempoten ke format V2 AES-256-GCM.
+2. **Pembuatan Kunci Perdana:** Jika database belum memiliki API key, sistem akan otomatis membuat satu default key dan menampilkannya di terminal saat startup pertama kali.
+3. **Rollback Manual:** Jika terjadi kendala pada data lama, Anda dapat melakukan pemulihan kapan saja dengan perintah:
+   ```bash
+   python -m prime_gate.cli db rollback
+   ```

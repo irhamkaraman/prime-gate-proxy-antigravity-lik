@@ -31,6 +31,10 @@ const ROUTE_META: Record<RoutePath, { title: string; subtitle: string }> = {
     title: 'Prompt Sandbox & Model Playground',
     subtitle: 'Interactive test bench for streaming inference across Google Antigravity & OpenAI endpoints',
   },
+  keys: {
+    title: 'API Keys & Agent Integrations',
+    subtitle: 'Generate and manage client API keys for Claude Code, OpenCode, Cline, Cursor, and Prompt Sandbox',
+  },
   sentinel: {
     title: 'System & Database Sentinel',
     subtitle: 'High-speed binary storage health, WAL-mode journals, and self-healing audit daemon',

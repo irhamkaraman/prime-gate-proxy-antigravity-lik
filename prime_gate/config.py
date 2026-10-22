@@ -50,7 +50,7 @@ MODELS_CATALOG = {
     "google-ai-pro-trial": [
         {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Thinking)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "claude-opus-4-6-thinking", "name": "Claude Opus 4.6 (Thinking)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
-        {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash (Recommended)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
+        {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash High (Extended Thinking)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "gemini-3.8-flash-medium", "name": "Gemini 3.8 Flash Medium", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "gemini-3.8-flash-low", "name": "Gemini 3.8 Flash Low", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
@@ -66,7 +66,7 @@ MODELS_CATALOG = {
         {"id": "claude-opus-5-5", "name": "Claude Opus 5.5 (Thinking)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Thinking)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "claude-opus-4-6-thinking", "name": "Claude Opus 4.6 (Thinking)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
-        {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash (Recommended)", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
+        {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash High", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "gemini-3.1-flash-lite", "name": "Gemini 3.1 Flash Lite", "owned_by": "google-antigravity", "provider": "prime gate proxy"},
         {"id": "gpt-oss-120b-medium", "name": "GPT-OSS 120B Medium", "owned_by": "google-antigravity", "provider": "prime gate proxy"},

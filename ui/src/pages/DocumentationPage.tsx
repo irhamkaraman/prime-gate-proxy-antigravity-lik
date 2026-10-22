@@ -211,9 +211,9 @@ main();`;
             </p>
           </div>
           <div style={{ background: '#090807', padding: 16, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>4. Economic Value Simulator</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fbbf24' }}>4. Estimasi Nilai Setara Tarif API Komersial</div>
             <p style={{ fontSize: 12, color: '#a8a29e', marginTop: 6, lineHeight: 1.5 }}>
-              Calculates equivalent commercial API savings (GPT-4o / Claude 3.5 Sonnet benchmark) in USD and IDR directly on the live dashboard.
+              Menghitung estimasi nilai komparatif terhadap tarif resmi API OpenAI/Anthropic (benchmark GPT-4o / Claude 3.5) dalam USD dan IDR berdasarkan kuota langganan akun Google Anda.
             </p>
           </div>
         </div>
