@@ -1319,6 +1319,37 @@ async def api_db_test_corrupt(request: Request):
 # System Update & Automated Git Sync Engine
 # =====================================================================
 
+def _get_effective_version() -> str:
+    """
+    Dynamically resolves current installed package version.
+    Reloads prime_gate module if in-memory __version__ is stale compared to disk.
+    """
+    global __version__
+    try:
+        import importlib
+        import prime_gate
+        importlib.reload(prime_gate)
+        if hasattr(prime_gate, "__version__") and prime_gate.__version__:
+            __version__ = prime_gate.__version__
+            return __version__
+    except Exception:
+        pass
+
+    try:
+        init_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "__init__.py")
+        if os.path.exists(init_path):
+            with open(init_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("__version__"):
+                        v = line.split("=")[1].strip().strip('"').strip("'")
+                        if v:
+                            __version__ = v
+                            return v
+    except Exception:
+        pass
+    return __version__
+
+
 _UPDATE_CACHE: Dict[str, Any] = {
     "last_checked": 0.0,
     "data": None
@@ -1379,36 +1410,49 @@ def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
     except Exception:
         pass
 
-    # Compare versions / commits
-    if latest_tag:
-        try:
-            # Simple version comparison
-            cur_parts = [int(p) for p in __version__.split(".") if p.isdigit()]
-            lat_parts = [int(p) for p in latest_tag.split(".") if p.isdigit()]
-            if lat_parts > cur_parts:
-                update_available = True
-        except Exception:
-            if latest_tag != __version__:
-                update_available = True
-
-    if remote_commit and local_commit and remote_commit != "unknown" and local_commit != "unknown":
-        if remote_commit != local_commit:
-            update_available = True
+    effective_ver = _get_effective_version()
 
     # 3. Check commits behind if git origin is tracked
     try:
         r_behind = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/main"], capture_output=True, text=True, cwd=repo_root, timeout=5)
         if r_behind.returncode == 0 and r_behind.stdout.strip().isdigit():
             commits_behind = int(r_behind.stdout.strip())
-            if commits_behind > 0:
-                update_available = True
     except Exception:
         pass
 
+    # Determine if local commit strictly matches remote commit
+    is_same_commit = (
+        local_commit != "unknown"
+        and remote_commit != "unknown"
+        and local_commit == remote_commit
+        and commits_behind == 0
+    )
+
+    if not is_same_commit:
+        if remote_commit != "unknown" and local_commit != "unknown" and remote_commit != local_commit:
+            update_available = True
+        if commits_behind > 0:
+            update_available = True
+
+    # Compare version strings
+    if latest_tag:
+        try:
+            cur_parts = [int(p) for p in effective_ver.split(".") if p.isdigit()]
+            lat_parts = [int(p) for p in latest_tag.split(".") if p.isdigit()]
+            if lat_parts > cur_parts:
+                update_available = True
+            elif is_same_commit:
+                update_available = False
+        except Exception:
+            if not is_same_commit and latest_tag != effective_ver:
+                update_available = True
+            elif is_same_commit:
+                update_available = False
+
     result = {
-        "current_version": __version__,
+        "current_version": effective_ver,
         "current_commit": local_commit,
-        "latest_version": latest_tag or __version__,
+        "latest_version": latest_tag or effective_ver,
         "latest_commit": remote_commit,
         "update_available": update_available,
         "commits_behind": commits_behind,

@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const res = await fetch('/api/system/auto-update/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: nextEnabled }),
+        body: JSON.stringify({ enabled: nextEnabled, auto_apply: nextEnabled }),
       });
       if (res.ok) {
         const data = await res.json();
