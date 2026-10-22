@@ -3,9 +3,9 @@
 # ⚡ Prime Gate Antigravity 代理网关
 ### `prime-gate-proxy-antigravity-lik`
 
-**专为 Google Antigravity 打造的企业级、自托管 OpenAI 兼容代理网关。**
+**专为 Google Antigravity 打造的企业级、自托管 OpenAI 与 Anthropic 双协议兼容代理网关。**
 
-[![Version](https://img.shields.io/badge/version-1.0.0--beta-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
@@ -14,7 +14,7 @@
 
 ### 🌐 语言选择 / Language Selection
 
-[🇺🇸 English](../../README.md) • [🇨🇳 简体中文](README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md)
+[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](../id/README.md) • [🇨🇳 简体中文](README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md)
 
 ---
 
@@ -22,17 +22,21 @@
 
 ## 📖 项目简介
 
-**Prime Gate** 是一款轻量级高性能代理网关，将 Google 内部的 Cloud AI Companion / Antigravity 接口封装为 **100% 兼容 OpenAI 标准的 REST & SSE API**（`/v1/models` 和 `/v1/chat/completions`）。
+**Prime Gate** 是一款轻量级高性能企业级双协议代理网关，将 Google 内部的 Cloud AI Companion / Antigravity 接口封装为 **100% 兼容 OpenAI 标准**（`/v1/chat/completions`）与 **原生 Anthropic Messages API**（`/v1/messages`）的 REST & SSE API。
 
-通过该工具，您可以将 Google Antigravity 配额中的 **Claude Sonnet 4.6 (Thinking)**、**Claude Opus 4.6 (Thinking)** 和 **Gemini 3.8 Flash** 模型直接无缝接入主流开发工具，如 **OpenCode**、**Cursor**、**Continue.dev**、**Aider**、**Cline** 和 **SillyTavern**。
+通过该工具，您可以将 Google Antigravity 配额中的 **Claude Sonnet 4.6 (Thinking)**、**Claude Opus 4.6 (Thinking)** 和 **Gemini 3.8 Flash** 模型直接无缝接入主流开发工具，如 **Claude Code CLI**、**Cline**、**Roo Code**、**OpenCode**、**Cursor**、**Continue.dev**、**Aider** 和 **SillyTavern**。
 
 ---
 
 ## 🌟 核心特性
 
-1. **100% 兼容 OpenAI 协议：**
-   完全兼容 OpenAI API 规范，即插即用，无需修改客户端调用逻辑。
-2. **实时思维链（Reasoning / Thinking）流式传输：**
+1. **OpenAI 与 Anthropic 双协议原生支持：**
+   全面支持 OpenAI (`/v1/chat/completions`) 与 Anthropic (`/v1/messages`) 规范，可无缝直连 Claude Code CLI。
+2. **多语言语义向量缓存 (Semantic Cache)：**
+   内置 FastEmbed ONNX 向量缓存与 SQLite WAL 存储，降低重复请求延迟至 ~12ms。
+3. **企业级安全架构 (AES-256-GCM)：**
+   本地凭据使用 AES-256-GCM 硬件加密隔离保护，全面支持 Client API Key 速率与配额管控。
+4. **实时思维链（Reasoning / Thinking）流式传输：**
    原生支持通过 `choices[0].delta.reasoning_content` 输出 Claude 4.6 及 Gemini 3.8 的深度推理过程。
 3. **零 400 报错（递归 Schema 清洗）：**
    自动清理 Google Antigravity 不支持的 JSON 约束（如 `exclusiveMinimum`, `exclusiveMaximum`, `$schema`, `additionalProperties`），确保函数与工具调用（Tool Calling）100% 稳定运行。

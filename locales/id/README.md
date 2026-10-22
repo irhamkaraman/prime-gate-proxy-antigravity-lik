@@ -9,10 +9,10 @@
 
 **Gateway Proksi Mandiri (Self-Hosted) Tingkat Perusahaan Kompatibel OpenAI & Anthropic untuk Google Antigravity.**
 
-[![Versi](https://img.shields.io/badge/version-1.2.3-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Versi](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=githubactions&logoColor=white)](../../.github/workflows/ci.yml)
-[![Anti-Banned](https://img.shields.io/badge/Keamanan-Penyelarasan%20Klien-blue.svg?style=for-the-badge&logo=shield)](../../README.md#-arsitektur-keamanan-akun--penyelarasan-klien)
-[![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](../../README.md#-next-gen-smart--semantic-vector-caching-hybrid-engine)
+[![Keamanan](https://img.shields.io/badge/Keamanan-Penyelarasan%20Klien-blue.svg?style=for-the-badge&logo=shield)](#-keamanan-permintaan--penyelarasan-klien-request-safety--client-alignment)
+[![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](#-next-gen-smart--semantic-vector-caching-hybrid-engine)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Lisensi: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
@@ -46,6 +46,30 @@
 **Prime Gate** adalah jembatan API enterprise dual-protokol yang membungkus layanan internal Google Cloud AI Companion / Antigravity menjadi endpoint REST & SSE yang **patuh pada standar OpenAI** (`/v1/chat/completions`) dan **protokol asli Anthropic Messages API** (`/v1/messages`).
 
 Alat ini memungkinkan Anda memanfaatkan kuota Google Antigravity Anda—termasuk **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)**, dan **Gemini 3.8 Flash**—secara langsung di dalam berbagai alat AI coding modern seperti **Claude Code CLI**, **Cline**, **Roo Code**, **OpenCode**, **Cursor**, **Continue.dev**, **Aider**, dan **SillyTavern**.
+
+---
+
+## 🔍 Batasan yang Diketahui (Known Limitations)
+
+1. **Ketergantungan Kuota Upstream:** Kuota inferensi, ketersediaan model, dan batas frekuensi request (*rate limits*) sepenuhnya diatur oleh kebijakan server Google Cloud.
+2. **Perubahan Skema API Internal:** Karena beroperasi di atas API internal Google Antigravity, perubahan skema mendadak dari upstream dapat memengaruhi fungsi translasi hingga update adaptasi dirilis.
+3. **Pencarian Web Publik:** MCP Web Search (`scripts/mcp_search.py`) mengandalkan resolver publik DoH (Cloudflare 1.1.1.1) dan parser DuckDuckGo yang dapat mengalami perubahan format sewaktu-waktu.
+4. **Bukan Pengganti Layanan API Komersial Resmi:** Proyek ini ditujukan untuk kebutuhan alur kerja developer personal dan eksperimen lokal, bukan untuk beban produksi komersial berskala besar.
+
+---
+
+## 🛡️ Model Ancaman (Threat Model)
+
+Untuk menjaga transparansi teknis, tabel berikut mendefinisikan apa yang dilindungi (*in-scope*) dan apa yang berada di luar kendali sistem (*out-of-scope*):
+
+| Area / Komponen | Apa yang Dilindungi (In-Scope) | Apa yang TIDAK Dilindungi (Out-of-Scope) |
+| :--- | :--- | :--- |
+| **Kredensial & Token Lokal** | Enkripsi terotentikasi AES-256-GCM dengan nonce 12-byte acak unik per record dan AAD binding. Kunci enkripsi diisolasi dalam OS Keyring (Windows DPAPI, macOS Keychain, Linux SecretService) dengan fallback terderivasi Scrypt KDF. Token otomatis diabaikan dari git tracking. | Perlindungan terhadap malware atau proses dengan hak akses root/administrator pada sistem operasi lokal Anda. |
+| **Integritas Database** | Checksum 32-bit CRC32 mendeteksi kerusakan fisik bit (*bit-rot* / disk corruption), sementara Authentication Tag AES-256-GCM mendeteksi modifikasi atau manipulasi data yang disengaja. Backup otomatis dibuat di `data/backups/`. | Kerusakan fisik media penyimpanan yang tidak dapat dipulihkan (*hardware failure*). Perintah `prime-gate db rollback` disediakan untuk pemulihan dari backup lokal. |
+| **Autentikasi & Batas Akses** | Seluruh endpoint proxy (`/v1/*`) mewajibkan API Key (`Authorization: Bearer` atau `x-api-key`). Kunci disimpan hanya dalam bentuk hash salted SHA-256. Non-loopback host binding dilindungi dari risiko paparan tanpa autentikasi. | Pembagian kunci API yang tidak disengaja oleh pengguna ke pihak luar. |
+| **Perlindungan Dashboard & Localhost** | Mitigasi DNS Rebinding (validasi header `Host`), validasi `Origin`, double-submit CSRF token, sesi `HttpOnly` `SameSite=Strict`, dan security headers (CSP, nosniff, DENY, Referrer-Policy). Handshake WebSocket `/sentinel` memvalidasi sesi dan origin. | Ekstensi browser pihak ketiga yang memiliki izin istimewa untuk membaca cookie atau memodifikasi DOM secara lokal. |
+| **Pola Lalu Lintas Klien** | Normalisasi header HTTP/gRPC menyerupai format IDE resmi, humanized pacing, dan Sentinel Loop Guard (memutus loop tool $\ge 3$ kali). | Analisis pola trafik sisi server Google (pemeriksaan IP, audit perilaku, dsb). **Tidak ada jaminan kebal deteksi atau anti-ban.** |
+| **Konsumsi Kuota** | Cache vektor semantik lokal (~12ms) mengurangi panggilan duplikat ke upstream. | Penyesuaian kuota, batas harian, atau kebijakan langganan oleh pihak Google. |
 
 ---
 
@@ -525,3 +549,67 @@ Kontribusi, laporan bug, dan permohonan fitur baru sangat diterima dengan hangat
 <div align="center">
 <b>Dibuat dengan ❤️ untuk Komunitas Developer AI & Open-Source Indonesia dan Global.</b>
 </div>
+
+---
+
+## 🔒 Arsitektur Keamanan & Panduan Migrasi (Security & Migration Guide)
+
+Prime Gate v1.2.4 mengimplementasikan penguatan keamanan komprehensif tingkat enterprise untuk melindungi kredensial, komunikasi lokal, dan integritas proxy:
+
+### 1. Enkripsi Kredensial At-Rest (AES-256-GCM)
+- **Kriptografi Standar Industri:** Kredensial OAuth, refresh token, dan data sesi disimpan menggunakan enkripsi terotentikasi **AES-256-GCM** (library `cryptography`) dengan nonce acak 12-byte unik per record dan Additional Authenticated Data (AAD) yang terikat pada key record.
+- **Isolasi Kunci Master:** Kunci enkripsi 256-bit disimpan secara aman pada hardware-backed **OS Keyring** (`keyring`):
+  - Windows: DPAPI (Data Protection API)
+  - macOS: Keychain
+  - Linux: SecretService / libsecret
+  - *Fallback Terproteksi:* Jika OS keyring tidak tersedia, sistem menggunakan kunci turunan KDF **Scrypt** dengan salt tersimpan lokal disertai peringatan keamanan transparan.
+- **Integritas Berlapis:** Checksum 32-bit CRC32 tetap dipertahankan murni sebagai verifikasi integritas data (*bit-rot detection*), sementara keaslian dan anti-tampering ditangani penuh oleh tag autentikasi AES-GCM.
+- **Rotasi Kunci:** Admin dapat merotasi kunci master enkripsi kapan pun dengan perintah:
+  ```bash
+  python -m prime_gate.cli db rotate-key
+  ```
+
+### 2. Autentikasi Mandatori & Penegakan Kebijakan API Key
+- **Proteksi Endpoint Proxy:** Seluruh panggilan ke `/v1/chat/completions`, `/v1/messages`, `/v1/messages/count_tokens`, dan `/v1/models` wajib menyertakan API Key yang valid melalui header:
+  ```http
+  Authorization: Bearer pg-live-...
+  # atau
+  x-api-key: pg-live-...
+  ```
+- **Penyimpanan Kunci yang Aman:** Kunci API mentah (`pg-live-<32 hex chars>`) hanya ditampilkan **satu kali** saat dibuat dan tidak pernah disimpan dalam bentuk plaintext. Database hanya menyimpan hash **salted SHA-256**.
+- **Verifikasi Constant-Time:** Verifikasi kunci dilakukan dengan perbandingan waktu konstan (`hmac.compare_digest`) guna mencegah serangan *timing attack*.
+- **Pembatasan Laju & Kuota Token (RPM / TPD):** Sliding-window rate limit per menit (RPM) dan kuota token per hari (TPD) ditegakkan ketat per kunci. Pelanggaran batas mengembalikan HTTP 429 terstandar dengan header `Retry-After: <detik>`.
+- **Daftar Putih Model Dinamis (Dynamic Whitelisting):** Setiap kunci API dapat dibatasi hanya untuk model-model tertentu. Request untuk model yang tidak diizinkan ditolak dengan HTTP 403 Forbidden.
+- **Isolasi Lingkup Cache (Cache Scope):** Cache dipartisi per kunci (`global` atau `scoped:<key_id>`), menjamin privasi multi-tenant yang ketat.
+- **Rate-Limiting Percobaan Gagal:** Upaya login atau verifikasi kredensial yang gagal dibatasi maksimum 5 kali dalam 5 menit. Jika terlampaui, client IP akan dikunci sementara selama 5 menit (`HTTP 429 Too Many Requests`).
+- **Non-Loopback Bind Guard:** Menjalankan proxy pada host non-loopback (`0.0.0.0` atau IP eksternal) akan ditolak secara otomatis kecuali autentikasi API key telah dikonfigurasi aktif.
+
+### 3. Perlindungan Dashboard dari Serangan Localhost
+- **Mitigasi DNS Rebinding:** Middleware `HostValidationMiddleware` memvalidasi header `Host` pada setiap request masuk. Request dengan host mencurigakan (misalnya domain eksternal yang di-resolve ke `127.0.0.1`) langsung ditolak dengan `HTTP 403 Forbidden`.
+- **Validasi Origin Ketat:** Mutasi state (`POST`, `PUT`, `DELETE`) divalidasi ketat agar hanya berasal dari dashboard lokal yang sah.
+- **Perlindungan CSRF (Double-Submit Cookie):** Dashboard menggunakan cookie `pg_csrf` yang wajib dicocokkan dengan header `x-csrf-token` pada setiap permintaan yang mengubah state.
+- **Security Headers Komprehensif:** Setiap respons menyertakan header keamanan modern:
+  - `Content-Security-Policy: default-src 'self'; ...`
+  - `X-Content-Type-Options: nosniff`
+  - `X-Frame-Options: DENY`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+- **Handshake WebSocket Terotentikasi:** Endpoint WebSocket `/sentinel` memvalidasi cookie sesi dashboard `pg_session` dan mencocokkan origin sebelum mengizinkan koneksi audit real-time.
+
+### 4. Auto-Update yang Aman (Safe Auto-Update)
+- **Tagged Release Verification:** Pembaruan ditarik secara terstruktur dari GitHub Releases API berbasis tag rilis resmi (bukan blind pull dari branch pengembangan).
+- **Validasi Checksum SHA-256:** Integritas paket rilis diverifikasi dengan hash SHA-256 sebelum diterapkan ke sistem.
+- **Default "Notify Only":** Pengaturan pembaruan otomatis default adalah *pemberitahuan saja* (`auto_apply: False`). Pengguna memiliki kendali penuh untuk menyetujui pembaruan.
+- **Safety Gate & Rollback Otomatis:** Pembaruan hanya dieksekusi saat proxy berada dalam status idle (0 in-flight request dan tanpa trafik $\ge 30$ detik). Jika health check gagal setelah update, sistem secara otomatis melakukan rollback ke versi cadangan sebelumnya.
+- **Zero Shell Injection:** Tidak ada perintah shell arbitrer yang dijalankan dari string jaringan (`shell=False`).
+
+### 5. Redaksi Log Terpusat (Log Redaction)
+- Modul pembersih regex terpusat (`prime_gate.logging.redactor`) menyaring token OAuth Google, refresh token, Bearer header, cookie sesi, dan API key dari seluruh output konsol, file log, WebSocket audit, dan pesan kesalahan HTTP.
+
+### 6. Panduan Migrasi Database V1 -> V2
+Bagi pengguna yang telah menggunakan Prime Gate versi sebelumnya:
+1. **Migrasi Otomatis:** Saat Prime Gate v1.2.4 dijalankan, sistem secara otomatis mendeteksi record database V1 (format XOR lama), membuat snapshot backup di `data/backups/backup_pre_v2_<timestamp>.pgdb`, dan mengonversinya secara idempoten ke format V2 AES-256-GCM.
+2. **Pembuatan Kunci Perdana:** Jika database belum memiliki API key, sistem akan otomatis membuat satu default key dan menampilkannya di terminal saat startup pertama kali.
+3. **Rollback Manual:** Jika terjadi kendala pada data lama, Anda dapat melakukan pemulihan kapan saja dengan perintah:
+   ```bash
+   python -m prime_gate.cli db rollback
+   ```

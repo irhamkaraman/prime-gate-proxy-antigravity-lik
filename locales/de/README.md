@@ -3,9 +3,9 @@
 # ⚡ Prime Gate Antigravity Proxy
 ### `prime-gate-proxy-antigravity-lik`
 
-**Ein produktionsreifer, selbst gehosteter OpenAI-kompatibler Proxy-Gateway für Google Antigravity.**
+**Ein produktionsreifer, selbst gehosteter OpenAI- und Anthropic-kompatibler Dual-Protokoll-Proxy-Gateway für Google Antigravity.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0--beta-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
@@ -14,7 +14,7 @@
 
 ### 🌐 Sprache auswählen / Select Language
 
-[🇺🇸 English](../../README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](README.md) • [🇫🇷 Français](../fr/README.md)
+[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](../id/README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](../ja/README.md) • [🇩🇪 Deutsch](README.md) • [🇫🇷 Français](../fr/README.md)
 
 ---
 
@@ -22,17 +22,21 @@
 
 ## 📖 Übersicht
 
-**Prime Gate** ist eine schlanke und robuste API-Bridge, die den internen Cloud AI Companion / Antigravity-Dienst von Google in eine **100% OpenAI-konforme REST- & SSE-API** (`/v1/models`, `/v1/chat/completions`) kapselt.
+**Prime Gate** ist eine schlanke und robuste API-Bridge, die den internen Cloud AI Companion / Antigravity-Dienst von Google in eine **OpenAI-konforme** (`/v1/chat/completions`) und **native Anthropic Messages API-kompatible** (`/v1/messages`) REST- & SSE-Schnittstelle kapselt.
 
-Nutzen Sie Ihre Google Antigravity-Kontingente – darunter **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)** und **Gemini 3.8 Flash** – direkt in Ihren bevorzugten AI-Entwicklungswerkzeugen wie **OpenCode**, **Cursor**, **Continue.dev**, **Aider**, **Cline** und **SillyTavern**.
+Nutzen Sie Ihre Google Antigravity-Kontingente – darunter **Claude Sonnet 4.6 (Thinking)**, **Claude Opus 4.6 (Thinking)** und **Gemini 3.8 Flash** – direkt in Ihren bevorzugten AI-Entwicklungswerkzeugen wie **Claude Code CLI**, **Cline**, **Roo Code**, **OpenCode**, **Cursor**, **Continue.dev**, **Aider** und **SillyTavern**.
 
 ---
 
 ## 🌟 Hauptfunktionen
 
-1. **100% OpenAI-Spezifikationskonform:**
-   Nahtloser Drop-in-Ersatz für Standard-OpenAI-Clients.
-2. **Echtzeit-Denkprozess-Streaming (Thinking Mode):**
+1. **Dual-Protokoll-Unterstützung (OpenAI & Anthropic Native):**
+   Vollständige Unterstützung für OpenAI- und native Anthropic-Endpunkte (`/v1/messages`) zur direkten Anbindung von Claude Code CLI.
+2. **Mehrsprachiger semantischer Vektor-Cache:**
+   Lokaler FastEmbed ONNX-Vektor-Cache mit SQLite WAL-Persistenz (~12ms TTFT).
+3. **Enterprise-Sicherheit (AES-256-GCM):**
+   Lokale Anmeldedaten werden mit AES-256-GCM und OS-Keyring geschützt; granulare Client-API-Key-Richtlinien (RPM / TPD).
+4. **Echtzeit-Denkprozess-Streaming (Thinking Mode):**
    Liefert Reasoning-Chunks via `choices[0].delta.reasoning_content` in Echtzeit.
 3. **Keine 400 Bad Request Fehler (Schema Sanitizer):**
    Bereinigt automatisch nicht unterstützte JSON-Schema-Einschränkungen (`exclusiveMinimum`, `$schema`, `additionalProperties`) für stabile Tool Calls.

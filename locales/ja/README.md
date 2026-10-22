@@ -3,9 +3,9 @@
 # ⚡ Prime Gate Antigravity プロキシ
 ### `prime-gate-proxy-antigravity-lik`
 
-**Google Antigravity向け本番グレード・セルフホスト型 OpenAI 互換プロキシゲートウェイ。**
+**Google Antigravity向け本番グレード・セルフホスト型 OpenAI & Anthropic デュアルプロトコル互換プロキシゲートウェイ。**
 
-[![Version](https://img.shields.io/badge/version-1.0.0--beta-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
@@ -14,7 +14,7 @@
 
 ### 🌐 言語を選択 / Select Language
 
-[🇺🇸 English](../../README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md)
+[🇺🇸 English](../../README.md) • [🇮🇩 Bahasa Indonesia](../id/README.md) • [🇨🇳 简体中文](../zh/README.md) • [🇷🇺 Русский](../ru/README.md) • [🇯🇵 日本語](README.md) • [🇩🇪 Deutsch](../de/README.md) • [🇫🇷 Français](../fr/README.md)
 
 ---
 
@@ -22,17 +22,21 @@
 
 ## 📖 概要
 
-**Prime Gate** は、Google の内部 Cloud AI Companion / Antigravity API を **100% OpenAI 互換の REST & SSE API**（`/v1/models`, `/v1/chat/completions`）としてラップする高性能プロキシゲートウェイです。
+**Prime Gate** は、Google の内部 Cloud AI Companion / Antigravity API を **OpenAI 互換**（`/v1/chat/completions`）および **ネイティブ Anthropic Messages API 互換**（`/v1/messages`）の REST & SSE エンドポイントとしてラップするエンタープライズグレードのプロキシゲートウェイです。
 
-**Claude Sonnet 4.6 (Thinking)**、**Claude Opus 4.6 (Thinking)**、**Gemini 3.8 Flash** などの強力なモデルを、**OpenCode**、**Cursor**、**Continue.dev**、**Aider**、**Cline**、**SillyTavern** などのお好みの開発環境で直接利用できます。
+**Claude Sonnet 4.6 (Thinking)**、**Claude Opus 4.6 (Thinking)**、**Gemini 3.8 Flash** などの強力なモデルを、**Claude Code CLI**、**Cline**、**Roo Code**、**OpenCode**、**Cursor**、**Continue.dev**、**Aider**、**SillyTavern** などのお好みの開発環境で直接利用できます。
 
 ---
 
 ## 🌟 主な機能
 
-1. **100% OpenAI API 互換:**
-   クライアント側の設定を変更することなく、標準の OpenAI エンドポイントとしてシームレスに機能します。
-2. **リアルタイム思考プロセス（Thinking Mode）ストリーミング:**
+1. **OpenAI & Anthropic デュアルプロトコル対応:**
+   OpenAI とネイティブ Anthropic (`/v1/messages`) の両プロトコルに対応し、Claude Code CLI に完全適合。
+2. **多言語対応セマンティックベクトルキャッシュ (Semantic Cache):**
+   FastEmbed ONNX ベクトル検索と SQLite WAL による高速応答（~12ms TTFT）。
+3. **エンタープライズセキュリティ (AES-256-GCM):**
+   OS Keyring による認証情報暗号化、API キーごとのレートリミット（RPM / TPD）およびキャッシュスコープ分離。
+4. **リアルタイム思考プロセス（Thinking Mode）ストリーミング:**
    Claude 4.6 および Gemini 3.8 の深い推論プロセスを `choices[0].delta.reasoning_content` 経由でリアルタイム配信。
 3. **400 Bad Request エラー防止（再帰的スキーマサニタイザー）:**
    Google Antigravity でサポートされていない JSON 制約（`exclusiveMinimum`、`$schema` 等）を自動除去し、ツール呼び出しを安定動作させます。

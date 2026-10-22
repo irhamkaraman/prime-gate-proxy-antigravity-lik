@@ -16,13 +16,24 @@ def test_no_absolute_claims_in_readme():
 
 
 def test_disclaimer_and_risk_sections_exist():
-    """Verify that Disclaimer & Risiko is present and explicitly warns against using primary accounts."""
+    """Verify that Disclaimer & Risks / Risiko is present and explicitly warns against using primary accounts."""
     readme_path = REPO_ROOT / "README.md"
     readme_text = readme_path.read_text(encoding="utf-8")
 
-    assert "Disclaimer & Risiko" in readme_text, "README.md must include Disclaimer & Risiko section"
-    assert "JANGAN PERNAH" in readme_text, "README.md must explicitly warn against using primary accounts"
-    assert "tidak berafiliasi" in readme_text.lower(), "README.md must state non-affiliation with Google/Anthropic"
+    assert ("Disclaimer & Risks" in readme_text or "Disclaimer & Risiko" in readme_text), \
+        "README.md must include Disclaimer & Risks section"
+    assert ("NEVER" in readme_text or "JANGAN PERNAH" in readme_text), \
+        "README.md must explicitly warn against using primary accounts"
+    assert ("not affiliated" in readme_text.lower() or "tidak berafiliasi" in readme_text.lower()), \
+        "README.md must state non-affiliation with Google/Anthropic"
+
+    # Also verify Indonesian localization retains identical guarantees
+    id_readme_path = REPO_ROOT / "locales" / "id" / "README.md"
+    if id_readme_path.exists():
+        id_text = id_readme_path.read_text(encoding="utf-8")
+        assert "Disclaimer & Risiko" in id_text
+        assert "JANGAN PERNAH" in id_text
+        assert "tidak berafiliasi" in id_text.lower()
 
 
 def test_known_limitations_and_threat_model_exist():
