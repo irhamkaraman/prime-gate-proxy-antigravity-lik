@@ -1568,16 +1568,37 @@ def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
             elif is_same_commit:
                 update_available = False
 
+    # 4. Check NPM registry for latest published prime-gate-antigravity package
+    npm_latest = None
+    try:
+        import urllib.request
+        req_npm = urllib.request.Request(
+            "https://registry.npmjs.org/prime-gate-antigravity/latest",
+            headers={"User-Agent": "PrimeGate-Updater", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req_npm, timeout=2) as resp_npm:
+            npm_data = json.loads(resp_npm.read().decode("utf-8"))
+            npm_latest = npm_data.get("version")
+            if npm_latest:
+                cur_parts = [int(p) for p in effective_ver.split(".") if p.isdigit()]
+                npm_parts = [int(p) for p in npm_latest.split(".") if p.isdigit()]
+                if npm_parts > cur_parts:
+                    update_available = True
+    except Exception:
+        pass
+
     result = {
         "current_version": effective_ver,
         "current_commit": local_commit,
         "latest_version": latest_tag or effective_ver,
         "latest_commit": remote_commit,
+        "npm_version": npm_latest,
         "update_available": update_available,
         "commits_behind": commits_behind,
         "is_synced": not update_available,
         "last_checked": now,
         "repo_url": "https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik",
+        "npm_url": "https://www.npmjs.com/package/prime-gate-antigravity",
         "auto_update": db.get_auto_update_config()
     }
 

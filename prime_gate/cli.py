@@ -32,6 +32,56 @@ from .db import db, sentinel, REC_SYSTEM
 console = Console()
 account_mgr = AccountManager()
 
+def _parse_semver(v: str) -> tuple:
+    parts = []
+    for x in v.lstrip("v").split("."):
+        try:
+            parts.append(int(x))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+def check_npm_update_notifier(silent_if_current: bool = True):
+    """
+    Non-blocking update checker against NPM registry (prime-gate-antigravity).
+    Caches check results in the database for 1 hour to maintain zero CLI latency.
+    """
+    try:
+        now = time.time()
+        cached = db.get("system:npm_update_check") or {}
+        last_checked = cached.get("last_checked", 0.0)
+        latest_ver = cached.get("latest_version")
+
+        # Refresh check every 1 hour (3600 seconds)
+        if (now - last_checked > 3600.0) or not latest_ver:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://registry.npmjs.org/prime-gate-antigravity/latest",
+                headers={"User-Agent": "PrimeGate-CLI", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                latest_ver = data.get("version")
+                if latest_ver:
+                    db.set("system:npm_update_check", {"last_checked": now, "latest_version": latest_ver})
+
+        if latest_ver and _parse_semver(latest_ver) > _parse_semver(__version__):
+            console.print(Panel(
+                Text.from_markup(
+                    f"[bold yellow]🔔 Update Available on NPM:[/bold yellow] [bold red]{__version__}[/bold red] → [bold green]{latest_ver}[/bold green]\n\n"
+                    f"• Update globally via npm:  [bold cyan]npm install -g prime-gate-antigravity@latest[/bold cyan]\n"
+                    f"• Or run latest via npx:    [bold cyan]npx prime-gate-antigravity@latest[/bold cyan]\n"
+                    f"• Or update Git clone:      [bold cyan]scripts\\update.bat[/bold cyan] (or [bold cyan]git pull[/bold cyan])"
+                ),
+                title="[bold yellow]Prime Gate NPM Update Available[/bold yellow]",
+                border_style="yellow"
+            ))
+        elif not silent_if_current:
+            console.print(f"[bold green]✓ Prime Gate is up to date (v{__version__}) on npmjs.org.[/bold green]")
+    except Exception:
+        if not silent_if_current:
+            console.print("[yellow]Could not reach npmjs.org (package may not yet be published or network offline).[/yellow]")
+
 def version_callback(value: bool):
     if value:
         console.print(Panel(
@@ -39,11 +89,12 @@ def version_callback(value: bool):
                 f"[bold cyan]prime-gate-proxy-antigravity-lik[/bold cyan] version [bold green]{__version__}[/bold green] "
                 f"([italic yellow]Codename: {__codename__}[/italic yellow])\n"
                 f"[dim]Engine: Python 3.11+ / FastAPI / HTTPX | Frontend: Node.js Glassmorphic Dashboard\n"
-                f"Author: irhamkaraman | GitHub: https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik[/dim]"
+                f"NPM Package: prime-gate-antigravity | GitHub: https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik[/dim]"
             ),
             title="[bold white]Prime Gate Antigravity[/bold white]",
             border_style="cyan"
         ))
+        check_npm_update_notifier(silent_if_current=True)
         raise typer.Exit()
 
 @app.callback()
@@ -53,7 +104,13 @@ def main(
     )
 ):
     """Prime Gate Antigravity CLI Suite."""
-    pass
+    check_npm_update_notifier(silent_if_current=True)
+
+@app.command(name="check-update")
+def check_update_cmd():
+    """Check for latest updates from npmjs.org."""
+    console.print("[cyan]Checking for Prime Gate updates on npmjs.org (prime-gate-antigravity)...[/cyan]")
+    check_npm_update_notifier(silent_if_current=False)
 
 @app.command()
 def start(
