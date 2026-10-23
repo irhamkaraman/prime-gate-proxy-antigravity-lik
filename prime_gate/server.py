@@ -254,7 +254,7 @@ async def api_auth_session_login(request: Request):
         raise HTTPException(status_code=401, detail={"error": {"message": "Invalid API Key", "code": "invalid_key"}})
 
     AuthManager.record_login_attempt(client_ip, True)
-    session_id, csrf_token = AuthManager.create_session()
+    session_id, csrf_token = AuthManager.create_session(matched.get("name", ""))
     is_secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
 
     response = JSONResponse(content={
@@ -270,7 +270,7 @@ async def api_auth_session_login(request: Request):
         samesite="strict",
         secure=is_secure,
         path="/",
-        max_age=86400
+        max_age=315360000
     )
     response.set_cookie(
         key=COOKIE_CSRF_NAME,
@@ -279,7 +279,7 @@ async def api_auth_session_login(request: Request):
         samesite="strict",
         secure=is_secure,
         path="/",
-        max_age=86400
+        max_age=315360000
     )
     return response
 

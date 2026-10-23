@@ -2,7 +2,7 @@ import unittest
 from starlette.testclient import TestClient
 from prime_gate.server import app
 from prime_gate.db import db
-from prime_gate.crypto.auth_manager import AuthManager, COOKIE_SESSION_NAME, HEADER_CSRF_NAME
+from prime_gate.crypto.auth_manager import AuthManager, COOKIE_SESSION_NAME, HEADER_CSRF_NAME, _ACTIVE_SESSIONS
 
 
 class TestDashboardSecurity(unittest.TestCase):
@@ -99,6 +99,34 @@ class TestDashboardSecurity(unittest.TestCase):
 
         # Clean up rate limit state for test teardown
         AuthManager.record_login_attempt(ip, True)
+
+    def test_permanent_session_persistence_across_memory_wipe(self):
+        """Verifies session survives daemon/server restart (memory wipe) via SQLite DB."""
+        # 1. Login to get cookies
+        login_resp = self.client.post(
+            "/api/auth/session",
+            json={"api_key": self.raw_key}
+        )
+        self.assertEqual(login_resp.status_code, 200)
+        self.assertIn(COOKIE_SESSION_NAME, self.client.cookies)
+        session_id = self.client.cookies[COOKIE_SESSION_NAME]
+
+        # 2. Verify cookie max_age is set to 10 years (315360000 seconds)
+        set_cookie_header = login_resp.headers.get("set-cookie", "")
+        self.assertIn("max-age=315360000", set_cookie_header.lower())
+
+        # 3. Simulate server restart: completely clear in-memory sessions dictionary
+        _ACTIVE_SESSIONS.clear()
+        self.assertEqual(len(_ACTIVE_SESSIONS), 0)
+
+        # 4. Status endpoint should rehydrate session from persistent DB
+        status_resp = self.client.get("/api/auth/session/status")
+        self.assertEqual(status_resp.status_code, 200)
+        self.assertTrue(status_resp.json()["authenticated"])
+        self.assertIsNotNone(status_resp.json()["csrf_token"])
+
+        # 5. AuthManager memory cache should now have restored the session
+        self.assertIn(session_id, _ACTIVE_SESSIONS)
 
 
 if __name__ == "__main__":

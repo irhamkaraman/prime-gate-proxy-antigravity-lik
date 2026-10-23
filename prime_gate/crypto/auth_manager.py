@@ -11,9 +11,9 @@ COOKIE_CSRF_NAME = "pg_csrf"
 HEADER_CSRF_NAME = "x-csrf-token"
 
 # In-memory storage for active sessions & rate limiting
-# session_id -> { "created_at": float, "expires_at": float, "csrf_token": str }
+# session_id -> { "created_at": float, "expires_at": float, "csrf_token": str, "key_name": str }
 _ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
-SESSION_TTL_SECONDS = 86400  # 24 hours
+SESSION_TTL_SECONDS = 315360000  # 10 years (persistent permanent session)
 
 # IP -> list of failed attempt timestamps
 _FAILED_LOGINS: Dict[str, List[float]] = defaultdict(list)
@@ -112,32 +112,59 @@ class AuthManager:
     # Session Management
     # -------------------------------------------------------------
     @staticmethod
-    def create_session() -> Tuple[str, str]:
+    def create_session(key_name: str = "") -> Tuple[str, str]:
         """
-        Creates a new dashboard session.
+        Creates a persistent dashboard session.
         Returns (session_id, csrf_token).
+        Persists session in binary DB to survive server & daemon restarts.
         """
         now = time.time()
         session_id = secrets.token_urlsafe(32)
         csrf_token = secrets.token_urlsafe(32)
 
-        _ACTIVE_SESSIONS[session_id] = {
+        session_data = {
             "created_at": now,
             "expires_at": now + SESSION_TTL_SECONDS,
-            "csrf_token": csrf_token
+            "csrf_token": csrf_token,
+            "key_name": key_name
         }
+        _ACTIVE_SESSIONS[session_id] = session_data
+
+        try:
+            from ..db import db
+            db.set(f"session:{session_id}", session_data)
+        except Exception:
+            pass
+
         return session_id, csrf_token
 
     @staticmethod
     def validate_session(session_id: Optional[str]) -> bool:
-        """Validates that a session exists and has not expired."""
+        """Validates that a session exists and has not expired (memory + persistent DB)."""
         if not session_id:
             return False
+
         session = _ACTIVE_SESSIONS.get(session_id)
         if not session:
+            try:
+                from ..db import db
+                data = db.get(f"session:{session_id}")
+                if data and isinstance(data, dict):
+                    _ACTIVE_SESSIONS[session_id] = data
+                    session = data
+            except Exception:
+                pass
+
+        if not session:
             return False
+
         if time.time() > session.get("expires_at", 0):
             _ACTIVE_SESSIONS.pop(session_id, None)
+            try:
+                from ..db import db
+                db.delete(f"session:{session_id}")
+            except Exception:
+                pass
             return False
         return True
 
@@ -146,7 +173,18 @@ class AuthManager:
         """Returns the CSRF token associated with an active session."""
         if not session_id:
             return None
+
         session = _ACTIVE_SESSIONS.get(session_id)
+        if not session:
+            try:
+                from ..db import db
+                data = db.get(f"session:{session_id}")
+                if data and isinstance(data, dict):
+                    _ACTIVE_SESSIONS[session_id] = data
+                    session = data
+            except Exception:
+                pass
+
         if session and time.time() <= session.get("expires_at", 0):
             return session.get("csrf_token")
         return None
@@ -163,6 +201,11 @@ class AuthManager:
 
     @staticmethod
     def destroy_session(session_id: Optional[str]):
-        """Invalidates a session on logout."""
+        """Invalidates a session on logout from memory and persistent database."""
         if session_id:
             _ACTIVE_SESSIONS.pop(session_id, None)
+            try:
+                from ..db import db
+                db.delete(f"session:{session_id}")
+            except Exception:
+                pass

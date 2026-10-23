@@ -17,7 +17,7 @@ import { DocumentationPage } from './pages/DocumentationPage';
 import { ApiKeysPage } from './pages/ApiKeysPage';
 
 import { Account, TelemetryMetrics, TokenVolumePoint, TimeRange } from './types';
-import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download } from 'lucide-react';
+import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download, Eye, EyeOff, ArrowRight, RefreshCw, ShieldCheck } from 'lucide-react';
 
 const initialMetrics: TelemetryMetrics = {
   throughput_tokens_per_sec: 0.0,
@@ -56,6 +56,9 @@ const MainLayout: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [loginKey, setLoginKey] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [copiedCliCmd, setCopiedCliCmd] = useState<boolean>(false);
+  const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -69,35 +72,81 @@ const MainLayout: React.FC = () => {
         const res = await fetch('/api/auth/session/status');
         if (res.ok) {
           const data = await res.json();
-          setIsAuthenticated(!!data.authenticated);
-        } else {
-          setIsAuthenticated(false);
+          if (data.authenticated) {
+            setIsAuthenticated(true);
+            return;
+          }
         }
       } catch {
-        setIsAuthenticated(false);
+        // network issue or error, proceed to fallback
       }
+
+      // Fallback: Check client-side persistent storage for auto-login
+      const savedKey = localStorage.getItem('pg_dashboard_api_key');
+      if (savedKey) {
+        try {
+          const loginRes = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: savedKey.trim() })
+          });
+          if (loginRes.ok) {
+            setIsAuthenticated(true);
+            return;
+          } else {
+            localStorage.removeItem('pg_dashboard_api_key');
+          }
+        } catch (e) {
+          console.debug('Auto-login fallback failed:', e);
+        }
+      }
+      setIsAuthenticated(false);
     };
     checkAuthStatus();
 
-    const onAuthRequired = () => setIsAuthenticated(false);
+    const onAuthRequired = async () => {
+      const savedKey = localStorage.getItem('pg_dashboard_api_key');
+      if (savedKey) {
+        try {
+          const loginRes = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: savedKey.trim() })
+          });
+          if (loginRes.ok) {
+            setIsAuthenticated(true);
+            return;
+          } else {
+            localStorage.removeItem('pg_dashboard_api_key');
+          }
+        } catch {
+          // ignore
+        }
+      }
+      setIsAuthenticated(false);
+    };
+
     window.addEventListener('pg_auth_required', onAuthRequired);
     return () => window.removeEventListener('pg_auth_required', onAuthRequired);
   }, []);
 
   const handleLoginSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!loginKey.trim()) return;
+    const keyToUse = loginKey.trim();
+    if (!keyToUse) return;
     setIsLoggingIn(true);
     try {
       const res = await fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: loginKey.trim() })
+        body: JSON.stringify({ api_key: keyToUse })
       });
       if (res.ok) {
+        // Persist key locally so the user never has to re-generate or re-enter key
+        localStorage.setItem('pg_dashboard_api_key', keyToUse);
         setIsAuthenticated(true);
         setLoginKey('');
-        showToast('Login berhasil! Sesi dashboard aktif.', 'success');
+        showToast('Login berhasil! Sesi dashboard aktif permanen.', 'success');
         fetchAccounts();
         fetchMetrics(timeRangeRef.current);
       } else {
@@ -110,6 +159,25 @@ const MainLayout: React.FC = () => {
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/session/logout', { method: 'POST' });
+    } catch (e) {
+      console.debug('Logout request failed:', e);
+    }
+    localStorage.removeItem('pg_dashboard_api_key');
+    setIsAuthenticated(false);
+    showToast('Sesi dashboard telah ditutup.', 'info');
+  };
+
+  const handleCopyCliCmd = () => {
+    navigator.clipboard.writeText('prime-gate auth create-key').then(() => {
+      setCopiedCliCmd(true);
+      showToast('Perintah CLI berhasil disalin!', 'success');
+      setTimeout(() => setCopiedCliCmd(false), 2000);
+    });
   };
 
 
@@ -484,91 +552,355 @@ const MainLayout: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0a0d14', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{
-          width: '100%',
-          maxWidth: 440,
-          padding: 32,
-          borderRadius: 20,
-          background: 'rgba(15, 23, 42, 0.85)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(56, 189, 248, 0.1)',
-          backdropFilter: 'blur(20px)'
-        }}>
+      <div
+        style={{
+          minHeight: '100vh',
+          background: `
+            radial-gradient(ellipse 65% 50% at 50% -10%, rgba(245, 158, 11, 0.12), transparent 75%),
+            radial-gradient(circle 420px at 50% 100%, rgba(217, 119, 6, 0.08), transparent 70%),
+            radial-gradient(circle 600px at 15% 50%, rgba(245, 158, 11, 0.03), transparent 60%),
+            radial-gradient(circle 600px at 85% 50%, rgba(217, 119, 6, 0.03), transparent 60%),
+            #090807
+          `,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+          fontFamily: 'var(--font-sans)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Subtle Cyber-Grid Background Accent */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: `
+              linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+              linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px)
+            `,
+            backgroundSize: '36px 36px',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Login Card */}
+        <div
+          className="animate-fade-in"
+          style={{
+            width: '100%',
+            maxWidth: 440,
+            padding: '36px 32px 30px',
+            borderRadius: 20,
+            background: 'linear-gradient(180deg, #15110e 0%, #100c09 100%)',
+            border: '1px solid rgba(168, 162, 158, 0.18)',
+            boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 40px rgba(245, 158, 11, 0.06)',
+            backdropFilter: 'blur(20px)',
+            position: 'relative',
+            zIndex: 10
+          }}
+        >
+          {/* Top Amber Shimmer Strip */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 36,
+              right: 36,
+              height: 2,
+              background: 'linear-gradient(90deg, transparent, #f59e0b, #d97706, transparent)',
+              borderRadius: 999
+            }}
+          />
+
+          {/* Brand Logo & Halo */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(14, 165, 233, 0.4)'
-            }}>
-              <KeyRound size={28} color="#ffffff" />
+            <div
+              style={{
+                width: 62,
+                height: 62,
+                borderRadius: 18,
+                background: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 24px rgba(245, 158, 11, 0.22)'
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 14px rgba(217, 119, 6, 0.45)'
+                }}
+              >
+                <KeyRound size={24} color="#ffffff" />
+              </div>
             </div>
           </div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, textAlign: 'center', color: '#f8fafc', marginBottom: 8 }}>
-            Prime Gate Gateway
-          </h2>
-          <p style={{ fontSize: 13, textAlign: 'center', color: '#94a3b8', marginBottom: 24, lineHeight: 1.5 }}>
-            Dashboard ini dilindungi enkripsi AES-256-GCM. Masukkan API Key Anda untuk membuka sesi aman.
+
+          {/* Title & Version Badge */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}>
+            <h2
+              style={{
+                fontSize: 22,
+                fontWeight: 800,
+                color: '#fafaf9',
+                letterSpacing: '-0.02em',
+                margin: 0
+              }}
+            >
+              Prime Gate Gateway
+            </h2>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#f59e0b',
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                padding: '2px 7px',
+                borderRadius: 5,
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.02em'
+              }}
+            >
+              v1.2.4
+            </span>
+          </div>
+
+          {/* Subtitle */}
+          <p
+            style={{
+              fontSize: 13,
+              textAlign: 'center',
+              color: '#a8a29e',
+              lineHeight: 1.5,
+              marginBottom: 16
+            }}
+          >
+            Dashboard ini dilindungi enkripsi <strong style={{ color: '#fafaf9' }}>AES-256-GCM</strong>. Masukkan API Key Anda untuk membuka sesi aman.
           </p>
-          <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                API Key (Bearer Secret)
-              </label>
-              <input
-                type="password"
-                value={loginKey}
-                onChange={e => setLoginKey(e.target.value)}
-                placeholder="pg-live-..."
-                autoFocus
-                style={{
-                  width: '100%',
-                  padding: '12px 16px',
-                  borderRadius: 12,
-                  background: 'rgba(2, 6, 23, 0.7)',
-                  border: '1px solid rgba(148, 163, 184, 0.2)',
-                  color: '#ffffff',
-                  fontSize: 14,
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
+
+          {/* Security Status Pill */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '4px 12px',
+                borderRadius: 999,
+                background: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.22)',
+                color: '#34d399',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.02em'
+              }}
+            >
+              <span className="pulse-dot" style={{ width: 6, height: 6 }} />
+              <span>Hardware-Accelerated Vault Protected</span>
             </div>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#a8a29e',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em'
+                  }}
+                >
+                  API Key (Bearer Secret)
+                </label>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: '#78716c',
+                    fontFamily: 'var(--font-mono)'
+                  }}
+                >
+                  Header: Bearer
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: '#090807',
+                  border: isInputFocused ? '1px solid #f59e0b' : '1px solid rgba(168, 162, 158, 0.22)',
+                  borderRadius: 12,
+                  padding: '0 12px 0 14px',
+                  boxShadow: isInputFocused ? '0 0 0 3px rgba(245, 158, 11, 0.18)' : 'inset 0 1px 2px rgba(0, 0, 0, 0.5)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <KeyRound
+                  size={16}
+                  color={isInputFocused ? '#f59e0b' : '#78716c'}
+                  style={{ flexShrink: 0, marginRight: 10, transition: 'color 0.2s' }}
+                />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={loginKey}
+                  onChange={e => setLoginKey(e.target.value)}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
+                  placeholder="pg-live-..."
+                  autoFocus
+                  style={{
+                    flex: 1,
+                    padding: '12px 0',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#fafaf9',
+                    fontSize: 13.5,
+                    fontFamily: 'var(--font-mono)',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                {loginKey && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#78716c',
+                      cursor: 'pointer',
+                      padding: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 6,
+                      transition: 'color 0.2s'
+                    }}
+                    title={showPassword ? 'Sembunyikan Key' : 'Tampilkan Key'}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#fafaf9')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#78716c')}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                )}
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={isLoggingIn || !loginKey.trim()}
               style={{
                 width: '100%',
-                padding: '12px 16px',
+                padding: '12px 18px',
                 borderRadius: 12,
-                background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
+                background: (isLoggingIn || !loginKey.trim())
+                  ? 'rgba(217, 119, 6, 0.3)'
+                  : 'linear-gradient(135deg, #d97706, #b45309)',
                 color: '#ffffff',
-                fontWeight: 600,
+                fontWeight: 700,
                 fontSize: 14,
+                fontFamily: 'var(--font-sans)',
                 border: 'none',
                 cursor: (isLoggingIn || !loginKey.trim()) ? 'not-allowed' : 'pointer',
-                opacity: (isLoggingIn || !loginKey.trim()) ? 0.6 : 1,
-                boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)',
-                transition: 'all 0.2s'
+                opacity: (isLoggingIn || !loginKey.trim()) ? 0.65 : 1,
+                boxShadow: (isLoggingIn || !loginKey.trim()) ? 'none' : '0 4px 16px rgba(217, 119, 6, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                transition: 'all 0.2s ease',
+                letterSpacing: '-0.01em'
+              }}
+              onMouseEnter={e => {
+                if (!isLoggingIn && loginKey.trim()) {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(217, 119, 6, 0.45)';
+                }
+              }}
+              onMouseLeave={e => {
+                if (!isLoggingIn && loginKey.trim()) {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #d97706, #b45309)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(217, 119, 6, 0.35)';
+                }
               }}
             >
-              {isLoggingIn ? 'Memverifikasi...' : 'Masuk ke Dashboard'}
+              {isLoggingIn ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  <span>Memverifikasi Sesi...</span>
+                </>
+              ) : (
+                <>
+                  <span>Masuk ke Dashboard</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </button>
           </form>
-          <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid rgba(148, 163, 184, 0.1)', textAlign: 'center' }}>
-            <span style={{ fontSize: 12, color: '#64748b' }}>
-              Belum punya key? Buat via CLI:{' '}
-              <code style={{ color: '#38bdf8', background: 'rgba(15, 23, 42, 0.8)', padding: '2px 6px', borderRadius: 4 }}>
-                prime-gate auth create-key
-              </code>
-            </span>
+
+          {/* Footer CLI helper box */}
+          <div
+            style={{
+              marginTop: 24,
+              paddingTop: 18,
+              borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ fontSize: 12, color: '#78716c', marginBottom: 10 }}>
+              Belum punya API key? Buat via CLI:
+            </div>
+            <div
+              onClick={handleCopyCliCmd}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '6px 12px',
+                borderRadius: 8,
+                background: 'rgba(245, 158, 11, 0.08)',
+                border: '1px solid rgba(245, 158, 11, 0.22)',
+                color: '#fbbf24',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                userSelect: 'none'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(245, 158, 11, 0.15)';
+                e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(245, 158, 11, 0.08)';
+                e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.22)';
+              }}
+              title="Klik untuk menyalin perintah CLI"
+            >
+              <span>prime-gate auth create-key</span>
+              {copiedCliCmd ? <Check size={13} color="#10b981" /> : <Copy size={13} color="#f59e0b" />}
+            </div>
           </div>
         </div>
+
+        {/* Global Toast Notifications */}
         <ToastContainer />
       </div>
     );
@@ -590,6 +922,7 @@ const MainLayout: React.FC = () => {
           onSyncQuota={handleSyncQuota}
           onOpenAddAccountModal={handleOpenAddAccountModal}
           isSyncing={isSyncing}
+          onLogout={handleLogout}
         />
 
         {/* Dynamic Route Render */}

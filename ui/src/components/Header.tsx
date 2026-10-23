@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigation } from '../context/NavigationContext';
 import { useToast } from '../context/ToastContext';
-import { RefreshCw, Plus, Copy, Check, ExternalLink } from 'lucide-react';
+import { RefreshCw, Plus, Copy, Check, ExternalLink, LogOut } from 'lucide-react';
 import { RoutePath } from '../types';
 
 interface HeaderProps {
   onSyncQuota: () => Promise<void>;
   onOpenAddAccountModal: () => void;
   isSyncing: boolean;
+  onLogout?: () => void;
 }
 
 const ROUTE_META: Record<RoutePath, { title: string; subtitle: string }> = {
@@ -49,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSyncQuota,
   onOpenAddAccountModal,
   isSyncing,
+  onLogout,
 }) => {
   const { currentRoute } = useNavigation();
   const { showToast } = useToast();
@@ -131,6 +133,19 @@ export const Header: React.FC<HeaderProps> = ({
           <Plus size={15} />
           <span>Add Account</span>
         </button>
+
+        {/* Logout / Lock Session button */}
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="btn btn-secondary"
+            style={{ padding: '8px 12px', color: '#a8a29e' }}
+            title="Kunci Dashboard (Logout)"
+          >
+            <LogOut size={14} />
+            <span style={{ fontSize: 12 }}>Keluar</span>
+          </button>
+        )}
       </div>
     </header>
   );

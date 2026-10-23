@@ -58,5 +58,10 @@ data/
 *.db-shm
 incidents.log
 
+# Testing & Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
 # Scratch testing scripts
 scratch/
