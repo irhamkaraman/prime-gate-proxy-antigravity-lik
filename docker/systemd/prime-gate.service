@@ -1,0 +1,39 @@
+[Unit]
+Description=Prime Gate Antigravity Gateway Service
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Replace 'ubuntu' with your server user or run as systemd user service
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/prime-gate
+
+# Environment configuration
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/ubuntu/.local/bin
+
+# Start Prime Gate in foreground mode
+ExecStart=/usr/local/bin/prime-gate start --host 127.0.0.1 --port 52111
+
+# Process management & auto-restart
+Restart=always
+RestartSec=5s
+KillMode=mixed
+TimeoutStopSec=15
+
+# Security hardening directives
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/prime-gate/data /opt/prime-gate/accounts.json
+
+# Logging to standard journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=prime-gate
+
+[Install]
+WantedBy=multi-user.target

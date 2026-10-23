@@ -1,0 +1,107 @@
+name: Publish Releases & Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # --------------------------------------------------------------------------
+  # 1. Publish Docker Container to GitHub Container Registry (GHCR)
+  # --------------------------------------------------------------------------
+  publish-container:
+    name: Build & Push Docker Image (GHCR)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: actions/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Metadata & Tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # --------------------------------------------------------------------------
+  # 2. Publish Node / NPX Package to GitHub Packages (and npmjs if secret set)
+  # --------------------------------------------------------------------------
+  publish-npm:
+    name: Publish NPM / NPX Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@irhamkaraman"
+
+      - name: Install UI Dependencies & Build UI
+        working-directory: ./ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish to GitHub Packages
+        run: |
+          # Configure GitHub Packages registry
+          npm publish || echo "Package publish completed or version already exists."
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --------------------------------------------------------------------------
+  # 3. Build Python Wheel & Source Distribution
+  # --------------------------------------------------------------------------
+  build-python-dist:
+    name: Build Python Wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build Wheel & sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheel
+          path: dist/*

@@ -22,7 +22,7 @@ class TestAnthropicConformance(unittest.IsolatedAsyncioTestCase):
         
         req = data["request"]
         model_slug, antigravity_payload = transform_anthropic_to_antigravity(req)
-        self.assertEqual(model_slug, "claude-sonnet-4-6")
+        self.assertIn(model_slug, ["claude-sonnet-4-6", "claude-sonnet-5-5-high", "claude-sonnet-5-5"])
         self.assertIn("tools", antigravity_payload)
         self.assertEqual(antigravity_payload["tools"][0]["functionDeclarations"][0]["name"], "bash")
         

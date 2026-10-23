@@ -1,0 +1,26 @@
+services:
+  prime-gate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/irhamkaraman/prime-gate-proxy-antigravity-lik:latest
+    container_name: prime-gate
+    restart: unless-stopped
+    ports:
+      - "52110:52110" # Web UI Dashboard
+      - "52111:52111" # OpenAI/Anthropic API Gateway Proxy
+    volumes:
+      - ./data:/app/data
+      # Optional: Mount your existing accounts.json directly if already logged in locally
+      # - ./accounts.json:/app/accounts.json:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HOST=0.0.0.0
+      - PORT=52111
+      - UI_PORT=52110
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:52111/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

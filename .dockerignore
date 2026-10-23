@@ -1,0 +1,25 @@
+.git
+.gitignore
+.env
+.daemon.pid
+daemon.log
+.coverage
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Dependencies and caches
+node_modules/
+ui/node_modules/
+ui/dist/
+scratch/
+
+# Sensitive data files (mount via volumes instead)
+accounts.json
+prime_gate.db
+data/

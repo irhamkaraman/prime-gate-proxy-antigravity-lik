@@ -9,7 +9,7 @@
 
 **A Production-Grade, Self-Hosted OpenAI & Anthropic Compatible Proxy Gateway for Google Antigravity.**
 
-[![Version](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Version](https://img.shields.io/badge/version-1.2.5-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 [![Security](https://img.shields.io/badge/Security-Client%20Alignment-blue.svg?style=for-the-badge&logo=shield)](#-request-safety--client-alignment)
 [![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](README.md#-next-gen-smart--semantic-vector-caching-hybrid-engine)
@@ -171,32 +171,45 @@ Auditing console for high-speed binary SQLite storage in WAL mode. Inspects head
 
 ## ⚡ Quick Start
 
-### 1. Clone & Install
+### 1. Global Installation (Recommended)
+
+Install Prime Gate globally so you can run `prime-gate <command>` from **any terminal directory** without typing `cd` or `python -m prime_gate.cli`:
+
 ```bash
 git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
 cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+
+# Install in editable mode to register the global 'prime-gate' CLI
+pip install -e .
 ```
-*(Windows users can simply double-click `scripts\install.bat`)*
+
+- **Windows Users (1-Click PATH Automator):**
+  Double-click **`scripts\setup-path.bat`** (or execute `powershell -ExecutionPolicy Bypass -File scripts\setup-path.ps1`). This automatically verifies Python, installs dependencies, and appends Python's `Scripts` directory to your Windows User `PATH` environment variable permanently.
+
+- **Linux / macOS Users:**
+  Ensure your user bin directory is in your `PATH` (typically `~/.local/bin` on Linux or `~/Library/Python/3.xx/bin` on macOS):
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc  # Linux
+  echo 'export PATH="$HOME/Library/Python/3.11/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc  # macOS
+  ```
 
 ### 2. Launch Background Daemon & Web UI
-Start both the Python Core API and Node.js Web UI with a single command:
-- **Windows (One-Click Background Launcher):**
-  ```bash
-  scripts\start-all.bat
-  ```
-- **Or via CLI Daemon:**
-  ```bash
-  python -m prime_gate.cli daemon start
-  ```
-- **Or Foreground Terminal Mode:**
-  ```bash
-  # Terminal 1: Core API
-  python -m prime_gate.cli start --port 52111
+Once installed, execute directly from **ANY directory or terminal**:
+```bash
+# Start background daemon (Proxy API :52111 + Web UI :52110)
+prime-gate daemon start
 
-  # Terminal 2: Web UI
-  python -m prime_gate.cli ui --port 52110
-  ```
+# Check status & health
+prime-gate daemon status
+
+# View live quotas & active accounts
+prime-gate quota
+
+# Stop daemon when finished
+prime-gate daemon stop
+```
+
+*(Windows users can also use `scripts\start-all.bat` and `scripts\stop-all.bat`)*
 
 ### 3. Open Web UI Onboarding & Connect Account
 1. Open your browser and navigate to **`http://127.0.0.1:52110`**.
@@ -205,12 +218,173 @@ Start both the Python Core API and Node.js Web UI with a single command:
    - Or click **"⚡ Quick Import from OpenCode Config"** if you already have accounts saved in OpenCode.
 3. Once authenticated, Prime Gate automatically transitions into the main **System Dashboard**, activating your live Quota Radar, active model catalog, and OpenAI endpoint (`http://127.0.0.1:52111/v1`).
 
-> 💡 **CLI Alternative:** Prefer CLI setup? You can also authenticate directly in terminal:
+> 💡 **CLI Alternative:** Prefer CLI setup? You can authenticate and manage accounts anywhere:
 > ```bash
-> python -m prime_gate.cli auth login   # Sign in via browser OAuth
-> python -m prime_gate.cli auth import  # Import OpenCode config
-> python -m prime_gate.cli quota        # View live quota table
+> prime-gate auth login   # Sign in via browser OAuth
+> prime-gate auth import  # Import OpenCode config
+> prime-gate quota        # View live quota table
 > ```
+
+---
+
+## 📦 Multi-Platform Installation Guide
+
+### 🪟 Windows (Automated & Manual PATH)
+
+#### Option A: One-Click Automated Script (Recommended)
+1. Clone the repository into any directory (e.g. `C:\Users\YourUser\prime-gate-proxy-antigravity-lik`).
+2. Right-click or double-click **`scripts\setup-path.bat`**.
+3. The script will:
+   - Run `pip install -e .`
+   - Detect your Python `Scripts` path (e.g. `%LOCALAPPDATA%\Programs\Python\Python311\Scripts`)
+   - Permanently add it to your Windows User Environment Variable (`PATH`)
+   - Verify the `prime-gate --version` command
+4. Open a new PowerShell or Command Prompt terminal from **any folder** and test:
+   ```powershell
+   prime-gate --version
+   prime-gate daemon start
+   ```
+
+#### Option B: Manual Environment Variable Setup (Windows GUI)
+If your organization restricts PowerShell scripts:
+1. Press `Win + R`, type `sysdm.cpl`, and press **Enter**.
+2. Go to the **Advanced** tab and click **Environment Variables...**.
+3. Under **User variables**, select `Path` and click **Edit...**.
+4. Click **New** and add your Python Scripts directory, typically:
+   ```text
+   %LOCALAPPDATA%\Programs\Python\Python311\Scripts
+   ```
+5. Click **OK** on all dialogs, open a new terminal, and run `prime-gate daemon start`.
+
+---
+
+### 🍏 macOS (Homebrew / System Python)
+
+1. **Clone & Install:**
+   ```bash
+   git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
+   cd prime-gate-proxy-antigravity-lik
+   pip3 install -e .
+   ```
+
+2. **Add to PATH (Zsh):**
+   ```zsh
+   # If using default macOS Python 3:
+   echo 'export PATH="$HOME/Library/Python/3.11/bin:$PATH"' >> ~/.zshrc
+
+   # If using Homebrew Python:
+   echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
+
+   source ~/.zshrc
+   ```
+
+3. **Verify & Run:**
+   ```bash
+   prime-gate --version
+   prime-gate daemon start
+   ```
+
+---
+
+### 🐧 Linux / VPS Server (Ubuntu / Debian / Arch / CentOS)
+
+#### 1. Standard Installation
+```bash
+# Clone to recommended production directory
+sudo git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git /opt/prime-gate
+sudo chown -R $USER:$USER /opt/prime-gate
+cd /opt/prime-gate
+
+# Install dependencies and global CLI
+pip install -e .
+
+# Ensure user bin is in PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### 2. Production Systemd Service (Autostart on Boot)
+For dedicated cloud VPS or home servers, Prime Gate includes a production-grade systemd unit file with security hardening:
+
+```bash
+# 1. Copy the systemd unit file
+sudo cp docker/systemd/prime-gate.service /etc/systemd/system/prime-gate.service
+
+# 2. Edit User and paths if your username is not 'ubuntu'
+sudo nano /etc/systemd/system/prime-gate.service
+
+# 3. Reload systemd and enable service
+sudo systemctl daemon-reload
+sudo systemctl enable --now prime-gate
+
+# 4. Inspect status and live logs
+sudo systemctl status prime-gate
+sudo journalctl -u prime-gate -f
+```
+
+---
+
+### 🐳 Docker & Docker Compose
+
+Deploy Prime Gate in an isolated, multi-stage container with zero local dependency conflicts:
+
+#### 1. Quick Start with Docker Compose
+```bash
+# 1. Clone repository
+git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
+cd prime-gate-proxy-antigravity-lik
+
+# 2. Build and start containers in background
+docker compose up -d
+
+# 3. View live logs
+docker compose logs -f
+```
+
+- **Web UI Dashboard:** `http://localhost:52110`
+- **Proxy Gateway API:** `http://localhost:52111/v1`
+- **Data Persistence:** Your compiled database and settings are securely stored in the `./data` volume.
+
+#### 2. Run Directly from GitHub Container Registry (GHCR)
+```bash
+docker run -d \
+  --name prime-gate \
+  -p 52110:52110 \
+  -p 52111:52111 \
+  -v $(pwd)/data:/app/data \
+  --restart unless-stopped \
+  ghcr.io/irhamkaraman/prime-gate-proxy-antigravity-lik:latest
+```
+
+---
+
+## 🚀 GitHub Packages & Distribution Architecture
+
+Prime Gate supports modern package distribution workflows across multiple package ecosystems:
+
+### 1. Understanding GitHub Packages vs Public Registries
+
+| Ecosystem | Registry URL | Access Requirements | Recommended Use Case |
+| :--- | :--- | :--- | :--- |
+| **GitHub Container Registry (GHCR)** | `ghcr.io` | **100% Public & Free** (Zero authentication required to pull) | Production Docker deployments, Kubernetes, self-hosted VPS servers. |
+| **GitHub Packages (NPM)** | `npm.pkg.github.com` | Requires scoped name (`@irhamkaraman/*`) and a GitHub Personal Access Token (PAT) configured in `~/.npmrc`. | Organization-internal or enterprise distribution. |
+| **Public npmjs.org Registry** | `registry.npmjs.org` | **100% Public** (Zero authentication required for end-users) | Frictionless `npx prime-gate-proxy@latest` execution. |
+| **Python Wheels (PyPI / Releases)** | GitHub Releases / PyPI | Direct download or `pip install prime-gate-proxy` | Native Python developers and CLI users. |
+
+### 2. Automated Release Workflow
+This repository includes an automated CI/CD release pipeline in [`.github/workflows/publish-package.yml`](.github/workflows/publish-package.yml):
+1. When you create and publish a new **GitHub Release** (e.g. tag `v1.2.4`):
+   - GitHub Actions compiles the multi-stage Docker image and pushes tags `latest` and `1.2.4` to **GHCR** (`ghcr.io/irhamkaraman/prime-gate-proxy-antigravity-lik`).
+   - GitHub Actions builds the Vite TypeScript UI bundle and publishes the npm package to GitHub Packages.
+   - GitHub Actions packages the Python wheel (`.whl`) and source distribution (`.tar.gz`) for releases.
+
+### 3. NPX Instant Execution & Auto-Update
+When distributed via npm registries, users can execute Prime Gate with zero manual installation:
+```bash
+# Execute latest release directly without pre-installing
+npx @irhamkaraman/prime-gate-proxy-antigravity-lik@latest daemon start
+```
+`npx` automatically queries the registry, caches the latest version, and runs the executable transparently. For local git clones, running `scripts\update.bat` or `git pull` pulls latest improvements while preserving your local SQLite database and keys intact.
 
 ---
 

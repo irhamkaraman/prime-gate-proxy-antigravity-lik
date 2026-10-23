@@ -9,7 +9,7 @@
 
 **Gateway Proksi Mandiri (Self-Hosted) Tingkat Perusahaan Kompatibel OpenAI & Anthropic untuk Google Antigravity.**
 
-[![Versi](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
+[![Versi](https://img.shields.io/badge/version-1.2.5-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
 [![CI](https://img.shields.io/badge/CI-Passing-brightgreen.svg?style=for-the-badge&logo=githubactions&logoColor=white)](../../.github/workflows/ci.yml)
 [![Keamanan](https://img.shields.io/badge/Keamanan-Penyelarasan%20Klien-blue.svg?style=for-the-badge&logo=shield)](#-keamanan-permintaan--penyelarasan-klien-request-safety--client-alignment)
 [![Semantic Cache](https://img.shields.io/badge/Cache-Semantic%20Vector%20FastEmbed-a78bfa.svg?style=for-the-badge)](#-next-gen-smart--semantic-vector-caching-hybrid-engine)
@@ -223,46 +223,220 @@ Konsol inspeksi kesehatan basis data SQLite WAL. Memeriksa validitas checksum CR
 
 ## ⚡ Panduan Mulai Cepat (Quick Start)
 
-### 1. Kloning & Instalasi Dependensi
+### 1. Instalasi Global CLI (Sangat Direkomendasikan)
+
+Pasang Prime Gate secara global agar Anda dapat menjalankan perintah `prime-gate <command>` dari **direktori terminal mana saja** tanpa perlu repot masuk ke folder (`cd`) atau mengetik `python -m prime_gate.cli`:
+
 ```bash
 git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
 cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+
+# Pasang dalam mode editable untuk mendaftarkan executable 'prime-gate' secara global
+pip install -e .
 ```
-*(Pengguna Windows dapat langsung klik ganda `scripts\install.bat`)*
+
+- **Pengguna Windows (Otomatisasi Sekali Klik PATH):**
+  Cukup klik dua kali file **`scripts\setup-path.bat`** (atau jalankan `powershell -ExecutionPolicy Bypass -File scripts\setup-path.ps1`). Skrip ini secara otomatis mendeteksi Python, memasang dependensi, dan menambahkan folder `Scripts` Python ke dalam **Environment Variable `PATH` Pengguna Windows** secara permanen.
+
+- **Pengguna Linux / macOS:**
+  Pastikan folder binary user sudah ada di dalam `PATH` (`~/.local/bin` di Linux atau `~/Library/Python/3.xx/bin` di macOS):
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc  # Linux
+  echo 'export PATH="$HOME/Library/Python/3.11/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc  # macOS
+  ```
 
 ### 2. Menjalankan Daemon & Dasbor Web
-Jalankan API Gateway Python dan Dasbor Web Node.js dengan satu perintah:
-- **Windows (Peluncur Sekali Klik):**
-  ```bash
-  scripts\start-all.bat
-  ```
-- **Atau via CLI Daemon:**
-  ```bash
-  python -m prime_gate.cli daemon start
-  ```
-- **Atau Mode Terminal Terpisah:**
-  ```bash
-  # Terminal 1: Core API Gateway
-  python -m prime_gate.cli start --port 52111
+Setelah terpasang, Anda bisa memanggilnya langsung dari **terminal dan folder mana pun**:
+```bash
+# Menjalankan daemon latar belakang (Proxy API :52111 + Web UI :52110)
+prime-gate daemon start
 
-  # Terminal 2: Web UI
-  python -m prime_gate.cli ui --port 52110
-  ```
+# Mengecek status proses & PID
+prime-gate daemon status
+
+# Melihat sisa kuota & model aktif
+prime-gate quota
+
+# Menghentikan daemon jika sudah selesai
+prime-gate daemon stop
+```
+
+*(Pengguna Windows juga tetap dapat menggunakan jalan pintas `scripts\start-all.bat` dan `scripts\stop-all.bat`)*
 
 ### 3. Masuk & Hubungkan Akun Google
 1. Buka browser dan kunjungi **`http://127.0.0.1:52110`**.
-2. Jika belum masuk, layar onboarding akan muncul secara otomatis:
+2. Jika belum masuk, layar onboarding bertema Anthropic akan muncul secara otomatis:
    - Klik **"Sign in with Google"** untuk login via browser OAuth 2.0 PKCE resmi.
    - Atau klik **"⚡ Quick Import from OpenCode Config"** jika Anda sudah memiliki akun di OpenCode.
 3. Setelah login berhasil, dasbor akan aktif dan gateway siap menerima request di port **`52111`**.
 
-> 💡 **Alternatif CLI:** Anda juga dapat mengelola akun langsung di terminal:
+> 💡 **Alternatif CLI:** Anda juga dapat mengelola akun langsung di terminal mana saja:
 > ```bash
-> python -m prime_gate.cli auth login   # Login via browser OAuth
-> python -m prime_gate.cli auth import  # Impor konfigurasi OpenCode
-> python -m prime_gate.cli quota        # Tampilkan tabel kuota aktif
+> prime-gate auth login   # Login via browser OAuth
+> prime-gate auth import  # Impor konfigurasi OpenCode
+> prime-gate quota        # Tampilkan tabel kuota aktif
 > ```
+
+---
+
+## 📦 Panduan Instalasi Multi-Platform Lengkap
+
+### 🪟 Windows (Otomatis & Manual Environment Variable)
+
+#### Opsi A: Skrip Otomatis Sekali Klik (Direkomendasikan)
+1. Kloning repositori ke folder mana saja di komputer Anda.
+2. Klik kanan atau klik ganda file **`scripts\setup-path.bat`**.
+3. Skrip akan secara otomatis:
+   - Menjalankan `pip install -e .`
+   - Mendeteksi letak folder `Scripts` Python (misalnya `%LOCALAPPDATA%\Programs\Python\Python311\Scripts`)
+   - Memasukkannya ke dalam Environment Variable `PATH` Pengguna Windows secara permanen
+   - Memverifikasi perintah `prime-gate --version`
+4. Buka PowerShell atau Command Prompt baru dari **folder mana saja**, lalu jalankan:
+   ```powershell
+   prime-gate --version
+   prime-gate daemon start
+   ```
+
+#### Opsi B: Pemasangan Manual via Windows GUI
+Jika PowerShell di komputer kantor/kampus Anda memiliki restriksi eksekusi:
+1. Tekan tombol `Win + R`, ketik `sysdm.cpl`, lalu tekan **Enter**.
+2. Masuk ke tab **Advanced** dan klik tombol **Environment Variables...**.
+3. Pada bagian **User variables**, pilih variabel `Path` dan klik **Edit...**.
+4. Klik **New**, lalu masukkan path folder Scripts Python Anda, umumnya:
+   ```text
+   %LOCALAPPDATA%\Programs\Python\Python311\Scripts
+   ```
+5. Klik **OK** di semua jendela, buka terminal baru, dan perintah `prime-gate` sudah aktif secara global!
+
+---
+
+### 🍏 macOS (Homebrew / Python Bawaan)
+
+1. **Kloning & Pasang:**
+   ```bash
+   git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
+   cd prime-gate-proxy-antigravity-lik
+   pip3 install -e .
+   ```
+
+2. **Daftarkan ke PATH (Zsh):**
+   ```zsh
+   # Jika menggunakan Python 3 bawaan:
+   echo 'export PATH="$HOME/Library/Python/3.11/bin:$PATH"' >> ~/.zshrc
+
+   # Jika menggunakan Homebrew Python:
+   echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshrc
+
+   source ~/.zshrc
+   ```
+
+3. **Uji Coba & Jalankan:**
+   ```bash
+   prime-gate --version
+   prime-gate daemon start
+   ```
+
+---
+
+### 🐧 Linux / Server VPS (Ubuntu / Debian / CentOS / Arch)
+
+#### 1. Instalasi Standar
+```bash
+# Kloning ke direktori server yang direkomendasikan
+sudo git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git /opt/prime-gate
+sudo chown -R $USER:$USER /opt/prime-gate
+cd /opt/prime-gate
+
+# Pasang dependensi dan CLI global
+pip install -e .
+
+# Pastikan direktori bin user aktif di PATH
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+#### 2. Service Systemd Tingkat Produksi (Autostart Saat Boot)
+Untuk server VPS cloud atau home lab yang menyala 24/7, Prime Gate telah menyediakan file unit systemd lengkap dengan pengerasan keamanan (*security hardening*):
+
+```bash
+# 1. Salin file service systemd
+sudo cp docker/systemd/prime-gate.service /etc/systemd/system/prime-gate.service
+
+# 2. Sesuaikan User dan Path jika username Anda bukan 'ubuntu'
+sudo nano /etc/systemd/system/prime-gate.service
+
+# 3. Muat ulang daemon systemd dan aktifkan service
+sudo systemctl daemon-reload
+sudo systemctl enable --now prime-gate
+
+# 4. Periksa status dan live log
+sudo systemctl status prime-gate
+sudo journalctl -u prime-gate -f
+```
+
+---
+
+### 🐳 Docker & Docker Compose
+
+Jalankan Prime Gate dalam kontainer terisolasi tanpa khawatir konflik versi pustaka Python atau Node.js:
+
+#### 1. Memulai Cepat dengan Docker Compose
+```bash
+# 1. Kloning repositori
+git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
+cd prime-gate-proxy-antigravity-lik
+
+# 2. Build dan jalankan kontainer di latar belakang
+docker compose up -d
+
+# 3. Pantau log real-time
+docker compose logs -f
+```
+
+- **Dasbor Web:** `http://localhost:52110`
+- **Proxy Gateway API:** `http://localhost:52111/v1`
+- **Penyimpanan Persisten:** Database terenkripsi SQLite WAL dan konfigurasi tersimpan aman di volume `./data`.
+
+#### 2. Jalankan Langsung dari GitHub Container Registry (GHCR)
+```bash
+docker run -d \
+  --name prime-gate \
+  -p 52110:52110 \
+  -p 52111:52111 \
+  -v $(pwd)/data:/app/data \
+  --restart unless-stopped \
+  ghcr.io/irhamkaraman/prime-gate-proxy-antigravity-lik:latest
+```
+
+---
+
+## 🚀 Arsitektur Distribusi GitHub Packages & NPX
+
+Prime Gate mendukung berbagai ekosistem distribusi paket modern:
+
+### 1. Perbedaan GitHub Packages vs Registry Publik
+
+| Ekosistem | Alamat Registry | Persyaratan Akses | Penggunaan Ideal |
+| :--- | :--- | :--- | :--- |
+| **GitHub Container Registry (GHCR)** | `ghcr.io` | **100% Terbuka & Publik** (Bisa di-pull siapa pun tanpa login) | Deployment Docker di VPS cloud, Kubernetes, dan server pribadi. |
+| **GitHub Packages (NPM)** | `npm.pkg.github.com` | Memerlukan nama berskup (`@irhamkaraman/*`) dan GitHub Personal Access Token (PAT) di file `~/.npmrc`. | Distribusi internal organisasi / tim pengembang. |
+| **Public npmjs.org Registry** | `registry.npmjs.org` | **100% Publik** (Siapapun bisa langsung jalan tanpa token) | Eksekusi instan satu baris perintah via `npx prime-gate-proxy@latest`. |
+| **Python Wheels (PyPI / Releases)** | GitHub Releases / PyPI | Unduh langsung atau `pip install prime-gate-proxy` | Pengembang Python native dan pengguna terminal CLI. |
+
+### 2. Otomasi Rilis (CI/CD GitHub Actions)
+Repositori ini telah dilengkapi alur kerja otomatis di [`.github/workflows/publish-package.yml`](.github/workflows/publish-package.yml):
+1. Setiap kali Anda menerbitkan **GitHub Release** baru (misalnya tag `v1.2.4`):
+   - GitHub Actions secara otomatis membangun image Docker multi-stage dan mendorong tag `latest` serta nomor versi ke **GHCR** (`ghcr.io/irhamkaraman/prime-gate-proxy-antigravity-lik`).
+   - GitHub Actions mengompilasi bundel antarmuka React/TypeScript dan mempublikasikannya ke GitHub Packages npm.
+   - GitHub Actions mengemas paket Python wheel (`.whl`) dan source distribution (`.tar.gz`) ke aset release.
+
+### 3. Eksekusi Instan NPX & Pembaruan Otomatis
+Jika didistribusikan melalui registry npm, pengguna dapat menjalankan Prime Gate secara instan tanpa proses instalasi manual:
+```bash
+# Menjalankan rilis terbaru secara langsung
+npx @irhamkaraman/prime-gate-proxy-antigravity-lik@latest daemon start
+```
+`npx` secara otomatis mengambil versi terbaru dan mengeksekusinya. Untuk instalasi lokal via Git, pengguna cukup menjalankan `scripts\update.bat` atau `git pull` untuk memperbarui kode tanpa menghapus database SQLite maupun kunci API yang telah tersimpan.
 
 ---
 

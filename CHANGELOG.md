@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.5] - 2026-10-23
+
+### 🌍 Global CLI Environment Variable (PATH) Automator, Multi-Platform Deployment & GitHub Packages CI/CD
+- **Windows 1-Click PATH Automator (`scripts/setup-path.ps1` & `scripts/setup-path.bat`):** Otomatisasi instalasi paket editable (`pip install -e .`), pendeteksian folder `Scripts` Python, dan penambahan permanen ke Windows User Environment Variable `PATH`. Memungkinkan pemanggilan `prime-gate <command>` secara global dari direktori terminal mana saja tanpa `cd` atau mengetik `python -m prime_gate.cli`.
+- **Pembaruan `pyproject.toml` Package Discovery:** Menambahkan konfigurasi eksplisit `[tool.setuptools.packages.find]` agar pip install editable tidak mengalami konflik flat-layout dengan folder UI/data.
+- **Panduan Multi-Platform Lengkap (Windows, macOS, Linux, Docker):** Dokumentasi instalasi komprehensif di `README.md` dan `locales/id/README.md`.
+- **Systemd Production Service Unit (`docker/systemd/prime-gate.service`):** File unit service Linux lengkap dengan *security hardening* (`NoNewPrivileges`, `PrivateTmp`, `ProtectSystem=full`) dan *auto-restart* saat boot.
+- **Kontainerisasi Produksi Multi-Stage (`Dockerfile` & `docker-compose.yml`):**
+  - Stage 1: Kompilasi frontend React 18 + Vite TypeScript via Node 20.
+  - Stage 2: Runtime ringan Python 3.11-slim + Node.js dengan volume persisten `/app/data`.
+  - Skrip `docker/entrypoint.sh` dengan generator kunci bootstrap otomatis, penangkapan sinyal gracefully (SIGINT/SIGTERM), serta healthcheck aktif.
+- **GitHub Packages & Distribution Pipeline (`.github/workflows/publish-package.yml`):**
+  - Publikasi otomatis image Docker ke GitHub Container Registry (`ghcr.io/irhamkaraman/prime-gate-proxy-antigravity-lik`).
+  - Publikasi paket npm/npx ke GitHub Packages (`@irhamkaraman/prime-gate-proxy-antigravity-lik`).
+  - Pembuatan dan pengunggahan aset release Python wheel (`.whl`) dan source distribution (`.tar.gz`).
+- **Verifikasi Kualitas:** 122 dari 122 pengujian pytest lulus 100% hijau.
+
+---
+
 ## [1.2.4] - 2026-10-23
 
 ### 🛡️ Client Gateway API Key Policy Enforcement, Dynamic Whitelisting & Cache Scope Isolation (Fase 5.1)
