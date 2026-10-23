@@ -103,7 +103,12 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     API key requests (Bearer / x-api-key) and the login endpoint are exempt.
     """
 
-    EXEMPT_PATHS = {"/api/auth/session", "/api/auth/session/status", "/api/auth/session/logout"}
+    EXEMPT_PATHS = {
+        "/api/auth/session",
+        "/api/auth/session/status",
+        "/api/auth/session/logout",
+        "/api/auth/session/local-login"
+    }
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         method = request.method.upper()

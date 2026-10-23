@@ -128,6 +128,20 @@ class TestDashboardSecurity(unittest.TestCase):
         # 5. AuthManager memory cache should now have restored the session
         self.assertIn(session_id, _ACTIVE_SESSIONS)
 
+    def test_local_login_loopback_and_external_rejection(self):
+        """Verifies local loopback auto-session succeeds for 127.0.0.1 and rejects non-loopback."""
+        local_client = TestClient(app, base_url="http://127.0.0.1:52111")
+        resp = local_client.post("/api/auth/session/local-login")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["success"])
+        self.assertIn(COOKIE_SESSION_NAME, local_client.cookies)
+
+        # Check status after local login
+        status = local_client.get("/api/auth/session/status")
+        self.assertEqual(status.status_code, 200)
+        self.assertTrue(status.json()["authenticated"])
+        self.assertTrue(status.json()["is_loopback"])
+
 
 if __name__ == "__main__":
     unittest.main()

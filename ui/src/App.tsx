@@ -17,7 +17,7 @@ import { DocumentationPage } from './pages/DocumentationPage';
 import { ApiKeysPage } from './pages/ApiKeysPage';
 
 import { Account, TelemetryMetrics, TokenVolumePoint, TimeRange } from './types';
-import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download, Eye, EyeOff, ArrowRight, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Copy, Check, KeyRound, Sparkles, Download, Eye, EyeOff, ArrowRight, RefreshCw, ShieldCheck, Zap } from 'lucide-react';
 
 const initialMetrics: TelemetryMetrics = {
   throughput_tokens_per_sec: 0.0,
@@ -67,7 +67,8 @@ const MainLayout: React.FC = () => {
   }, [timeRange]);
   // Check dashboard session authentication on mount
   useEffect(() => {
-    const checkAuthStatus = async () => {
+    const checkAuthStatus = async (retryCount = 0) => {
+      // 1. Verify if session cookie is already active
       try {
         const res = await fetch('/api/auth/session/status');
         if (res.ok) {
@@ -76,12 +77,21 @@ const MainLayout: React.FC = () => {
             setIsAuthenticated(true);
             return;
           }
+        } else if (res.status === 502 || res.status === 503) {
+          // Backend is booting up. Retry smoothly without destroying local state
+          if (retryCount < 3) {
+            setTimeout(() => checkAuthStatus(retryCount + 1), 1000);
+            return;
+          }
         }
       } catch {
-        // network issue or error, proceed to fallback
+        if (retryCount < 3) {
+          setTimeout(() => checkAuthStatus(retryCount + 1), 1000);
+          return;
+        }
       }
 
-      // Fallback: Check client-side persistent storage for auto-login
+      // 2. Client-side persistent storage auto-login
       const savedKey = localStorage.getItem('pg_dashboard_api_key');
       if (savedKey) {
         try {
@@ -93,13 +103,28 @@ const MainLayout: React.FC = () => {
           if (loginRes.ok) {
             setIsAuthenticated(true);
             return;
-          } else {
+          } else if (loginRes.status === 401) {
+            // ONLY remove key if explicitly rejected as invalid, not on 502/network timeouts
             localStorage.removeItem('pg_dashboard_api_key');
           }
         } catch (e) {
           console.debug('Auto-login fallback failed:', e);
         }
       }
+
+      // 3. Loopback Fallback: Automatically establish session for local machine owner (127.0.0.1)
+      try {
+        const localLoginRes = await fetch('/api/auth/session/local-login', {
+          method: 'POST'
+        });
+        if (localLoginRes.ok) {
+          setIsAuthenticated(true);
+          return;
+        }
+      } catch (e) {
+        console.debug('Local loopback auto-login deferred:', e);
+      }
+
       setIsAuthenticated(false);
     };
     checkAuthStatus();
@@ -116,13 +141,27 @@ const MainLayout: React.FC = () => {
           if (loginRes.ok) {
             setIsAuthenticated(true);
             return;
-          } else {
+          } else if (loginRes.status === 401) {
             localStorage.removeItem('pg_dashboard_api_key');
           }
         } catch {
-          // ignore
+          // ignore transient network failure
         }
       }
+
+      // Attempt loopback session before showing modal
+      try {
+        const localLoginRes = await fetch('/api/auth/session/local-login', {
+          method: 'POST'
+        });
+        if (localLoginRes.ok) {
+          setIsAuthenticated(true);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
       setIsAuthenticated(false);
     };
 
@@ -156,6 +195,28 @@ const MainLayout: React.FC = () => {
       }
     } catch {
       showToast('Gagal menghubungi gateway server', 'error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLocalAutoLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch('/api/auth/session/local-login', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setIsAuthenticated(true);
+        showToast(`Sesi aktif otomatis untuk ${data.key_name || 'Local Machine'}!`, 'success');
+        fetchAccounts();
+        fetchMetrics(timeRangeRef.current);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        const msg = err.detail?.error?.message || err.detail || 'Auto-login loopback tidak dapat digunakan.';
+        showToast(msg, 'error');
+      }
+    } catch {
+      showToast('Gagal menghubungi gateway server (port 52111 unreachable)', 'error');
     } finally {
       setIsLoggingIn(false);
     }
@@ -852,6 +913,44 @@ const MainLayout: React.FC = () => {
                   <ArrowRight size={16} />
                 </>
               )}
+            </button>
+
+            {/* Quick Auto-Connect for Local Host */}
+            <button
+              type="button"
+              onClick={handleLocalAutoLogin}
+              disabled={isLoggingIn}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: 12,
+                background: 'rgba(245, 158, 11, 0.06)',
+                border: '1px solid rgba(245, 158, 11, 0.22)',
+                color: '#fbbf24',
+                fontSize: 12.5,
+                fontWeight: 600,
+                fontFamily: 'var(--font-sans)',
+                cursor: isLoggingIn ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                transition: 'all 0.2s ease',
+                marginTop: -4
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(245, 158, 11, 0.14)';
+                e.currentTarget.style.borderColor = '#f59e0b';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(245, 158, 11, 0.06)';
+                e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.22)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <Zap size={14} color="#f59e0b" />
+              <span>Auto-Detect & Masuk Otomatis (Local Machine)</span>
             </button>
           </form>
 
