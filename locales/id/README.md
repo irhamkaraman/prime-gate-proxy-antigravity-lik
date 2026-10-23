@@ -223,45 +223,41 @@ Konsol inspeksi kesehatan basis data SQLite WAL. Memeriksa validitas checksum CR
 
 ## ⚡ Panduan Mulai Cepat (Quick Start)
 
-### 1. Instalasi Global CLI (Sangat Direkomendasikan)
+### 1. Eksekusi Instan via NPX (Tanpa Perlu Git Clone)
 
-Pasang Prime Gate secara global agar Anda dapat menjalankan perintah `prime-gate <command>` dari **direktori terminal mana saja** tanpa perlu repot masuk ke folder (`cd`) atau mengetik `python -m prime_gate.cli`:
+Jalankan Prime Gate secara instan dari terminal mana saja tanpa repot kloning repositori atau konfigurasi manual:
 
 ```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
+# Menjalankan daemon latar belakang (Proxy API :52111 + Dasbor Web :52110)
+npx prime-gate-antigravity daemon start
 
-# Pasang dalam mode editable untuk mendaftarkan executable 'prime-gate' secara global
-pip install -e .
-```
+# Melihat sisa kuota & katalog model aktif
+npx prime-gate-antigravity quota
 
-- **Pengguna Windows (Otomatisasi Sekali Klik PATH):**
-  Cukup klik dua kali file **`scripts\setup-path.bat`** (atau jalankan `powershell -ExecutionPolicy Bypass -File scripts\setup-path.ps1`). Skrip ini secara otomatis mendeteksi Python, memasang dependensi, dan menambahkan folder `Scripts` Python ke dalam **Environment Variable `PATH` Pengguna Windows** secara permanen.
-
-- **Pengguna Linux / macOS:**
-  Pastikan folder binary user sudah ada di dalam `PATH` (`~/.local/bin` di Linux atau `~/Library/Python/3.xx/bin` di macOS):
-  ```bash
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc  # Linux
-  echo 'export PATH="$HOME/Library/Python/3.11/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc  # macOS
-  ```
-
-### 2. Menjalankan Daemon & Dasbor Web
-Setelah terpasang, Anda bisa memanggilnya langsung dari **terminal dan folder mana pun**:
-```bash
-# Menjalankan daemon latar belakang (Proxy API :52111 + Web UI :52110)
-prime-gate daemon start
-
-# Mengecek status proses & PID
-prime-gate daemon status
-
-# Melihat sisa kuota & model aktif
-prime-gate quota
+# Mengecek status proses latar belakang
+npx prime-gate-antigravity daemon status
 
 # Menghentikan daemon jika sudah selesai
+npx prime-gate-antigravity daemon stop
+```
+
+### 2. Instalasi Global via NPM (Direkomendasikan)
+
+Pasang sekali secara global agar perintah `prime-gate` dapat dipanggil dari **direktori terminal mana saja**:
+
+```bash
+npm install -g prime-gate-antigravity
+```
+
+Setelah terpasang, cukup jalankan:
+```bash
+prime-gate daemon start
+prime-gate quota
+prime-gate daemon status
 prime-gate daemon stop
 ```
 
-*(Pengguna Windows juga tetap dapat menggunakan jalan pintas `scripts\start-all.bat` dan `scripts\stop-all.bat`)*
+*(Pengguna Windows yang ingin menjalankan versi skrip lokal juga dapat mengklik ganda `scripts\setup-path.bat` atau `scripts\start-all.bat`)*
 
 ### 3. Masuk & Hubungkan Akun Google
 1. Buka browser dan kunjungi **`http://127.0.0.1:52110`**.

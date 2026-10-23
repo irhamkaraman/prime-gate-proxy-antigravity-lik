@@ -171,45 +171,41 @@ Auditing console for high-speed binary SQLite storage in WAL mode. Inspects head
 
 ## ⚡ Quick Start
 
-### 1. Global Installation (Recommended)
+### 1. Instant Execution via NPX (Zero Clone / Zero Installation)
 
-Install Prime Gate globally so you can run `prime-gate <command>` from **any terminal directory** without typing `cd` or `python -m prime_gate.cli`:
+You can launch and manage Prime Gate immediately without cloning the repository or manual setup:
 
-```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
-
-# Install in editable mode to register the global 'prime-gate' CLI
-pip install -e .
-```
-
-- **Windows Users (1-Click PATH Automator):**
-  Double-click **`scripts\setup-path.bat`** (or execute `powershell -ExecutionPolicy Bypass -File scripts\setup-path.ps1`). This automatically verifies Python, installs dependencies, and appends Python's `Scripts` directory to your Windows User `PATH` environment variable permanently.
-
-- **Linux / macOS Users:**
-  Ensure your user bin directory is in your `PATH` (typically `~/.local/bin` on Linux or `~/Library/Python/3.xx/bin` on macOS):
-  ```bash
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc  # Linux
-  echo 'export PATH="$HOME/Library/Python/3.11/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc  # macOS
-  ```
-
-### 2. Launch Background Daemon & Web UI
-Once installed, execute directly from **ANY directory or terminal**:
 ```bash
 # Start background daemon (Proxy API :52111 + Web UI :52110)
+npx prime-gate-antigravity daemon start
+
+# View real-time quotas & active model catalog
+npx prime-gate-antigravity quota
+
+# Check daemon health & background process status
+npx prime-gate-antigravity daemon status
+
+# Stop background services
+npx prime-gate-antigravity daemon stop
+```
+
+### 2. Global Installation via NPM (Recommended)
+
+Install Prime Gate once globally to get the permanent `prime-gate` command available from **any terminal directory**:
+
+```bash
+npm install -g prime-gate-antigravity
+```
+
+Once installed, execute directly anywhere:
+```bash
 prime-gate daemon start
-
-# Check status & health
-prime-gate daemon status
-
-# View live quotas & active accounts
 prime-gate quota
-
-# Stop daemon when finished
+prime-gate daemon status
 prime-gate daemon stop
 ```
 
-*(Windows users can also use `scripts\start-all.bat` and `scripts\stop-all.bat`)*
+*(Windows users who prefer standalone local scripts can also use `scripts\setup-path.bat` or `scripts\start-all.bat`)*
 
 ### 3. Open Web UI Onboarding & Connect Account
 1. Open your browser and navigate to **`http://127.0.0.1:52110`**.

@@ -77,13 +77,20 @@
 
 ## ⚡ 快速开始
 
-### 1. 克隆与安装
+### 1. 通过 NPX 即时运行（无需克隆与手动配置）
 ```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+# 启动后台守护进程 (Proxy API :52111 + Web UI :52110)
+npx prime-gate-antigravity daemon start
+
+# 查看配额雷达表格
+npx prime-gate-antigravity quota
 ```
-*(Windows 用户可直接双击运行 `scripts\install.bat`)*
+
+### 2. 通过 NPM 全局安装（推荐）
+```bash
+npm install -g prime-gate-antigravity
+prime-gate daemon start
+```
 
 ### 2. 启动后台守护进程与 Web 控制台
 一键启动 Python 核心 API 与 Node.js Web UI：

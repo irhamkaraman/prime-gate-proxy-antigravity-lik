@@ -78,14 +78,15 @@ SQLite WAL モードによるリアルタイム永続リクエスト台帳。モ
 ## ⚡ クイックスタート
 
 ```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+# NPX による即時起動（Git クローン不要）
+npx prime-gate-antigravity daemon start
 
-# バックグラウンドで起動 (Windows)
-scripts\start-all.bat
-# または CLI デーモンで起動
-python -m prime_gate.cli daemon start
+# クォータ確認
+npx prime-gate-antigravity quota
+
+# または NPM でグローバルインストール
+npm install -g prime-gate-antigravity
+prime-gate daemon start
 ```
 
 ### Web UI オンボーディング

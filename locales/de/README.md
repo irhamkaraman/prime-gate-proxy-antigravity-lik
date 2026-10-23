@@ -78,14 +78,15 @@ Diagnosekonsole für den binären SQLite-Speicher im WAL-Modus: CRC32-Integritä
 ## ⚡ Schnellstart
 
 ```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+# Sofortiger Start via NPX (Kein Git Clone erforderlich)
+npx prime-gate-antigravity daemon start
 
-# Im Hintergrund starten (Windows)
-scripts\start-all.bat
-# Oder via CLI Daemon
-python -m prime_gate.cli daemon start
+# Quota anzeigen
+npx prime-gate-antigravity quota
+
+# Oder global via NPM installieren
+npm install -g prime-gate-antigravity
+prime-gate daemon start
 ```
 
 ### Web-UI-Onboarding

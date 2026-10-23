@@ -78,14 +78,15 @@ Console de contrôle du stockage binaire SQLite en mode WAL : vérification d'in
 ## ⚡ Démarrage rapide
 
 ```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+# Démarrage instantané via NPX (Aucun clone Git requis)
+npx prime-gate-antigravity daemon start
 
-# Démarrer en arrière-plan (Windows)
-scripts\start-all.bat
-# Ou via le démon CLI
-python -m prime_gate.cli daemon start
+# Afficher les quotas
+npx prime-gate-antigravity quota
+
+# Ou installer globalement via NPM
+npm install -g prime-gate-antigravity
+prime-gate daemon start
 ```
 
 ### Intégration via l'interface Web (Onboarding)

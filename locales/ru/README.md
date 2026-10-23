@@ -77,22 +77,19 @@
 
 ## ⚡ Быстрый старт
 
-### 1. Клонирование и установка
+### 1. Мгновенный запуск через NPX (Без необходимости Git Clone)
 ```bash
-git clone https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik.git
-cd prime-gate-proxy-antigravity-lik
-pip install -r requirements.txt
+# Фоновый запуск демона (API :52111 + Web UI :52110)
+npx prime-gate-antigravity daemon start
+
+# Просмотр квот
+npx prime-gate-antigravity quota
 ```
-*(Пользователи Windows могут дважды кликнуть `scripts\install.bat`)*
 
-### 2. Запуск фонового демона и веб-интерфейса
-Запустите API и Web UI одной командой:
+### 2. Глобальная установка через NPM (Рекомендуется)
 ```bash
-# Фоновый запуск в один клик (Windows)
-scripts\start-all.bat
-
-# Или через CLI-демон
-python -m prime_gate.cli daemon start
+npm install -g prime-gate-antigravity
+prime-gate daemon start
 ```
 
 ### 3. Онбординг через Web UI и подключение аккаунта
