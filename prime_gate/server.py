@@ -38,7 +38,7 @@ from .translator import (
     stream_cached_anthropic_sse,
     estimate_anthropic_tokens,
 )
-from .db import db, event_bus, WebSocketLogHandler
+from .db import db, event_bus, WebSocketLogHandler, REC_MODEL
 from .db.sentinel import sentinel
 from .telemetry import telemetry
 from .compactor import ContextCompactor

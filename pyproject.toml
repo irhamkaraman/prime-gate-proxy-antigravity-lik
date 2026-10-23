@@ -29,3 +29,9 @@ prime-gate = "prime_gate.cli:app"
 [tool.setuptools.packages.find]
 include = ["prime_gate*"]
 exclude = ["ui*", "data*", "locales*", "scratch*", "tests*", "docs*", "benchmarks*", "scripts*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
