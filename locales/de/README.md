@@ -5,9 +5,9 @@
 
 **Ein produktionsreifer, selbst gehosteter OpenAI- und Anthropic-kompatibler Dual-Protokoll-Proxy-Gateway für Google Antigravity.**
 
-[![Version](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![NPM Version](https://img.shields.io/npm/v/prime-gate-antigravity.svg?style=for-the-badge&logo=npm&color=CB3837)](https://www.npmjs.com/package/prime-gate-antigravity)
+[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/prime-gate-antigravity?activeTab=dependencies)
+[![Dependents](https://img.shields.io/badge/dependents-0-blue.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/prime-gate-antigravity?activeTab=dependents)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
 
 ---
@@ -49,29 +49,9 @@ Nutzen Sie Ihre Google Antigravity-Kontingente – darunter **Claude Sonnet 4.6 
 
 ---
 
-## 📸 Benutzeroberfläche & Demonstration
+## 📸 Web UI Dashboard Galerie
 
-Elegantes Dark-Glassmorphism-Interface auf Basis von React 18, TypeScript und Echtzeit-WebSockets:
-
-### 1. Dashboard & Echtzeit-Telemetrie (`/dashboard`)
-Echtzeit-Analyse der Token-Durchsatzrate, rollierende 24h-Verbrauchssummen, durchschnittliche Latenz (TTFT), segmentierte Verbrauchsdiagramme (`1m`, `1h`, `1d`, `1month`) sowie Bestenliste der Modelle nach Kontingentverbrauch.
-![Dashboard & Telemetrie](../../docs/images/dashboard-telemetry.png)
-
-### 2. Nutzung & Modell-Benchmarks (`/benchmarks`)
-Persistentes SQLite-WAL-Transaktionsbuch aller eingehenden API-Anfragen in Echtzeit. Zeigt Modell-Laufzeiten, Latenzen, Token-Anteile und gewichtete Quota-Impact-Scores (Claude 3x, GPT 2x, Gemini 1x) mit Schnellsuche und Filterfunktionen.
-![Nutzung & Modell-Benchmarks](../../docs/images/usage-benchmarks.png)
-
-### 3. Konten-Manager & Dynamischer Modellkatalog (`/accounts`)
-Verwaltung mehrerer Google OAuth-Konten mit aktiver Rotation, Kontingentstand und automatischem Modellkatalog inklusive Feature-Badges (Thinking, Vision/Multimodal, Kontextfenster, Streaming).
-![Konten-Manager & Modelle](../../docs/images/accounts-models.png)
-
-### 4. Prompt-Sandbox & Testumgebung (`/sandbox`)
-Interaktive Testumgebung für Streaming-Inferenz. Konfiguration von System-Prompts, Benutzeranweisungen, Temperatur und Token-Limits mit Live-Metriken (TTFT, Gesamtdauer, Token/Sekunde).
-![Prompt-Sandbox](../../docs/images/prompt-sandbox.png)
-
-### 5. System & Datenbank-Sentinel (`/sentinel`)
-Diagnosekonsole für den binären SQLite-Speicher im WAL-Modus: CRC32-Integritätsprüfung, Page-Cache-Nutzung, VACUUM-Optimierung und Echtzeit-Auditprotokoll des Hintergrundwächters via WebSockets.
-![System & Datenbank-Sentinel](../../docs/images/system-sentinel.png)
+👉 **[Vollständige hochauflösende Screenshot-Galerie ansehen](../../docs/SCREENSHOTS.md)**
 
 ---
 

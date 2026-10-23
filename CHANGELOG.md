@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.6] - 2026-10-23
+
+### 🎨 Modular Documentation Overhaul, NPM Package Polish & Decoupled UI Gallery
+- **NPM Package Hero Section:** Prominent, zero-dependency installation command (`npm i -g prime-gate-antigravity@latest` & `npx prime-gate-antigravity`) directly at the top with explicit CLI flag specifications and status metadata badges (NPM Version, 0 Dependencies, 0 Dependents, License, CI Passing, Platform).
+- **Decoupled UI Gallery (`docs/SCREENSHOTS.md`):** Extracted large high-resolution dashboard screenshots out of the primary `README.md` into a dedicated gallery document, dramatically accelerating page load times and reading ergonomics across npmjs.org and GitHub.
+- **Categorized Terminal Commands Cheatsheet:** Consolidated all CLI commands into a clean, categorized reference (Daemon Service Management, Google OAuth Auth, Client API Keys & Policies, Quota, Updates & SQLite WAL DB Maintenance).
+- **Latest Supported Models Catalog:** Dedicated model matrix detailing context lengths, reasoning/thinking capabilities, and best-fit coding agents (Claude Sonnet 4.6, Claude Opus 4.6, Gemini 3.8 Flash, Claude 3.7 Sonnet).
+- **Windows Terminal Resilience (cp1252):** Hardened CLI update notifier output with ASCII-safe formatting to eliminate `UnicodeEncodeError` on legacy Windows command shells.
+- **Multi-Language Synchronization:** Propagated modular documentation design to Indonesian (`locales/id/`), Chinese (`locales/zh/`), Japanese (`locales/ja/`), Russian (`locales/ru/`), German (`locales/de/`), and French (`locales/fr/`).
+
+---
+
 ## [1.2.5] - 2026-10-23
 
 ### 🌍 Global CLI Environment Variable (PATH) Automator, Multi-Platform Deployment & GitHub Packages CI/CD

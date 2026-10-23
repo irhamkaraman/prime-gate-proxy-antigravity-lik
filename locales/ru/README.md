@@ -5,9 +5,9 @@
 
 **Высокопроизводительный self-hosted двухпротокольный прокси-шлюз для Google Antigravity с поддержкой протоколов OpenAI и Anthropic.**
 
-[![Version](https://img.shields.io/badge/version-1.2.4-38bdf8.svg?style=for-the-badge)](https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![Node.js](https://img.shields.io/badge/Node.js-20.x%2B-339933.svg?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![NPM Version](https://img.shields.io/npm/v/prime-gate-antigravity.svg?style=for-the-badge&logo=npm&color=CB3837)](https://www.npmjs.com/package/prime-gate-antigravity)
+[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/prime-gate-antigravity?activeTab=dependencies)
+[![Dependents](https://img.shields.io/badge/dependents-0-blue.svg?style=for-the-badge&logo=npm)](https://www.npmjs.com/package/prime-gate-antigravity?activeTab=dependents)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](../../LICENSE)
 
 ---
@@ -49,29 +49,9 @@
 
 ---
 
-## 📸 Демонстрация пользовательского интерфейса
+## 📸 Галерея интерфейса веб-панели
 
-Современный веб-интерфейс в стиле dark glassmorphism (React 18 + TypeScript + WebSocket):
-
-### 1. Панель управления и телеметрия (`/dashboard`)
-Отображает скорость генерации (токенов/сек), 24-часовой объем токенов, среднюю задержку (TTFT), детализированный график потребления (`1m`, `1h`, `1d`, `1month`) и рейтинг моделей по расходу квот.
-![Панель управления и телеметрия](../../docs/images/dashboard-telemetry.png)
-
-### 2. Статистика использования и бенчмарки (`/benchmarks`)
-Постоянный журнал запросов на базе SQLite WAL в реальном времени. Включает аналитику по моделям, задержкам, распределению токенов и взвешенную оценку расхода квот (Claude 3x, GPT 2x, Gemini 1x) с мгновенным поиском и фильтрацией.
-![Статистика использования и бенчмарки](../../docs/images/usage-benchmarks.png)
-
-### 3. Менеджер аккаунтов и каталог моделей (`/accounts`)
-Управление несколькими учетными записями Google OAuth, ротация активного аккаунта, мониторинг остатка квот и автоматическое определение каталога моделей с индикаторами возможностей (Thinking, Vision, Context, Streaming).
-![Менеджер аккаунтов и модели](../../docs/images/accounts-models.png)
-
-### 4. Интерактивная песочница промптов (`/sandbox`)
-Интерактивный тестовый стенд для потоковой генерации. Настройка системных промптов, температуры и лимитов с телеметрией инференса в реальном времени (TTFT, общее время, токенов/сек).
-![Песочница промптов](../../docs/images/prompt-sandbox.png)
-
-### 5. Мониторинг базы данных и системный Sentinel (`/sentinel`)
-Диагностика бинарного хранилища SQLite в режиме WAL: проверка контрольных сумм CRC32, использование страниц кэша, дефрагментация VACUUM и журнал аудита демона через WebSocket.
-![Системный Sentinel](../../docs/images/system-sentinel.png)
+👉 **[Смотреть полную галерею скриншотов высокого разрешения](../../docs/SCREENSHOTS.md)**
 
 ---
 
