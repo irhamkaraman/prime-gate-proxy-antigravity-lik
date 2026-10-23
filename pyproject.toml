@@ -33,5 +33,4 @@ exclude = ["ui*", "data*", "locales*", "scratch*", "tests*", "docs*", "benchmark
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-asyncio_mode = "auto"
 
