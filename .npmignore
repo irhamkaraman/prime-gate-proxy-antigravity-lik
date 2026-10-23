@@ -1,0 +1,39 @@
+# Git & CI/CD
+.git/
+.github/
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker/
+
+# Sensitive data files
+accounts.json
+accounts*.json
+data/
+prime_gate.db*
+.daemon.pid
+daemon.log
+*.key
+*.token
+
+# Tests, benchmarks, and scratch
+tests/
+benchmarks/
+scratch/
+# Python caches & virtualenvs
+__pycache__/
+*/__pycache__/
+*/*/__pycache__/
+*/*/*/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node build artifacts inside UI source (keep ui/dist)
+ui/node_modules/
+ui/src/

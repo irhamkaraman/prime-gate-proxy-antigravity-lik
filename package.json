@@ -1,14 +1,15 @@
 {
-  "name": "@irhamkaraman/prime-gate-proxy-antigravity-lik",
-  "version": "1.2.5",
+  "name": "prime-gate-antigravity",
+  "version": "1.0.0",
   "type": "module",
-  "description": "Production-grade, OpenAI-compatible proxy gateway for Google Antigravity with rich CLI and Anthropic-themed Web UI dashboard",
+  "description": "Production-grade, OpenAI & Anthropic compatible proxy gateway for Google Antigravity with rich CLI and Anthropic-themed Web UI dashboard",
   "main": "ui/server.js",
   "bin": {
-    "prime-gate": "./bin/prime-gate.js"
+    "prime-gate-antigravity": "./bin/index.js",
+    "prime-gate": "./bin/index.js"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "scripts": {
     "start": "node ui/server.js",
@@ -24,11 +25,13 @@
   "keywords": [
     "antigravity",
     "openai-proxy",
+    "anthropic-proxy",
     "google-antigravity",
     "claude-4.6",
     "gemini-3.8",
     "llm-gateway",
-    "opencode"
+    "opencode",
+    "claude-code"
   ],
   "author": "irhamkaraman",
   "license": "MIT"
