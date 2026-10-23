@@ -5,16 +5,22 @@ from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
 from prime_gate.server import app
-from prime_gate.db.engine import BinaryDatabaseEngine
+from prime_gate.db import db
 from prime_gate.sentinel.loop_guard import AgentLoopGuard
 
 class TestAllEndpointsComprehensive(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.client = TestClient(app)
-        db = BinaryDatabaseEngine()
         res = db.create_api_key("e2e-test-key")
         cls.api_key = res[0] if isinstance(res, tuple) else res.get("raw_key")
+        rec = res[1] if isinstance(res, tuple) else res.get("key", {})
+        cls.key_id = rec.get("id")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "key_id") and cls.key_id:
+            db.delete_api_key(cls.key_id)
 
     def test_01_health_and_probes(self):
         """1. Comprehensive testing of /health, /health/liveness, /health/readiness."""

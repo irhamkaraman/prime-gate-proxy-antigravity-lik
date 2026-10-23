@@ -308,9 +308,29 @@ async def api_auth_session_status(request: Request):
 
 
 @app.get("/api/auth/keys")
-async def api_auth_list_keys(auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)):
-    """Lists registered API keys with redacted secrets."""
-    return {"keys": db.list_api_keys()}
+async def api_auth_list_keys(
+    page: Optional[int] = None,
+    limit: Optional[int] = None,
+    search: Optional[str] = None,
+    auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)
+):
+    """Lists registered API keys with redacted secrets, optional pagination & search."""
+    all_keys = db.list_api_keys()
+    if search:
+        s = search.lower().strip()
+        all_keys = [k for k in all_keys if s in str(k.get("name", "")).lower() or s in str(k.get("prefix", "")).lower()]
+    total = len(all_keys)
+    if page is not None and limit is not None and limit > 0:
+        offset = (max(1, page) - 1) * limit
+        paginated = all_keys[offset:offset + limit]
+        return {
+            "keys": paginated,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": max(1, (total + limit - 1) // limit)
+        }
+    return {"keys": all_keys, "total": total}
 
 
 @app.post("/api/auth/keys")
@@ -353,10 +373,47 @@ async def api_auth_create_key(request: Request, auth_ctx: Dict[str, Any] = Depen
 
 
 @app.delete("/api/auth/keys/{key_id}")
-async def api_auth_revoke_key(key_id: str, auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)):
-    """Revokes an API key."""
-    success = db.revoke_api_key(key_id)
+async def api_auth_revoke_key(
+    key_id: str,
+    permanent: bool = False,
+    auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)
+):
+    """Revokes or permanently deletes an API key."""
+    if permanent:
+        success = db.delete_api_key(key_id)
+    else:
+        success = db.revoke_api_key(key_id)
     return {"success": success}
+
+
+@app.post("/api/auth/keys/bulk-delete")
+async def api_auth_bulk_delete_keys(
+    request: Request,
+    auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)
+):
+    """Permanently deletes multiple API keys by numeric IDs."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    ids = body.get("ids", [])
+    deleted_count = db.delete_api_keys(ids)
+    return {"success": True, "deleted_count": deleted_count}
+
+
+@app.post("/api/auth/keys/bulk-revoke")
+async def api_auth_bulk_revoke_keys(
+    request: Request,
+    auth_ctx: Dict[str, Any] = Depends(require_dashboard_session)
+):
+    """Revokes multiple API keys by numeric IDs."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    ids = body.get("ids", [])
+    revoked_count = db.revoke_api_keys(ids)
+    return {"success": True, "revoked_count": revoked_count}
 
 @app.on_event("startup")
 async def on_startup():

@@ -13,7 +13,7 @@ class TestWebSocketSecurity(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        db.revoke_api_key(cls.key_rec["id"])
+        db.delete_api_key(cls.key_rec["id"])
 
     def test_websocket_rejected_without_session(self):
         client = TestClient(app, base_url="http://localhost:52111")

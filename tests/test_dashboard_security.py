@@ -13,7 +13,7 @@ class TestDashboardSecurity(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        db.revoke_api_key(cls.key_rec["id"])
+        db.delete_api_key(cls.key_rec["id"])
 
     def setUp(self):
         # Reset rate limiting state before each test

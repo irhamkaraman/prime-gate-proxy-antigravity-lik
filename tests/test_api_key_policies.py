@@ -13,6 +13,15 @@ def client():
     return TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def cleanup_policy_test_keys():
+    yield
+    # Safely clean up test keys created during policy test runs
+    conn = db._get_connection()
+    conn.execute("DELETE FROM pg_api_key_usage WHERE key_id IN (SELECT id FROM pg_api_keys WHERE name LIKE 'test-%' OR name LIKE 'client-%')")
+    conn.execute("DELETE FROM pg_api_keys WHERE name LIKE 'test-%' OR name LIKE 'client-%'")
+
+
 def test_rpm_limit_exceeded_returns_429_openai(client):
     """Verifies that exceeding the RPM limit on OpenAI endpoints returns 429 with Retry-After and OpenAI error JSON."""
     raw_key, record = db.create_api_key(

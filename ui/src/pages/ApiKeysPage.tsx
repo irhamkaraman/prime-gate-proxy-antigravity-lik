@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../context/ToastContext';
 import { useModal } from '../context/ModalContext';
 import {
@@ -15,7 +15,16 @@ import {
   ExternalLink,
   X,
   Lock,
-  Cpu
+  Cpu,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  CheckSquare,
+  Square,
+  AlertOctagon,
+  RefreshCw
 } from 'lucide-react';
 
 interface ApiKeyItem {
@@ -51,6 +60,13 @@ export const ApiKeysPage: React.FC = () => {
   const [copiedKey, setCopiedKey] = useState<boolean>(false);
   const [selectedAgentTab, setSelectedAgentTab] = useState<'claude' | 'opencode' | 'cline' | 'cursor' | 'aider' | 'curl'>('claude');
   const [copiedSnippet, setCopiedSnippet] = useState<boolean>(false);
+
+  // Pagination, search, and bulk selection state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [selectedKeyIds, setSelectedKeyIds] = useState<(string | number)[]>([]);
+  const [isBulkLoading, setIsBulkLoading] = useState<boolean>(false);
 
   const fetchKeys = async () => {
     setIsLoading(true);
@@ -129,7 +145,7 @@ export const ApiKeysPage: React.FC = () => {
   const handleRevokeKey = (keyItem: ApiKeyItem) => {
     confirmAction({
       title: 'Revoke API Key',
-      description: `Are you sure you want to permanently revoke API key "${keyItem.name}" (${keyItem.prefix}...)? Any agent or tool currently using this key will immediately be blocked with HTTP 401 Unauthorized.`,
+      description: `Are you sure you want to revoke API key "${keyItem.name}" (${keyItem.prefix}...)? Any agent or tool currently using this key will immediately be blocked with HTTP 401 Unauthorized.`,
       confirmText: 'Revoke Key',
       confirmVariant: 'danger',
       onConfirm: async () => {
@@ -139,7 +155,6 @@ export const ApiKeysPage: React.FC = () => {
           });
           if (res.ok) {
             showToast(`API Key "${keyItem.name}" revoked successfully`, 'success');
-            // If the revoked key was stored in active sandbox, remove it
             if (activeKey.startsWith(keyItem.prefix)) {
               localStorage.removeItem('pg_active_api_key');
               setActiveKey('');
@@ -154,6 +169,141 @@ export const ApiKeysPage: React.FC = () => {
       }
     });
   };
+
+  const handleDeleteKeyPermanent = (keyItem: ApiKeyItem) => {
+    confirmAction({
+      title: 'Hapus Permanen API Key',
+      description: `Apakah Anda yakin ingin MENGHAPUS PERMANEN API key "${keyItem.name}" (${keyItem.prefix}...) dari database SQLite? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Hapus Permanen',
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/auth/keys/${keyItem.id}?permanent=true`, {
+            method: 'DELETE'
+          });
+          if (res.ok) {
+            showToast(`API Key "${keyItem.name}" telah dihapus permanen dari database`, 'success');
+            if (activeKey.startsWith(keyItem.prefix)) {
+              localStorage.removeItem('pg_active_api_key');
+              setActiveKey('');
+            }
+            setSelectedKeyIds(prev => prev.filter(id => id !== keyItem.id));
+            fetchKeys();
+          } else {
+            showToast('Gagal menghapus API key', 'error');
+          }
+        } catch {
+          showToast('Error saat menghapus API key', 'error');
+        }
+      }
+    });
+  };
+
+  const handleToggleSelect = (id: string | number) => {
+    setSelectedKeyIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllPage = (pageItems: ApiKeyItem[]) => {
+    const pageIds = pageItems.map(k => k.id);
+    const allSelected = pageIds.every(id => selectedKeyIds.includes(id));
+    if (allSelected) {
+      setSelectedKeyIds(prev => prev.filter(id => !pageIds.includes(id)));
+    } else {
+      setSelectedKeyIds(prev => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedKeyIds([]);
+  };
+
+  const handleBulkRevoke = () => {
+    if (selectedKeyIds.length === 0) return;
+    confirmAction({
+      title: 'Bulk Revoke API Keys',
+      description: `Apakah Anda yakin ingin me-revoke ${selectedKeyIds.length} API key yang dipilih? Klien yang menggunakan key ini akan langsung ditolak (401).`,
+      confirmText: `Revoke ${selectedKeyIds.length} Key`,
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        setIsBulkLoading(true);
+        try {
+          const res = await fetch('/api/auth/keys/bulk-revoke', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: selectedKeyIds })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            showToast(`${data.revoked_count || selectedKeyIds.length} API key berhasil di-revoke`, 'success');
+            setSelectedKeyIds([]);
+            fetchKeys();
+          } else {
+            showToast('Gagal melakukan bulk revoke', 'error');
+          }
+        } catch {
+          showToast('Terjadi kesalahan jaringan saat bulk revoke', 'error');
+        } finally {
+          setIsBulkLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedKeyIds.length === 0) return;
+    confirmAction({
+      title: 'Hapus Permanen Terpilih',
+      description: `Apakah Anda yakin ingin MENGHAPUS PERMANEN ${selectedKeyIds.length} API key yang dipilih dari database SQLite? Data kunci dan riwayat penggunaannya akan dibersihkan total.`,
+      confirmText: `Hapus Permanen ${selectedKeyIds.length} Key`,
+      confirmVariant: 'danger',
+      onConfirm: async () => {
+        setIsBulkLoading(true);
+        try {
+          const res = await fetch('/api/auth/keys/bulk-delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: selectedKeyIds })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            showToast(`${data.deleted_count || selectedKeyIds.length} API key berhasil dihapus permanen`, 'success');
+            setSelectedKeyIds([]);
+            fetchKeys();
+          } else {
+            showToast('Gagal melakukan bulk delete', 'error');
+          }
+        } catch {
+          showToast('Terjadi kesalahan jaringan saat bulk delete', 'error');
+        } finally {
+          setIsBulkLoading(false);
+        }
+      }
+    });
+  };
+
+  // Filter & Pagination Calculations
+  const filteredKeys = useMemo(() => {
+    if (!searchQuery.trim()) return keys;
+    const q = searchQuery.toLowerCase().trim();
+    return keys.filter(
+      k => (k.name || '').toLowerCase().includes(q) || (k.prefix || '').toLowerCase().includes(q)
+    );
+  }, [keys, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredKeys.length / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedKeys = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredKeys.slice(start, start + pageSize);
+  }, [filteredKeys, currentPage, pageSize]);
 
   const handleCopyRawKey = () => {
     if (!createdRawKey) return;
@@ -476,7 +626,7 @@ curl -X POST http://127.0.0.1:52111/v1/chat/completions \\
             alignItems: 'center',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: 12,
+            gap: 16,
             marginBottom: 20
           }}
         >
@@ -486,17 +636,151 @@ curl -X POST http://127.0.0.1:52111/v1/chat/completions \\
               <h2 style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', margin: 0 }}>
                 Registered API Keys
               </h2>
-              <span className="badge badge-neutral">{keys.length} Active</span>
+              <span className="badge badge-amber">{keys.length} Total</span>
+              {searchQuery && (
+                <span className="badge badge-neutral">
+                  {filteredKeys.length} cocok
+                </span>
+              )}
             </div>
             <p style={{ fontSize: 13, color: '#a8a29e', marginTop: 4, margin: '4px 0 0 0' }}>
-              Cryptographically hashed keys accepted for `/v1/chat/completions` and `/v1/messages`.
+              Kunci API terotentikasi & terenkripsi untuk gateway OpenAI (`/v1/chat/completions`) dan Anthropic (`/v1/messages`).
             </p>
+          </div>
+
+          {/* Search Bar & Refresh */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                minWidth: 240,
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: 8,
+                padding: '0 10px'
+              }}
+            >
+              <Search size={15} color="#78716c" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Cari nama atau prefix key..."
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: '#ffffff',
+                  fontSize: 12,
+                  padding: '7px 8px',
+                  width: '100%'
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#a8a29e',
+                    cursor: 'pointer',
+                    padding: 0,
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={fetchKeys}
+              className="btn btn-secondary btn-sm"
+              title="Refresh API Keys"
+              style={{ padding: '7px 10px' }}
+            >
+              <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            </button>
           </div>
         </div>
 
+        {/* Bulk Action Toolbar (Active when keys are selected) */}
+        {selectedKeyIds.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+              padding: '12px 18px',
+              marginBottom: 16,
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05))',
+              border: '1px solid rgba(245, 158, 11, 0.35)',
+              borderRadius: 10
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 6,
+                  background: 'rgba(245, 158, 11, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#f59e0b'
+                }}
+              >
+                <CheckSquare size={16} />
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#fafaf9' }}>
+                {selectedKeyIds.length} API Key terpilih
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={handleBulkRevoke}
+                disabled={isBulkLoading}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  color: '#f59e0b',
+                  borderColor: 'rgba(245, 158, 11, 0.4)'
+                }}
+              >
+                <span>Revoke Terpilih</span>
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkLoading}
+                className="btn btn-danger btn-sm"
+              >
+                <Trash2 size={13} />
+                <span>Hapus Permanen Terpilih</span>
+              </button>
+              <button
+                onClick={handleClearSelection}
+                className="btn btn-secondary btn-sm"
+                style={{ color: '#a8a29e' }}
+              >
+                <span>Batal</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div style={{ padding: '36px', textAlign: 'center', color: '#a8a29e', fontSize: 14 }}>
-            Loading registered keys...
+            Memuat daftar API key terdaftar...
           </div>
         ) : keys.length === 0 ? (
           <div
@@ -510,124 +794,270 @@ curl -X POST http://127.0.0.1:52111/v1/chat/completions \\
           >
             <KeyRound size={32} color="#78716c" style={{ marginBottom: 10 }} />
             <p style={{ fontSize: 14, color: '#a8a29e', margin: '0 0 12px 0' }}>
-              No API keys found. Create a key to authenticate Claude Code, OpenCode, and Prompt Sandbox.
+              Belum ada API key terdaftar. Buat key baru untuk mengautentikasi Claude Code, OpenCode, atau Prompt Sandbox.
             </p>
             <button
               onClick={() => setIsCreateModalOpen(true)}
               className="btn btn-primary"
             >
               <Plus size={15} />
-              <span>Create First Key</span>
+              <span>Buat API Key Pertama</span>
             </button>
           </div>
+        ) : filteredKeys.length === 0 ? (
+          <div style={{ padding: '36px', textAlign: 'center', color: '#a8a29e', fontSize: 14 }}>
+            Tidak ada API key yang cocok dengan pencarian "{searchQuery}".
+          </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>KEY NAME</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>PREFIX</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>POLICY LIMITS</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>CACHE SCOPE</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>MODELS</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>LAST USED</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>STATUS</th>
-                  <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c', textAlign: 'right' }}>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map((k) => (
-                  <tr
-                    key={String(k.id)}
-                    style={{
-                      borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                      transition: 'background 0.15s ease'
-                    }}
-                  >
-                    <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 600, color: '#ffffff' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Lock size={14} color="#f59e0b" />
-                        <span>{k.name}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#fbbf24' }}>
-                      <span
+          <div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <th style={{ padding: '12px 14px', width: 40, textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={
+                          paginatedKeys.length > 0 &&
+                          paginatedKeys.every((k) => selectedKeyIds.includes(k.id))
+                        }
+                        onChange={() => handleSelectAllPage(paginatedKeys)}
+                        style={{ cursor: 'pointer', accentColor: '#f59e0b' }}
+                        title="Pilih semua baris pada halaman ini"
+                      />
+                    </th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>KEY NAME</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>PREFIX</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>POLICY LIMITS</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>CACHE SCOPE</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>MODELS</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>LAST USED</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c' }}>STATUS</th>
+                    <th style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: '#78716c', textAlign: 'right' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedKeys.map((k) => {
+                    const isSelected = selectedKeyIds.includes(k.id);
+                    const isRevoked = !!(k as any).revoked_at;
+                    return (
+                      <tr
+                        key={String(k.id)}
                         style={{
-                          background: 'rgba(245, 158, 11, 0.1)',
-                          border: '1px solid rgba(245, 158, 11, 0.25)',
-                          padding: '3px 8px',
-                          borderRadius: 6
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                          background: isSelected ? 'rgba(245, 158, 11, 0.07)' : 'transparent',
+                          transition: 'background 0.15s ease'
                         }}
                       >
-                        {k.prefix}...
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 12 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 11, color: '#78716c' }}>RPM:</span>
-                          {k.rate_limit_rpm ? (
-                            <span className="badge badge-amber">{k.rate_limit_rpm} req/m</span>
+                        <td style={{ padding: '14px 14px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelect(k.id)}
+                            style={{ cursor: 'pointer', accentColor: '#f59e0b' }}
+                          />
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 600, color: '#ffffff' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <Lock size={14} color="#f59e0b" />
+                            <span>{k.name}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#fbbf24' }}>
+                          <span
+                            style={{
+                              background: 'rgba(245, 158, 11, 0.1)',
+                              border: '1px solid rgba(245, 158, 11, 0.25)',
+                              padding: '3px 8px',
+                              borderRadius: 6
+                            }}
+                          >
+                            {k.prefix}...
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: 12 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 11, color: '#78716c' }}>RPM:</span>
+                              {k.rate_limit_rpm ? (
+                                <span className="badge badge-amber">{k.rate_limit_rpm} req/m</span>
+                              ) : (
+                                <span style={{ color: '#a8a29e', fontSize: 11 }}>Unlimited</span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 11, color: '#78716c' }}>TPD:</span>
+                              {k.rate_limit_tpd ? (
+                                <span className="badge badge-cyan">{k.rate_limit_tpd.toLocaleString()} tokens</span>
+                              ) : (
+                                <span style={{ color: '#a8a29e', fontSize: 11 }}>Unlimited</span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: 12 }}>
+                          {k.cache_scope === 'key' ? (
+                            <span className="badge badge-emerald">Isolated (Key)</span>
+                          ) : k.cache_scope === 'disabled' ? (
+                            <span className="badge badge-neutral">Bypass</span>
                           ) : (
-                            <span style={{ color: '#a8a29e', fontSize: 11 }}>Unlimited</span>
+                            <span className="badge badge-neutral">Shared</span>
                           )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 11, color: '#78716c' }}>TPD:</span>
-                          {k.rate_limit_tpd ? (
-                            <span className="badge badge-cyan">{k.rate_limit_tpd.toLocaleString()} tokens</span>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: 12 }}>
+                          {(() => {
+                            try {
+                              const m = typeof k.allowed_models === 'string' ? JSON.parse(k.allowed_models) : (k.allowed_models || []);
+                              if (!m || m.length === 0 || m.includes('*')) {
+                                return <span style={{ color: '#a8a29e', fontSize: 11 }}>All models (*)</span>;
+                              }
+                              return (
+                                <span className="badge badge-amber" title={m.join(', ')}>
+                                  {m.length} allowed
+                                </span>
+                              );
+                            } catch {
+                              return <span style={{ color: '#a8a29e', fontSize: 11 }}>All models (*)</span>;
+                            }
+                          })()}
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: 12, color: '#a8a29e' }}>
+                          {k.last_used_at ? formatDate(k.last_used_at) : 'Never'}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          {isRevoked ? (
+                            <span className="badge badge-neutral" style={{ color: '#f87171' }}>Revoked</span>
                           ) : (
-                            <span style={{ color: '#a8a29e', fontSize: 11 }}>Unlimited</span>
+                            <span className="badge badge-emerald">Active</span>
                           )}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 12 }}>
-                      {k.cache_scope === 'key' ? (
-                        <span className="badge badge-emerald">Isolated (Key)</span>
-                      ) : k.cache_scope === 'disabled' ? (
-                        <span className="badge badge-neutral">Bypass</span>
-                      ) : (
-                        <span className="badge badge-neutral">Shared</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 12 }}>
-                      {(() => {
-                        try {
-                          const m = typeof k.allowed_models === 'string' ? JSON.parse(k.allowed_models) : (k.allowed_models || []);
-                          if (!m || m.length === 0 || m.includes('*')) {
-                            return <span style={{ color: '#a8a29e', fontSize: 11 }}>All models (*)</span>;
-                          }
-                          return (
-                            <span className="badge badge-amber" title={m.join(', ')}>
-                              {m.length} allowed
-                            </span>
-                          );
-                        } catch {
-                          return <span style={{ color: '#a8a29e', fontSize: 11 }}>All models (*)</span>;
-                        }
-                      })()}
-                    </td>
-                    <td style={{ padding: '14px 16px', fontSize: 12, color: '#a8a29e' }}>
-                      {k.last_used_at ? formatDate(k.last_used_at) : 'Never'}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span className="badge badge-emerald">Active</span>
-                    </td>
-                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => handleRevokeKey(k)}
-                        className="btn btn-danger btn-sm"
-                        title="Revoke API Key"
-                      >
-                        <Trash2 size={13} />
-                        <span>Revoke</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                            {!isRevoked && (
+                              <button
+                                onClick={() => handleRevokeKey(k)}
+                                className="btn btn-secondary btn-sm"
+                                style={{ color: '#f59e0b', padding: '5px 8px' }}
+                                title="Revoke API Key"
+                              >
+                                <span>Revoke</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteKeyPermanent(k)}
+                              className="btn btn-danger btn-sm"
+                              style={{ padding: '5px 8px' }}
+                              title="Hapus Permanen dari Database"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls Footer */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 16,
+                marginTop: 20,
+                paddingTop: 16,
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)'
+              }}
+            >
+              {/* Left: Summary text */}
+              <div style={{ fontSize: 12, color: '#a8a29e' }}>
+                Menampilkan{' '}
+                <strong style={{ color: '#fafaf9' }}>
+                  {filteredKeys.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+                </strong>
+                -
+                <strong style={{ color: '#fafaf9' }}>
+                  {Math.min(currentPage * pageSize, filteredKeys.length)}
+                </strong>{' '}
+                dari <strong style={{ color: '#fafaf9' }}>{filteredKeys.length}</strong> key
+                {searchQuery && ` (difilter dari ${keys.length} total)`}
+              </div>
+
+              {/* Center: Page Navigation */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '6px 8px', opacity: currentPage === 1 ? 0.4 : 1 }}
+                  title="Halaman Pertama"
+                >
+                  <ChevronsLeft size={14} />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '6px 8px', opacity: currentPage === 1 ? 0.4 : 1 }}
+                  title="Halaman Sebelumnya"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+
+                <div style={{ fontSize: 12, color: '#fafaf9', padding: '0 8px', fontFamily: 'var(--font-mono)' }}>
+                  Hal {currentPage} / {totalPages}
+                </div>
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '6px 8px', opacity: currentPage === totalPages ? 0.4 : 1 }}
+                  title="Halaman Selanjutnya"
+                >
+                  <ChevronRight size={14} />
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '6px 8px', opacity: currentPage === totalPages ? 0.4 : 1 }}
+                  title="Halaman Terakhir"
+                >
+                  <ChevronsRight size={14} />
+                </button>
+              </div>
+
+              {/* Right: Page Size Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#a8a29e' }}>
+                <span>Baris per hal:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    background: '#15110e',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 6,
+                    color: '#fafaf9',
+                    padding: '4px 8px',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
           </div>
         )}
       </div>

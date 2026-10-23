@@ -4,7 +4,7 @@ import json
 import sqlite3
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 from .binary_codec import (
     BinaryCodec, DatabaseCorruptedError,
@@ -1613,6 +1613,50 @@ class BinaryDatabaseEngine:
             WHERE (CAST(id AS TEXT) = ? OR name = ?) AND revoked_at IS NULL
         """, (now, str(key_id_or_name), str(key_id_or_name)))
         return cursor.rowcount > 0
+
+    def delete_api_key(self, key_id_or_name: Union[int, str]) -> bool:
+        """Permanently deletes an API key and its usage ledger records."""
+        conn = self._get_connection()
+        cursor = conn.execute(
+            "SELECT id FROM pg_api_keys WHERE CAST(id AS TEXT) = ? OR name = ?",
+            (str(key_id_or_name), str(key_id_or_name))
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+        kid = row["id"]
+        conn.execute("DELETE FROM pg_api_key_usage WHERE key_id = ?", (kid,))
+        del_cursor = conn.execute("DELETE FROM pg_api_keys WHERE id = ?", (kid,))
+        return del_cursor.rowcount > 0
+
+    def delete_api_keys(self, key_ids: List[Union[int, str]]) -> int:
+        """Permanently deletes multiple API keys by numeric IDs."""
+        if not key_ids:
+            return 0
+        conn = self._get_connection()
+        valid_ids = [int(k) for k in key_ids if str(k).isdigit()]
+        if not valid_ids:
+            return 0
+        placeholders = ",".join("?" for _ in valid_ids)
+        conn.execute(f"DELETE FROM pg_api_key_usage WHERE key_id IN ({placeholders})", valid_ids)
+        cursor = conn.execute(f"DELETE FROM pg_api_keys WHERE id IN ({placeholders})", valid_ids)
+        return cursor.rowcount
+
+    def revoke_api_keys(self, key_ids: List[Union[int, str]]) -> int:
+        """Revokes multiple API keys by numeric IDs."""
+        if not key_ids:
+            return 0
+        conn = self._get_connection()
+        valid_ids = [int(k) for k in key_ids if str(k).isdigit()]
+        if not valid_ids:
+            return 0
+        now = time.time()
+        placeholders = ",".join("?" for _ in valid_ids)
+        cursor = conn.execute(
+            f"UPDATE pg_api_keys SET revoked_at = ? WHERE id IN ({placeholders}) AND revoked_at IS NULL",
+            [now] + valid_ids
+        )
+        return cursor.rowcount
 
     def update_api_key_last_used(self, key_id: int):
         conn = self._get_connection()
