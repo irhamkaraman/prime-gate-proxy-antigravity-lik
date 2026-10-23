@@ -70,7 +70,7 @@ def check_npm_update_notifier(silent_if_current: bool = True):
         if latest_ver and _parse_semver(latest_ver) > _parse_semver(__version__):
             console.print(Panel(
                 Text.from_markup(
-                    f"[bold yellow]🔔 Update Available on NPM:[/bold yellow] [bold red]{__version__}[/bold red] → [bold green]{latest_ver}[/bold green]\n\n"
+                    f"[bold yellow][!] Update Available on NPM:[/bold yellow] [bold red]{__version__}[/bold red] -> [bold green]{latest_ver}[/bold green]\n\n"
                     f"• Update globally via npm:  [bold cyan]npm install -g prime-gate-antigravity@latest[/bold cyan]\n"
                     f"• Or run latest via npx:    [bold cyan]npx prime-gate-antigravity@latest[/bold cyan]\n"
                     f"• Or update Git clone:      [bold cyan]scripts\\update.bat[/bold cyan] (or [bold cyan]git pull[/bold cyan])"
@@ -79,7 +79,7 @@ def check_npm_update_notifier(silent_if_current: bool = True):
                 border_style="yellow"
             ))
         elif not silent_if_current:
-            console.print(f"[bold green]✓ Prime Gate is up to date (v{__version__}) on npmjs.org.[/bold green]")
+            console.print(f"[bold green][OK] Prime Gate is up to date (v{__version__}) on npmjs.org.[/bold green]")
     except Exception:
         if not silent_if_current:
             console.print("[yellow]Could not reach npmjs.org (package may not yet be published or network offline).[/yellow]")
