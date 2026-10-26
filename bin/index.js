@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 // Read local version
-let currentVersion = "1.2.7";
+let currentVersion = "1.2.8";
 try {
   const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
   if (pkg.version) currentVersion = pkg.version;

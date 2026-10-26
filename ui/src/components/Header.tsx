@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigation } from '../context/NavigationContext';
 import { useToast } from '../context/ToastContext';
-import { RefreshCw, Plus, Copy, Check, ExternalLink, LogOut } from 'lucide-react';
+import { RefreshCw, Plus, Copy, Check, Menu, X } from 'lucide-react';
 import { RoutePath } from '../types';
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
   onOpenAddAccountModal: () => void;
   isSyncing: boolean;
   onLogout?: () => void;
+  isMobileSidebarOpen?: boolean;
+  onToggleMobileSidebar?: () => void;
 }
 
 const ROUTE_META: Record<RoutePath, { title: string; subtitle: string }> = {
@@ -50,7 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSyncQuota,
   onOpenAddAccountModal,
   isSyncing,
-  onLogout,
+  isMobileSidebarOpen = false,
+  onToggleMobileSidebar,
 }) => {
   const { currentRoute } = useNavigation();
   const { showToast } = useToast();
@@ -68,49 +71,37 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header
-      style={{
-        padding: '20px 32px',
-        borderBottom: '1px solid rgba(168, 162, 158, 0.12)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        background: '#0e0b08',
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-      }}
-    >
-      <div>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#fafaf9', letterSpacing: '-0.02em' }}>
-          {meta.title}
-        </h1>
-        <p style={{ fontSize: 13, color: '#a8a29e', marginTop: 4 }}>
-          {meta.subtitle}
-        </p>
+    <header className="app-header">
+      <div className="app-header-left">
+        {onToggleMobileSidebar && (
+          <button
+            type="button"
+            onClick={onToggleMobileSidebar}
+            className="btn-mobile-toggle"
+            aria-label="Toggle navigation menu"
+            title="Menu Navigasi"
+          >
+            {isMobileSidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+        )}
+        <div className="app-header-text">
+          <h1 className="app-header-title">
+            {meta.title}
+          </h1>
+          <p className="app-header-subtitle">
+            {meta.subtitle}
+          </p>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="app-header-actions">
         {/* Gateway URL copy pill */}
         <div
           onClick={handleCopyGatewayUrl}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '7px 12px',
-            borderRadius: 8,
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid rgba(168, 162, 158, 0.15)',
-            fontSize: 12,
-            fontFamily: 'var(--font-mono)',
-            color: '#d6d3d1',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-          title="Click to copy gateway base URL"
+          className="gateway-url-pill"
+          title={`Click to copy gateway base URL (${gatewayUrl})`}
         >
-          <span>{gatewayUrl}</span>
+          <span className="gateway-url-text">{gatewayUrl}</span>
           {copied ? <Check size={14} color="#10b981" /> : <Copy size={14} color="#78716c" />}
         </div>
 
@@ -118,34 +109,28 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onSyncQuota}
           disabled={isSyncing}
-          className="btn btn-secondary"
+          className="btn btn-secondary header-btn"
           title="Sync live quota and models from Google Antigravity"
         >
-          <RefreshCw size={14} className={isSyncing ? 'animate-spin' : ''} style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }} />
-          <span>{isSyncing ? 'Syncing...' : 'Sync Live'}</span>
+          <RefreshCw
+            size={14}
+            className={isSyncing ? 'animate-spin' : ''}
+            style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }}
+          />
+          <span className="btn-text-full">{isSyncing ? 'Syncing...' : 'Sync Live'}</span>
+          <span className="btn-text-short">{isSyncing ? 'Sync...' : 'Sync'}</span>
         </button>
 
         {/* Add Account button */}
         <button
           onClick={onOpenAddAccountModal}
-          className="btn btn-primary"
+          className="btn btn-primary header-btn"
+          title="Add or connect Google Antigravity account"
         >
           <Plus size={15} />
-          <span>Add Account</span>
+          <span className="btn-text-full">Add Account</span>
+          <span className="btn-text-short">Account</span>
         </button>
-
-        {/* Logout / Lock Session button */}
-        {onLogout && (
-          <button
-            onClick={onLogout}
-            className="btn btn-secondary"
-            style={{ padding: '8px 12px', color: '#a8a29e' }}
-            title="Kunci Dashboard (Logout)"
-          >
-            <LogOut size={14} />
-            <span style={{ fontSize: 12 }}>Keluar</span>
-          </button>
-        )}
       </div>
     </header>
   );

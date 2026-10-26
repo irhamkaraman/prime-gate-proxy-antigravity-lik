@@ -17,6 +17,7 @@ import {
   Download,
   AlertCircle,
   GitBranch,
+  X,
 } from 'lucide-react';
 import { Account, RoutePath, SystemUpdateStatus, GitPullResponse } from '../types';
 
@@ -25,6 +26,8 @@ interface SidebarProps {
   accounts: Account[];
   onAccountSwitched: () => void;
   isWsConnected: boolean;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,6 +35,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   accounts,
   onAccountSwitched,
   isWsConnected,
+  isMobileOpen = false,
+  onCloseMobile,
 }) => {
   const { currentRoute, navigate } = useNavigation();
   const { openModal, closeModal } = useModal();
@@ -247,17 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside
-      style={{
-        width: 260,
-        height: '100vh',
-        background: '#0d0a08',
-        borderRight: '1px solid rgba(168, 162, 158, 0.14)',
-        display: 'flex',
-        flexDirection: 'column',
-        flexShrink: 0,
-      }}
-    >
+    <aside className={`app-sidebar ${isMobileOpen ? 'open' : ''}`}>
       {/* Brand Header */}
       <div
         style={{
@@ -272,22 +267,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em' }}>
             Prime Gate
           </span>
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              color: '#f59e0b',
-              background: 'rgba(245, 158, 11, 0.12)',
-              border: '1px solid rgba(245, 158, 11, 0.25)',
-              padding: '2px 7px',
-              borderRadius: 5,
-              fontFamily: 'monospace',
-              letterSpacing: '0.02em',
-            }}
-            title={`Version: v${updateInfo?.current_version || '1.2.7'}`}
-          >
-            v{updateInfo?.current_version || '1.2.7'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#f59e0b',
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.25)',
+                padding: '2px 7px',
+                borderRadius: 5,
+                fontFamily: 'monospace',
+                letterSpacing: '0.02em',
+              }}
+              title={`Version: v${updateInfo?.current_version || '1.2.8'}`}
+            >
+              v{updateInfo?.current_version || '1.2.8'}
+            </span>
+            {onCloseMobile && (
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="sidebar-mobile-close"
+                aria-label="Close menu"
+                title="Tutup Menu"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 11, color: '#78716c', fontWeight: 500 }}>
@@ -466,7 +474,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.id)}
+              onClick={() => {
+                navigate(item.id);
+                if (onCloseMobile) onCloseMobile();
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',

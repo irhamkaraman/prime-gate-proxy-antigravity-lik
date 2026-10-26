@@ -59,12 +59,18 @@ const MainLayout: React.FC = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [copiedCliCmd, setCopiedCliCmd] = useState<boolean>(false);
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     timeRangeRef.current = timeRange;
   }, [timeRange]);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setIsMobileSidebarOpen(false);
+  }, [currentRoute]);
   // Check dashboard session authentication on mount
   useEffect(() => {
     const checkAuthStatus = async (retryCount = 0) => {
@@ -1007,12 +1013,22 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="app-container">
+      {/* Mobile Backdrop */}
+      {isMobileSidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* Left Sidebar */}
       <Sidebar
         activeAccount={activeAccount}
         accounts={accounts}
         onAccountSwitched={fetchAccounts}
         isWsConnected={isWsConnected}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Content Area */}
@@ -1021,7 +1037,8 @@ const MainLayout: React.FC = () => {
           onSyncQuota={handleSyncQuota}
           onOpenAddAccountModal={handleOpenAddAccountModal}
           isSyncing={isSyncing}
-          onLogout={handleLogout}
+          isMobileSidebarOpen={isMobileSidebarOpen}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
         />
 
         {/* Dynamic Route Render */}

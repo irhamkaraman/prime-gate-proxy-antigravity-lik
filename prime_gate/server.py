@@ -1850,7 +1850,7 @@ async def stream_cached_response_sse(
     cached: Dict[str, Any]
 ) -> AsyncGenerator[str, None]:
     """Streams a cached response in standard OpenAI SSE chunk format with smooth pacing."""
-    yield format_sse_chunk(completion_id, created, model, {"role": "assistant", "content": ""})
+    yield format_sse_chunk(completion_id, created, model, {"role": "assistant"})
 
     response_text = cached.get("response_text", "")
     if response_text:
@@ -1996,8 +1996,9 @@ async def stream_antigravity_sse(
         resp = connected_resp
         account_email = connected_account.get("email") if connected_account else None
         try:
-            # Yield initial role chunk required by Vercel AI SDK (@ai-sdk/openai-compatible) and Cursor/Continue
-            yield format_sse_chunk(completion_id, created, model, {"role": "assistant", "content": ""})
+            # Yield initial role chunk compliant with standard OpenAI streaming specification
+            # (Omit content: "" so clients like Vercel AI SDK/OpenCode don't create phantom empty text parts on tool turns)
+            yield format_sse_chunk(completion_id, created, model, {"role": "assistant"})
 
             has_emitted_tool_call = False
             tool_index = 0
@@ -2221,10 +2222,13 @@ async def stream_antigravity_sse(
                                         if to_yield.strip().startswith("Thought:") or to_yield.strip().startswith("thought:"):
                                             reasoning_tokens += max(1, len(to_yield.split()))
                                             yield format_sse_chunk(completion_id, created, model, {"reasoning_content": to_yield})
-                                        else:
+                                        elif not has_emitted_tool_call:
                                             completion_tokens += max(1, len(to_yield.split()))
                                             accumulated_content.append(to_yield)
                                             yield format_sse_chunk(completion_id, created, model, {"content": to_yield})
+                                        else:
+                                            completion_tokens += max(1, len(to_yield.split()))
+                                            accumulated_content.append(to_yield)
                 except Exception:
                     continue
 
@@ -2250,16 +2254,20 @@ async def stream_antigravity_sse(
                 else:
                     completion_tokens += max(1, len(call_buffer.split()))
                     accumulated_content.append(call_buffer)
-                    yield format_sse_chunk(completion_id, created, model, {"content": call_buffer})
+                    if not has_emitted_tool_call:
+                        yield format_sse_chunk(completion_id, created, model, {"content": call_buffer})
 
             if text_buffer:
                 if text_buffer.strip().startswith("Thought:") or text_buffer.strip().startswith("thought:"):
                     reasoning_tokens += max(1, len(text_buffer.split()))
                     yield format_sse_chunk(completion_id, created, model, {"reasoning_content": text_buffer})
-                else:
+                elif not has_emitted_tool_call:
                     completion_tokens += max(1, len(text_buffer.split()))
                     accumulated_content.append(text_buffer)
                     yield format_sse_chunk(completion_id, created, model, {"content": text_buffer})
+                else:
+                    completion_tokens += max(1, len(text_buffer.split()))
+                    accumulated_content.append(text_buffer)
 
             # Store generated response into smart cache if eligible and no tool calls occurred
             full_response_text = "".join(accumulated_content).strip()

@@ -52,7 +52,7 @@ prime-gate daemon start
 | `--port <number>` | Proxy API port (OpenAI & Anthropic endpoints) | `52111` |
 | `--ui-port <number>` | Glassmorphic Web UI dashboard port | `52110` |
 | `--daemon` | Start or manage process in background | `false` |
-| `--version`, `-v` | Display current installed version | `1.2.7` |
+| `--version`, `-v` | Display current installed version | `1.2.8` |
 | `--help`, `-h` | Display all available commands and help | - |
 
 ---
@@ -159,7 +159,7 @@ Connect OpenCode with full tool-calling and thinking support:
 }
 ```
 
-**Alternative: OpenAI Protocol (Fully compatible with v1.2.7 tool-result normalization):**
+**Alternative: OpenAI Protocol (Fully compatible with v1.2.8 tool-result normalization):**
 ```json
 {
   "providers": {
