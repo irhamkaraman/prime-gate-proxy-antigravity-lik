@@ -354,7 +354,7 @@ def format_non_stream_response(
     """Format standard OpenAI non-streaming ChatCompletion response."""
     message: Dict[str, Any] = {
         "role": "assistant",
-        "content": content_text if content_text else ""
+        "content": content_text if content_text else (None if tool_calls else "")
     }
     if reasoning_content:
         message["reasoning_content"] = reasoning_content

@@ -284,16 +284,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               fontFamily: 'monospace',
               letterSpacing: '0.02em',
             }}
-            title={`Version: v${updateInfo?.current_version || '1.2.4'}`}
+            title={`Version: v${updateInfo?.current_version || '1.2.7'}`}
           >
-            v{updateInfo?.current_version || '1.2.4'}
+            v{updateInfo?.current_version || '1.2.7'}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 11, color: '#78716c', fontWeight: 500 }}>
             Antigravity Gateway
           </div>
-          {updateInfo?.current_commit && (
+          {updateInfo?.current_commit && updateInfo.current_commit !== 'unknown' && (
             <div
               style={{
                 fontSize: 10,
@@ -386,66 +386,76 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 fontFamily: 'monospace',
               }}
             >
-              v{updateInfo.latest_version}
+              v{updateInfo.npm_version || updateInfo.latest_version}
             </span>
           </div>
 
           <div style={{ fontSize: 11, color: '#d6d3d1', lineHeight: 1.4 }}>
-            {updateInfo.commits_behind > 0
+            {updateInfo.is_git_repo && updateInfo.commits_behind > 0
               ? `Behind by ${updateInfo.commits_behind} commit${updateInfo.commits_behind > 1 ? 's' : ''} from remote origin.`
-              : `Local version (v${updateInfo.current_version}) is out of sync with GitHub (v${updateInfo.latest_version}).`}
+              : `New version available on npm (v${updateInfo.npm_version || updateInfo.latest_version}).`}
           </div>
 
-          {updateInfo?.auto_update?.enabled && (
-            <div
+          {updateInfo.is_git_repo ? (
+            <button
+              onClick={handleGitPull}
+              disabled={isPulling}
               style={{
-                fontSize: 10,
-                color: '#fde68a',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
-                background: 'rgba(245, 158, 11, 0.12)',
-                padding: '4px 7px',
-                borderRadius: 5,
+                justifyContent: 'center',
+                gap: 6,
+                padding: '7px 10px',
+                borderRadius: 7,
+                background: isPulling ? 'rgba(245, 158, 11, 0.3)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                border: 'none',
+                color: isPulling ? '#fcd34d' : '#000000',
+                fontWeight: 700,
+                fontSize: 11,
+                cursor: isPulling ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)',
               }}
             >
-              <RefreshCw size={10} style={{ animation: 'spin 4s linear infinite', flexShrink: 0 }} />
-              <span>Auto Update will install automatically once system is idle.</span>
-            </div>
+              {isPulling ? (
+                <>
+                  <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span>Pulling Updates...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={12} />
+                  <span>Update Now (git pull)</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(updateInfo.install_command || 'npm i -g prime-gate-antigravity@latest');
+                showToast('Copied NPM update command to clipboard!', 'success');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '7px 10px',
+                borderRadius: 7,
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                border: 'none',
+                color: '#000000',
+                fontWeight: 700,
+                fontSize: 11,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)',
+              }}
+            >
+              <Download size={12} />
+              <span>Copy npm update command</span>
+            </button>
           )}
-
-          <button
-            onClick={handleGitPull}
-            disabled={isPulling}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-              padding: '7px 10px',
-              borderRadius: 7,
-              background: isPulling ? 'rgba(245, 158, 11, 0.3)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
-              border: 'none',
-              color: isPulling ? '#fcd34d' : '#000000',
-              fontWeight: 700,
-              fontSize: 11,
-              cursor: isPulling ? 'not-allowed' : 'pointer',
-              transition: 'all 0.15s ease',
-              boxShadow: '0 2px 8px rgba(245, 158, 11, 0.25)',
-            }}
-          >
-            {isPulling ? (
-              <>
-                <RefreshCw size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                <span>Pulling Updates...</span>
-              </>
-            ) : (
-              <>
-                <Download size={12} />
-                <span>Update Now (git pull)</span>
-              </>
-            )}
-          </button>
         </div>
       )}
 

@@ -29,7 +29,7 @@
 
 </div>
 
-## 🚀 Pemasangan & Menjalankan Cepat
+## 🚀 Pemasangan & Menjalankan Cepat (Windows, macOS, Linux)
 
 Jalankan Prime Gate secara instan di sistem Anda tanpa perlu clone repo manual:
 
@@ -41,6 +41,7 @@ npx prime-gate-antigravity
 npm install -g prime-gate-antigravity@latest
 
 # Jalankan daemon di latar belakang (Proxy API :52111 + Web UI :52110)
+# Mendukung penuh Windows, macOS, dan Linux
 prime-gate daemon start
 ```
 
@@ -51,7 +52,7 @@ prime-gate daemon start
 | `--port <angka>` | Port API proksi (endpoint OpenAI & Anthropic) | `52111` |
 | `--ui-port <angka>` | Port Dasbor Web UI Glassmorphic | `52110` |
 | `--daemon` | Jalankan atau kelola proses di latar belakang | `false` |
-| `--version`, `-v` | Tampilkan versi yang terpasang saat ini | `1.2.6` |
+| `--version`, `-v` | Tampilkan versi yang terpasang saat ini | `1.2.7` |
 | `--help`, `-h` | Tampilkan bantuan & seluruh daftar perintah | - |
 
 ---

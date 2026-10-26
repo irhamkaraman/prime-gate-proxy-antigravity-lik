@@ -1481,28 +1481,38 @@ def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
         return _UPDATE_CACHE["data"]
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    has_git = os.path.exists(os.path.join(repo_root, ".git"))
+
     local_commit = "unknown"
     remote_commit = "unknown"
     commits_behind = 0
     latest_tag = None
     update_available = False
+    effective_ver = _get_effective_version()
 
-    try:
-        r_head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=repo_root, timeout=5)
-        if r_head.returncode == 0:
-            local_commit = r_head.stdout.strip()
-    except Exception:
-        pass
-
-    # 1. Check GitHub API for latest release tags
+    # 1. Primary: Check NPM registry for published package version
+    npm_latest = None
     try:
         import urllib.request
-        req = urllib.request.Request(
+        req_npm = urllib.request.Request(
+            "https://registry.npmjs.org/prime-gate-antigravity/latest",
+            headers={"User-Agent": "PrimeGate-Updater", "Accept": "application/json"}
+        )
+        with urllib.request.urlopen(req_npm, timeout=3) as resp_npm:
+            npm_data = json.loads(resp_npm.read().decode("utf-8"))
+            npm_latest = npm_data.get("version")
+    except Exception as e:
+        logger.debug(f"NPM registry check deferred: {e}")
+
+    # 2. Secondary: Check GitHub API tags
+    try:
+        import urllib.request
+        req_gh = urllib.request.Request(
             "https://api.github.com/repos/irhamkaraman/prime-gate-proxy-antigravity-lik/tags",
             headers={"User-Agent": "PrimeGate-Updater"}
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            tags = json.loads(resp.read().decode("utf-8"))
+        with urllib.request.urlopen(req_gh, timeout=3) as resp_gh:
+            tags = json.loads(resp_gh.read().decode("utf-8"))
             if tags and isinstance(tags, list):
                 latest_tag = tags[0].get("name", "").lstrip("v")
                 t_sha = tags[0].get("commit", {}).get("sha", "")
@@ -1511,91 +1521,68 @@ def _check_github_sync(force_refresh: bool = False) -> Dict[str, Any]:
     except Exception as e:
         logger.debug(f"GitHub API tag lookup deferred: {e}")
 
-    # 2. Check remote git commit via git ls-remote (anonymous to avoid credential helper conflicts)
-    try:
-        git_env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-        r_remote = subprocess.run(
-            ["git", "-c", "credential.helper=", "ls-remote", "origin", "refs/heads/main"],
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=8,
-            env=git_env
-        )
-        if r_remote.returncode == 0 and r_remote.stdout.strip():
-            remote_sha = r_remote.stdout.strip().split()[0][:7]
-            if remote_sha:
-                remote_commit = remote_sha
-    except Exception:
-        pass
-
-    effective_ver = _get_effective_version()
-
-    # 3. Check commits behind if git origin is tracked
-    try:
-        r_behind = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/main"], capture_output=True, text=True, cwd=repo_root, timeout=5)
-        if r_behind.returncode == 0 and r_behind.stdout.strip().isdigit():
-            commits_behind = int(r_behind.stdout.strip())
-    except Exception:
-        pass
-
-    # Determine if local commit strictly matches remote commit
-    is_same_commit = (
-        local_commit != "unknown"
-        and remote_commit != "unknown"
-        and local_commit == remote_commit
-        and commits_behind == 0
-    )
-
-    if not is_same_commit:
-        if remote_commit != "unknown" and local_commit != "unknown" and remote_commit != local_commit:
-            update_available = True
-        if commits_behind > 0:
-            update_available = True
-
-    # Compare version strings
-    if latest_tag:
+    # 3. Optional: Read git local commit & commits behind ONLY if .git exists
+    if has_git:
         try:
-            cur_parts = [int(p) for p in effective_ver.split(".") if p.isdigit()]
-            lat_parts = [int(p) for p in latest_tag.split(".") if p.isdigit()]
-            if lat_parts > cur_parts:
-                update_available = True
-            elif is_same_commit:
-                update_available = False
+            r_head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=repo_root, timeout=3)
+            if r_head.returncode == 0:
+                local_commit = r_head.stdout.strip()
         except Exception:
-            if not is_same_commit and latest_tag != effective_ver:
-                update_available = True
-            elif is_same_commit:
-                update_available = False
+            pass
 
-    # 4. Check NPM registry for latest published prime-gate-antigravity package
-    npm_latest = None
-    try:
-        import urllib.request
-        req_npm = urllib.request.Request(
-            "https://registry.npmjs.org/prime-gate-antigravity/latest",
-            headers={"User-Agent": "PrimeGate-Updater", "Accept": "application/json"}
-        )
-        with urllib.request.urlopen(req_npm, timeout=2) as resp_npm:
-            npm_data = json.loads(resp_npm.read().decode("utf-8"))
-            npm_latest = npm_data.get("version")
-            if npm_latest:
-                cur_parts = [int(p) for p in effective_ver.split(".") if p.isdigit()]
-                npm_parts = [int(p) for p in npm_latest.split(".") if p.isdigit()]
-                if npm_parts > cur_parts:
-                    update_available = True
-    except Exception:
-        pass
+        try:
+            git_env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+            r_remote = subprocess.run(
+                ["git", "-c", "credential.helper=", "ls-remote", "origin", "refs/heads/main"],
+                capture_output=True,
+                text=True,
+                cwd=repo_root,
+                timeout=5,
+                env=git_env
+            )
+            if r_remote.returncode == 0 and r_remote.stdout.strip():
+                remote_sha = r_remote.stdout.strip().split()[0][:7]
+                if remote_sha:
+                    remote_commit = remote_sha
+        except Exception:
+            pass
+
+        try:
+            r_behind = subprocess.run(["git", "rev-list", "--count", "HEAD..origin/main"], capture_output=True, text=True, cwd=repo_root, timeout=3)
+            if r_behind.returncode == 0 and r_behind.stdout.strip().isdigit():
+                commits_behind = int(r_behind.stdout.strip())
+        except Exception:
+            pass
+
+    # Authoritative SemVer comparison function
+    def _parse_v(v_str: str) -> List[int]:
+        return [int(x) for x in v_str.lstrip("v").split(".") if x.isdigit()]
+
+    cur_parts = _parse_v(effective_ver)
+
+    # Check NPM version first
+    target_remote_ver = npm_latest or latest_tag
+    if target_remote_ver:
+        remote_parts = _parse_v(target_remote_ver)
+        if remote_parts > cur_parts:
+            update_available = True
+        else:
+            update_available = False
+    elif has_git and commits_behind > 0:
+        update_available = True
 
     result = {
         "current_version": effective_ver,
         "current_commit": local_commit,
-        "latest_version": latest_tag or effective_ver,
+        "latest_version": target_remote_ver or effective_ver,
         "latest_commit": remote_commit,
         "npm_version": npm_latest,
         "update_available": update_available,
         "commits_behind": commits_behind,
         "is_synced": not update_available,
+        "is_git_repo": has_git,
+        "install_command": "npm i -g prime-gate-antigravity@latest",
+        "npx_command": "npx prime-gate-antigravity@latest",
         "last_checked": now,
         "repo_url": "https://github.com/irhamkaraman/prime-gate-proxy-antigravity-lik",
         "npm_url": "https://www.npmjs.com/package/prime-gate-antigravity",

@@ -29,9 +29,9 @@
 
 </div>
 
-## 🚀 Quick Install & Run
+## 🚀 Quick Install & Run (Windows, macOS, Linux)
 
-Launch Prime Gate instantly without manual git cloning or complex environment setup:
+Launch Prime Gate instantly on any operating system without manual git cloning or complex environment setup:
 
 ```bash
 # Option 1: Run instantly with zero installation (via NPX)
@@ -41,6 +41,7 @@ npx prime-gate-antigravity
 npm install -g prime-gate-antigravity@latest
 
 # Start background daemon (Proxy API :52111 + Web UI :52110)
+# Works natively on Windows, macOS, and Linux
 prime-gate daemon start
 ```
 
@@ -51,7 +52,7 @@ prime-gate daemon start
 | `--port <number>` | Proxy API port (OpenAI & Anthropic endpoints) | `52111` |
 | `--ui-port <number>` | Glassmorphic Web UI dashboard port | `52110` |
 | `--daemon` | Start or manage process in background | `false` |
-| `--version`, `-v` | Display current installed version | `1.2.6` |
+| `--version`, `-v` | Display current installed version | `1.2.7` |
 | `--help`, `-h` | Display all available commands and help | - |
 
 ---
@@ -136,10 +137,40 @@ export ANTHROPIC_API_KEY="pg-live-..."  # Generate with: prime-gate keys create
 claude --model claude-sonnet-4-6
 ```
 
-### 2. Cursor IDE / OpenCode / Cline / Continue.dev (OpenAI & Anthropic API)
+### 2. Cursor IDE / Cline / Roo Code / Continue.dev (OpenAI & Anthropic API)
 * **Base URL:** `http://127.0.0.1:52111/v1`
 * **API Key:** `pg-live-...` (Generate via `prime-gate keys create` or Web UI)
 * **Model ID:** `claude-sonnet-4-6` or `gemini-3.8-flash`
+
+### 3. OpenCode (`~/.config/opencode/opencode.json`)
+Connect OpenCode with full tool-calling and thinking support:
+
+**Recommended: Native Anthropic Protocol (Zero OpenAI content guard errors):**
+```json
+{
+  "providers": {
+    "antigravity": {
+      "type": "anthropic",
+      "baseUrl": "http://127.0.0.1:52111",
+      "apiKey": "pg-live-your-key",
+      "models": ["claude-sonnet-4-6", "claude-opus-4-6-thinking", "gemini-3.8-flash"]
+    }
+  }
+}
+```
+
+**Alternative: OpenAI Protocol (Fully compatible with v1.2.7 tool-result normalization):**
+```json
+{
+  "providers": {
+    "antigravity": {
+      "baseUrl": "http://127.0.0.1:52111/v1",
+      "apiKey": "pg-live-your-key",
+      "models": ["claude-sonnet-4-6", "gemini-3.8-flash"]
+    }
+  }
+}
+```
 
 📖 *For step-by-step guides for Aider, Roo Code, LibreChat, and SDKs, see [Complete User Guide](docs/USER_GUIDE.md#6-ai-client--ide-integration-guide).*
 

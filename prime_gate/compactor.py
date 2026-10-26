@@ -255,7 +255,7 @@ class ContextCompactor:
         if role == "user":
             content = msg.get("content")
             if isinstance(content, list) and any(
-                isinstance(p, dict) and p.get("type") == "tool_result" for p in content
+                isinstance(p, dict) and p.get("type") in ("tool_result", "tool-result") for p in content
             ):
                 return True
         return False
@@ -391,13 +391,25 @@ class ContextCompactor:
                 elif isinstance(content, list):
                     new_parts = []
                     for part in content:
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            p_text = part.get("text", "")
-                            p_new, p_diff = cls._prune_string_content(p_text, max_tool_chars, head_lines, tail_lines)
-                            if p_diff > 0:
-                                total_pruned_chars += p_diff
-                                pruned_tool_count += 1
-                                part["text"] = p_new
+                        if isinstance(part, dict):
+                            p_type = part.get("type")
+                            if p_type == "text":
+                                p_text = part.get("text", "")
+                                p_new, p_diff = cls._prune_string_content(p_text, max_tool_chars, head_lines, tail_lines)
+                                if p_diff > 0:
+                                    total_pruned_chars += p_diff
+                                    pruned_tool_count += 1
+                                    part["text"] = p_new
+                            elif p_type in ("tool-result", "tool_result"):
+                                # OpenCode / Vercel AI SDK parts list: prune result/content without mutating part type
+                                res_key = "result" if "result" in part else ("output" if "output" in part else "content")
+                                p_val = part.get(res_key, "")
+                                if isinstance(p_val, str):
+                                    p_new, p_diff = cls._prune_string_content(p_val, max_tool_chars, head_lines, tail_lines)
+                                    if p_diff > 0:
+                                        total_pruned_chars += p_diff
+                                        pruned_tool_count += 1
+                                        part[res_key] = p_new
                         new_parts.append(part)
                     msg_copy["content"] = new_parts
 
@@ -406,10 +418,11 @@ class ContextCompactor:
                 if isinstance(content, list):
                     new_parts = []
                     for part in content:
-                        if isinstance(part, dict) and part.get("type") == "tool_result":
-                            res_content = part.get("content", "")
+                        if isinstance(part, dict) and part.get("type") in ("tool_result", "tool-result"):
+                            res_key = "result" if "result" in part else ("output" if "output" in part else "content")
+                            res_content = part.get(res_key, "")
                             res_err = part.get("is_error", False)
-                            t_use_id = part.get("tool_use_id")
+                            t_use_id = part.get("tool_use_id") or part.get("toolCallId") or part.get("id")
 
                             if preserve_errors and cls._contains_error(res_content, is_error_flag=res_err):
                                 new_parts.append(part)
@@ -424,7 +437,7 @@ class ContextCompactor:
                                 if diff > 0:
                                     total_pruned_chars += diff
                                     pruned_tool_count += 1
-                                    part["content"] = new_res
+                                    part[res_key] = new_res
                         new_parts.append(part)
                     msg_copy["content"] = new_parts
 

@@ -212,9 +212,10 @@ def transform_openai_to_antigravity(
             elif isinstance(content, list):
                 for p in content:
                     if isinstance(p, dict):
-                        if p.get("type") == "text" and p.get("text"):
+                        p_type = p.get("type")
+                        if p_type == "text" and p.get("text"):
                             parts.append({"text": p["text"]})
-                        elif p.get("type") == "image_url" and isinstance(p.get("image_url"), dict):
+                        elif p_type == "image_url" and isinstance(p.get("image_url"), dict):
                             url = p["image_url"].get("url", "")
                             if url.startswith("data:"):
                                 try:
@@ -223,8 +224,40 @@ def transform_openai_to_antigravity(
                                     parts.append({"inlineData": {"mimeType": mime_type, "data": b64_data}})
                                 except Exception:
                                     pass
+                        elif p_type in ("tool_result", "tool-result"):
+                            # Agent frameworks (Anthropic / Vercel AI SDK) sending tool result inside user turn
+                            call_id = p.get("tool_use_id") or p.get("toolCallId") or p.get("id") or ""
+                            fn_name = p.get("name") or tool_call_map.get(call_id, "unknown_tool")
+                            raw_res = p.get("content") or p.get("result") or p.get("output") or ""
+                            res_dict = {}
+                            if isinstance(raw_res, dict):
+                                res_dict = raw_res
+                            elif isinstance(raw_res, list):
+                                text_sub = []
+                                for sub_p in raw_res:
+                                    if isinstance(sub_p, dict) and sub_p.get("text"):
+                                        text_sub.append(sub_p["text"])
+                                    elif isinstance(sub_p, str):
+                                        text_sub.append(sub_p)
+                                res_dict = {"output": "\n".join(text_sub) if text_sub else ""}
+                            elif isinstance(raw_res, str):
+                                try:
+                                    parsed = json.loads(raw_res)
+                                    res_dict = parsed if isinstance(parsed, dict) else {"output": parsed}
+                                except Exception:
+                                    res_dict = {"output": raw_res}
+                            else:
+                                res_dict = {"output": str(raw_res) if raw_res is not None else ""}
+
+                            fn_resp_obj = {"name": fn_name, "response": res_dict}
+                            if call_id:
+                                fn_resp_obj["id"] = call_id
+                            parts.append({"functionResponse": fn_resp_obj})
             if parts:
-                contents.append({"role": "user", "parts": parts})
+                if contents and contents[-1].get("role") == "user":
+                    contents[-1]["parts"].extend(parts)
+                else:
+                    contents.append({"role": "user", "parts": parts})
 
         elif role == "assistant":
             parts = []
@@ -291,17 +324,29 @@ def transform_openai_to_antigravity(
             elif isinstance(out_val, dict):
                 response_dict = out_val
             elif isinstance(out_val, list):
-                # Extract text if it's OpenAI content parts list
+                # Extract text or tool-result parts (OpenCode / Vercel AI SDK parts list)
                 text_parts = []
                 for p in out_val:
-                    if isinstance(p, dict) and p.get("type") == "text" and p.get("text"):
-                        text_parts.append(p["text"])
+                    if isinstance(p, dict):
+                        p_type = p.get("type")
+                        if p_type == "text" and p.get("text"):
+                            text_parts.append(p["text"])
+                        elif p_type in ("tool-result", "tool_result"):
+                            r = p.get("result") or p.get("content") or p.get("output")
+                            if isinstance(r, dict):
+                                response_dict.update(r)
+                            elif isinstance(r, str):
+                                text_parts.append(r)
+                            elif r is not None:
+                                text_parts.append(str(r))
                     elif isinstance(p, str):
                         text_parts.append(p)
-                if text_parts:
+                if text_parts and not response_dict:
                     response_dict = {"output": "\n".join(text_parts)}
-                else:
-                    response_dict = {"output": out_val}
+                elif text_parts and response_dict:
+                    response_dict["text"] = "\n".join(text_parts)
+                elif not response_dict:
+                    response_dict = {"output": ""}
             else:
                 response_dict = {"output": str(out_val) if out_val is not None else ""}
 

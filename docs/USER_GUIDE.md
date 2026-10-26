@@ -400,7 +400,7 @@ Prime Gate v1.2.0 introduces four enterprise-grade runtime mechanisms designed f
 | `prime-gate auth remove [EMAIL]` | `[EMAIL]`, `-e/--email`, `-a/--all`, `-f/--force` | Removes account(s) via positional arg, flags, or interactive prompt. |
 | `prime-gate delete-account` | `[EMAIL]`, `-e/--email`, `-a/--all`, `-f/--force` | Direct shortcut to delete account(s) via flag or interactive menu. |
 | `prime-gate auth clear` | `-y/--yes`, `-f/--force` | Wipes all accounts and resets database state. |
-| `prime-gate daemon start` | None | Launches background proxy & web UI on Windows. |
+| `prime-gate daemon start` | None | Launches background proxy & web UI (Windows, macOS, Linux). |
 | `prime-gate daemon status` | None | Checks background PID, memory, and port health. |
 | `prime-gate daemon stop` | None | Terminates active background proxy processes. |
 | `prime-gate db status` | None | Shows binary DB file size and record counts. |

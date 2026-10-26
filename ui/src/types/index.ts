@@ -313,6 +313,10 @@ export interface SystemUpdateStatus {
   update_available: boolean;
   commits_behind: number;
   is_synced: boolean;
+  npm_version?: string | null;
+  is_git_repo?: boolean;
+  install_command?: string;
+  npx_command?: string;
   last_checked: number;
   repo_url: string;
   auto_update?: AutoUpdateConfig;

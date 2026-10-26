@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 
 // Read local version
-let currentVersion = "1.2.5";
+let currentVersion = "1.2.7";
 try {
   const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
   if (pkg.version) currentVersion = pkg.version;
@@ -54,6 +54,22 @@ async function checkNpmUpdate() {
   }
 }
 
+function resolvePythonCmd() {
+  if (process.env.PYTHON_BIN) {
+    return process.env.PYTHON_BIN;
+  }
+  if (process.platform === "win32") {
+    return "python";
+  }
+  // Linux & macOS: prioritize python3 (PEP 394), fallback to python
+  try {
+    execSync("python3 --version", { stdio: "ignore" });
+    return "python3";
+  } catch {
+    return "python";
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -70,10 +86,11 @@ async function main() {
     child.on("exit", code => process.exit(code ?? 0));
   } else {
     // Otherwise pass through to Python CLI
-    const child = spawn("python", ["-m", "prime_gate.cli", ...args], {
+    const pythonCmd = resolvePythonCmd();
+    const child = spawn(pythonCmd, ["-m", "prime_gate.cli", ...args], {
       stdio: "inherit",
       cwd: projectRoot,
-      shell: true
+      shell: process.platform === "win32"
     });
     child.on("exit", code => process.exit(code ?? 0));
   }
