@@ -280,9 +280,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 fontFamily: 'monospace',
                 letterSpacing: '0.02em',
               }}
-              title={`Version: v${updateInfo?.current_version || '1.2.9'}`}
+              title={`Version: v${updateInfo?.current_version || '1.2.10'}`}
             >
-              v{updateInfo?.current_version || '1.2.9'}
+              v{updateInfo?.current_version || '1.2.10'}
             </span>
             {onCloseMobile && (
               <button

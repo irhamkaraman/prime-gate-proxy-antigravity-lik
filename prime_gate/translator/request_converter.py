@@ -4,7 +4,7 @@ from typing import Dict, Any, Tuple, List, Optional
 from ..config import SYSTEM_INSTRUCTION
 from ..db import db
 from .schema_cleaner import clean_schema_for_antigravity
-from .thought_cache import thought_sig_cache
+from .thought_cache import thought_sig_cache, sanitize_thought_signature
 
 logger = logging.getLogger("prime_gate.translator.request_converter")
 
@@ -309,8 +309,7 @@ def transform_openai_to_antigravity(
                                 model=model
                             )
                         )
-                        if sig and sig != "skip_thought_signature_validator":
-                            part_entry["thoughtSignature"] = sig
+                        part_entry["thoughtSignature"] = sanitize_thought_signature(sig)
                         parts.append(part_entry)
             if parts:
                 contents.append({"role": "model", "parts": parts})

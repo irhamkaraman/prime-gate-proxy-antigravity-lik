@@ -1698,7 +1698,14 @@ class BinaryDatabaseEngine:
         ttl_seconds: int = 86400
     ) -> bool:
         """Stores a cryptographic thought signature with multi-key indexing and TTL."""
-        if not key or not signature or signature == "skip_thought_signature_validator":
+        if not key or not signature or signature in ("skip_thought_signature_validator", "context_engineering_is_the_way_to_go"):
+            return False
+        import base64
+        try:
+            dec = base64.b64decode(signature, validate=True)
+            if not dec:
+                return False
+        except Exception:
             return False
         try:
             conn = self._get_connection()

@@ -44,7 +44,7 @@ from .telemetry import telemetry
 from .compactor import ContextCompactor
 from .resilience import AccountFailoverPool
 from .sentinel.loop_guard import AgentLoopGuard
-from .translator.thought_cache import thought_sig_cache
+from .translator.thought_cache import thought_sig_cache, sanitize_thought_signature
 from .search import search_web
 from .client_pool import get_shared_client, close_shared_client
 from urllib.parse import urlparse
@@ -2053,7 +2053,7 @@ async def stream_antigravity_sse(
                     cand_sig = None
                     for p in parts:
                         s = p.get("thoughtSignature") or p.get("thought_signature")
-                        if s and s != "skip_thought_signature_validator":
+                        if s:
                             cand_sig = s
                             latest_stream_sig = s
                             break
@@ -2073,14 +2073,14 @@ async def stream_antigravity_sse(
                             raw_args = fn_call.get("args", {})
                             fn_name, args = normalize_tool_call(raw_name, raw_args, declared_tools)
                             sig = part.get("thoughtSignature") or part.get("thought_signature") or cand_sig or latest_stream_sig
-                            if sig and sig != "skip_thought_signature_validator":
-                                thought_sig_cache.store(
-                                    key=call_id,
-                                    signature=sig,
-                                    fn_name=fn_name,
-                                    fn_args=args,
-                                    model=model
-                                )
+                            clean_sig = sanitize_thought_signature(sig)
+                            thought_sig_cache.store(
+                                key=call_id,
+                                signature=clean_sig,
+                                fn_name=fn_name,
+                                fn_args=args,
+                                model=model
+                            )
 
                             tc_chunk = {
                                 "index": tool_index,
@@ -2091,12 +2091,11 @@ async def stream_antigravity_sse(
                                     "arguments": json.dumps(args)
                                 }
                             }
-                            if sig and sig != "skip_thought_signature_validator":
-                                tc_chunk["extra_content"] = {
-                                    "google": {
-                                        "thought_signature": sig
-                                    }
+                            tc_chunk["extra_content"] = {
+                                "google": {
+                                    "thought_signature": clean_sig
                                 }
+                            }
 
                             yield format_sse_chunk(
                                 completion_id, created, model,
@@ -2804,7 +2803,7 @@ async def chat_completions(request: Request, _auth: Dict[str, Any] = Depends(req
                             cand_sig = None
                             for p in parts:
                                 s = p.get("thoughtSignature") or p.get("thought_signature")
-                                if s and s != "skip_thought_signature_validator":
+                                if s:
                                     cand_sig = s
                                     break
 
@@ -2820,14 +2819,14 @@ async def chat_completions(request: Request, _auth: Dict[str, Any] = Depends(req
                                     raw_args = fn.get("args", {})
                                     fn_name, args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
                                     sig = p.get("thoughtSignature") or p.get("thought_signature") or cand_sig
-                                    if sig and sig != "skip_thought_signature_validator":
-                                        thought_sig_cache.store(
-                                            key=call_id,
-                                            signature=sig,
-                                            fn_name=fn_name,
-                                            fn_args=args,
-                                            model=model
-                                        )
+                                    clean_sig = sanitize_thought_signature(sig)
+                                    thought_sig_cache.store(
+                                        key=call_id,
+                                        signature=clean_sig,
+                                        fn_name=fn_name,
+                                        fn_args=args,
+                                        model=model
+                                    )
 
                                     tc_entry = {
                                         "id": call_id,
@@ -2837,12 +2836,11 @@ async def chat_completions(request: Request, _auth: Dict[str, Any] = Depends(req
                                             "arguments": json.dumps(args)
                                         }
                                     }
-                                    if sig and sig != "skip_thought_signature_validator":
-                                        tc_entry["extra_content"] = {
-                                            "google": {
-                                                "thought_signature": sig
-                                            }
+                                    tc_entry["extra_content"] = {
+                                        "google": {
+                                            "thought_signature": clean_sig
                                         }
+                                    }
                                     tool_calls.append(tc_entry)
                     except Exception:
                         continue
@@ -3428,7 +3426,7 @@ async def anthropic_messages(request: Request, _auth: Dict[str, Any] = Depends(r
                         cand_sig = None
                         for p in parts:
                             s = p.get("thoughtSignature") or p.get("thought_signature")
-                            if s and s != "skip_thought_signature_validator":
+                            if s:
                                 cand_sig = s
                                 break
 
@@ -3442,14 +3440,14 @@ async def anthropic_messages(request: Request, _auth: Dict[str, Any] = Depends(r
                                 raw_args = fn.get("args", {})
                                 fn_name, fn_args = normalize_tool_call(raw_name, raw_args, body.get("tools"))
                                 sig = p.get("thoughtSignature") or p.get("thought_signature") or cand_sig
-                                if sig and sig != "skip_thought_signature_validator":
-                                    thought_sig_cache.store(
-                                        key=call_id,
-                                        signature=sig,
-                                        fn_name=fn_name,
-                                        fn_args=fn_args,
-                                        model=model
-                                    )
+                                clean_sig = sanitize_thought_signature(sig)
+                                thought_sig_cache.store(
+                                    key=call_id,
+                                    signature=clean_sig,
+                                    fn_name=fn_name,
+                                    fn_args=fn_args,
+                                    model=model
+                                )
                                 content_blocks.append({
                                     "type": "tool_use",
                                     "id": call_id,

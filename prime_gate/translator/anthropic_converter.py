@@ -18,7 +18,7 @@ from ..db.events import event_bus
 from .schema_cleaner import clean_schema_for_antigravity
 from .request_converter import resolve_model_info
 from .response_converter import extract_text_tool_calls, normalize_tool_call
-from .thought_cache import thought_sig_cache
+from .thought_cache import thought_sig_cache, sanitize_thought_signature
 from ..quota.monitor import QuotaMonitor
 from ..client_pool import get_shared_client
 
@@ -255,8 +255,7 @@ def transform_anthropic_to_antigravity(
                             model=model
                         )
                     )
-                    if sig and sig != "skip_thought_signature_validator":
-                        part_entry["thoughtSignature"] = sig
+                    part_entry["thoughtSignature"] = sanitize_thought_signature(sig)
                     parts.append(part_entry)
 
                 elif b_type == "tool_result":
@@ -908,7 +907,7 @@ async def stream_anthropic_sse(
                     cand_sig = None
                     for p in parts:
                         s = p.get("thoughtSignature") or p.get("thought_signature")
-                        if s and s != "skip_thought_signature_validator":
+                        if s:
                             cand_sig = s
                             latest_stream_sig = s
                             break
@@ -992,7 +991,7 @@ async def stream_anthropic_sse(
                             fn_name, fn_args = normalize_tool_call(raw_name, raw_args, declared_tools)
                             call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
                             sig = part.get("thoughtSignature") or part.get("thought_signature") or cand_sig or latest_stream_sig
-                            if sig and sig != "skip_thought_signature_validator":
+                            if sig:
                                 thought_sig_cache.store(
                                     key=call_id,
                                     signature=sig,

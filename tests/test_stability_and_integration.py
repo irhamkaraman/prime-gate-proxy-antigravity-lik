@@ -72,6 +72,8 @@ class TestStabilityAndIntegration(unittest.IsolatedAsyncioTestCase):
         # Wait for TTL expiration
         time.sleep(2.05)
         self.assertIsNone(cache.get(call_id))
+        from prime_gate.db import db
+        db.clean_expired_thought_signatures()
 
     def test_db_migration_idempotent_multi_run(self):
         """Verifies multiple consecutive database initializations succeed without schema conflict."""
