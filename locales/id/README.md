@@ -52,7 +52,7 @@ prime-gate daemon start
 | `--port <angka>` | Port API proksi (endpoint OpenAI & Anthropic) | `52111` |
 | `--ui-port <angka>` | Port Dasbor Web UI Glassmorphic | `52110` |
 | `--daemon` | Jalankan atau kelola proses di latar belakang | `false` |
-| `--version`, `-v` | Tampilkan versi yang terpasang saat ini | `1.2.8` |
+| `--version`, `-v` | Tampilkan versi yang terpasang saat ini | `1.2.9` |
 | `--help`, `-h` | Tampilkan bantuan & seluruh daftar perintah | - |
 
 ---

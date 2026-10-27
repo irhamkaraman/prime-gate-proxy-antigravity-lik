@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.9] - 2026-10-27
+
+### 🛡️ Persistent Thought Signature Engine & Gemini 3 Reasoning Tool Calling Resilience
+- **Persistent SQLite WAL Thought Signature Cache:** Migrated ephemeral in-memory thought signature storage into a dedicated persistent SQLite table (`pg_thought_signatures`) with comprehensive multi-column indexing (`fn_name`, `call_hash`, and `expires_at`). Cryptographic tokens now survive daemon restarts, crashes, and background updates with 100% data retention.
+- **Multi-Key Indexing & Fallback Resolver:** Implemented multi-tier signature association (`call_id`, `call_hash` of function name + serialized JSON arguments, and `fn_name`). Cascading resolver in `request_converter.py` and `anthropic_converter.py` ensures upstream Gemini 3 reasoning models never receive naked `functionCall` parts, permanently resolving HTTP 400 `Function call is missing a thought_signature in functionCall parts`.
+- **Cross-Chunk Streaming Aggregation:** Hardened SSE stream generators (`stream_antigravity_sse` & `stream_anthropic_sse`) to capture thought signatures emitted on reasoning chunks preceding tool call chunks.
+- **Client Metadata Passthrough:** Injected standard Google metadata `extra_content: {"google": {"thought_signature": sig}}` on SSE tool call deltas for seamless upstream echo in OpenAI-compatible client wrappers.
+- **Automated Verification:** Added dedicated test suite `tests/test_thought_signature_persistence.py` covering SQLite CRUD, simulated daemon kill & recovery, and OpenAI/Anthropic translator signature injection (134/134 test suite 100% green).
+
+---
+
+## [1.2.8] - 2026-10-26
+
+### 🎨 Fully Responsive Modern Navbar & OpenCode Tool Streaming Lowering Fix
+- **Responsive Mobile/Tablet Navigation Drawer:** Refactored dashboard layout with slide-out navigation drawer, backdrop blur overlay, and hamburger toggle button (`Menu` / `X`) for seamless tablet and smartphone responsiveness. Removed legacy Logout button from navbar.
+- **OpenCode SSE Tool Delta Sanitization:** Eliminated phantom empty text chunks (`content: ""`) on initial assistant SSE frames and suppressed trailing text deltas following tool calls, resolving OpenCode's client-side `OpenAI Chat tool messages only support tool-result content for now` lowering error.
+- **Native Anthropic Protocol Integration:** Configured dual-protocol compatibility with `@ai-sdk/anthropic` (`primegate-anthropic`) in OpenCode.
+
+---
+
+## [1.2.7] - 2026-10-25
+
+### ⚡ NPM-First Update Checker & Cross-Platform POSIX Resiliency
+- **NPM Registry Native Sync:** Switched default version checking from git remote branches to official NPM registry API (`https://registry.npmjs.org/prime-gate-antigravity/latest`), eliminating false-positive git pull warnings for global npm/npx users.
+- **Cross-Platform Daemon Parity:** Enhanced POSIX daemon management for Linux and macOS environments.
+
+---
+
 ## [1.2.6] - 2026-10-23
 
 ### 🎨 Modular Documentation Overhaul, NPM Package Polish & Decoupled UI Gallery

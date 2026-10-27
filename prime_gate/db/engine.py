@@ -251,6 +251,21 @@ class BinaryDatabaseEngine:
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_key_usage_time ON pg_api_key_usage(key_id, created_at);")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pg_thought_signatures (
+                cache_key TEXT PRIMARY KEY,
+                signature TEXT NOT NULL,
+                fn_name TEXT,
+                call_hash TEXT,
+                model TEXT,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            );
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_thought_sig_fn ON pg_thought_signatures(fn_name);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_thought_sig_hash ON pg_thought_signatures(call_hash);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_thought_sig_exp ON pg_thought_signatures(expires_at);")
+
         # Auto-migrate legacy V1 records to V2 AES-256-GCM
         try:
             self.migrate_v1_to_v2()
@@ -1672,6 +1687,133 @@ class BinaryDatabaseEngine:
             logger.info("Generated initial default API Key.")
             return raw_key
         return None
+
+    def store_thought_signature(
+        self,
+        key: str,
+        signature: str,
+        fn_name: Optional[str] = None,
+        call_hash: Optional[str] = None,
+        model: Optional[str] = None,
+        ttl_seconds: int = 86400
+    ) -> bool:
+        """Stores a cryptographic thought signature with multi-key indexing and TTL."""
+        if not key or not signature or signature == "skip_thought_signature_validator":
+            return False
+        try:
+            conn = self._get_connection()
+            now = time.time()
+            exp = now + ttl_seconds
+            conn.execute(
+                """
+                INSERT INTO pg_thought_signatures (cache_key, signature, fn_name, call_hash, model, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    signature=excluded.signature,
+                    fn_name=COALESCE(excluded.fn_name, pg_thought_signatures.fn_name),
+                    call_hash=COALESCE(excluded.call_hash, pg_thought_signatures.call_hash),
+                    model=COALESCE(excluded.model, pg_thought_signatures.model),
+                    created_at=excluded.created_at,
+                    expires_at=excluded.expires_at
+                """,
+                (key, signature, fn_name, call_hash, model, now, exp)
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to store thought signature {key}: {e}")
+            return False
+
+    def get_thought_signature(self, key: str) -> Optional[str]:
+        """Retrieves an active thought signature by primary cache_key."""
+        if not key:
+            return None
+        try:
+            conn = self._get_connection()
+            now = time.time()
+            cursor = conn.execute(
+                "SELECT signature FROM pg_thought_signatures WHERE cache_key = ? AND expires_at > ?",
+                (key, now)
+            )
+            row = cursor.fetchone()
+            return row["signature"] if row else None
+        except Exception as e:
+            logger.warning(f"Failed to read thought signature {key}: {e}")
+            return None
+
+    def get_thought_signature_by_hash(self, call_hash: str) -> Optional[str]:
+        """Retrieves most recent active thought signature by function call args hash."""
+        if not call_hash:
+            return None
+        try:
+            conn = self._get_connection()
+            now = time.time()
+            cursor = conn.execute(
+                """
+                SELECT signature FROM pg_thought_signatures
+                WHERE call_hash = ? AND expires_at > ?
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (call_hash, now)
+            )
+            row = cursor.fetchone()
+            return row["signature"] if row else None
+        except Exception:
+            return None
+
+    def get_thought_signature_by_fn(self, fn_name: str) -> Optional[str]:
+        """Retrieves most recent active thought signature by function name."""
+        if not fn_name:
+            return None
+        try:
+            conn = self._get_connection()
+            now = time.time()
+            cursor = conn.execute(
+                """
+                SELECT signature FROM pg_thought_signatures
+                WHERE fn_name = ? AND expires_at > ?
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (fn_name, now)
+            )
+            row = cursor.fetchone()
+            return row["signature"] if row else None
+        except Exception:
+            return None
+
+    def get_latest_valid_thought_signature(self, model: Optional[str] = None) -> Optional[str]:
+        """Retrieves the most recent cryptographic thought signature recorded in the database."""
+        try:
+            conn = self._get_connection()
+            now = time.time()
+            if model:
+                cursor = conn.execute(
+                    """
+                    SELECT signature FROM pg_thought_signatures
+                    WHERE model = ? AND expires_at > ?
+                    ORDER BY created_at DESC LIMIT 1
+                    """,
+                    (model, now)
+                )
+                row = cursor.fetchone()
+                if row:
+                    return row["signature"]
+            cursor = conn.execute(
+                "SELECT signature FROM pg_thought_signatures WHERE expires_at > ? ORDER BY created_at DESC LIMIT 1",
+                (now,)
+            )
+            row = cursor.fetchone()
+            return row["signature"] if row else None
+        except Exception:
+            return None
+
+    def clean_expired_thought_signatures(self) -> int:
+        """Purges expired thought signatures."""
+        try:
+            conn = self._get_connection()
+            cursor = conn.execute("DELETE FROM pg_thought_signatures WHERE expires_at <= ?", (time.time(),))
+            return cursor.rowcount
+        except Exception:
+            return 0
 
 
 # Global Singleton Database Engine

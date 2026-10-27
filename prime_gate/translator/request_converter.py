@@ -291,11 +291,23 @@ def transform_openai_to_antigravity(
                         part_entry = {
                             "functionCall": fn_payload
                         }
+                        extra_sig = None
+                        extra_content = tc.get("extra_content")
+                        if isinstance(extra_content, dict):
+                            google_extra = extra_content.get("google")
+                            if isinstance(google_extra, dict):
+                                extra_sig = google_extra.get("thought_signature") or google_extra.get("thoughtSignature")
+
                         sig = (
                             tc.get("thoughtSignature")
                             or tc.get("thought_signature")
-                            or thought_sig_cache.get(call_id)
-                            or thought_sig_cache.get(fn_name)
+                            or extra_sig
+                            or thought_sig_cache.resolve_signature(
+                                call_id=call_id,
+                                fn_name=fn_name,
+                                fn_args=fn_args,
+                                model=model
+                            )
                         )
                         if sig and sig != "skip_thought_signature_validator":
                             part_entry["thoughtSignature"] = sig

@@ -248,8 +248,12 @@ def transform_anthropic_to_antigravity(
                     sig = (
                         block.get("thoughtSignature")
                         or block.get("thought_signature")
-                        or thought_sig_cache.get(call_id)
-                        or thought_sig_cache.get(fn_name)
+                        or thought_sig_cache.resolve_signature(
+                            call_id=call_id,
+                            fn_name=fn_name,
+                            fn_args=raw_input,
+                            model=model
+                        )
                     )
                     if sig and sig != "skip_thought_signature_validator":
                         part_entry["thoughtSignature"] = sig
@@ -868,6 +872,7 @@ async def stream_anthropic_sse(
                         return True
             return False
 
+        latest_stream_sig: Optional[str] = None
         try:
             aiter = resp.aiter_lines().__aiter__()
             while True:
@@ -905,6 +910,7 @@ async def stream_anthropic_sse(
                         s = p.get("thoughtSignature") or p.get("thought_signature")
                         if s and s != "skip_thought_signature_validator":
                             cand_sig = s
+                            latest_stream_sig = s
                             break
 
                     for part in parts:
@@ -985,10 +991,15 @@ async def stream_anthropic_sse(
                             raw_args = fn.get("args", {})
                             fn_name, fn_args = normalize_tool_call(raw_name, raw_args, declared_tools)
                             call_id = fn.get("id") or f"toolu_{uuid.uuid4().hex[:12]}"
-                            sig = part.get("thoughtSignature") or part.get("thought_signature") or cand_sig
+                            sig = part.get("thoughtSignature") or part.get("thought_signature") or cand_sig or latest_stream_sig
                             if sig and sig != "skip_thought_signature_validator":
-                                thought_sig_cache.store(call_id, sig)
-                                thought_sig_cache.store(fn_name, sig)
+                                thought_sig_cache.store(
+                                    key=call_id,
+                                    signature=sig,
+                                    fn_name=fn_name,
+                                    fn_args=fn_args,
+                                    model=model
+                                )
                             for ev in emit_tool(fn_name, fn_args, call_id):
                                 yield ev
 
