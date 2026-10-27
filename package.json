@@ -1,12 +1,12 @@
 {
   "name": "prime-gate-antigravity",
-  "version": "1.2.10",
+  "version": "1.2.11",
   "type": "module",
   "description": "Production-grade, OpenAI & Anthropic compatible proxy gateway for Google Antigravity with rich CLI and Anthropic-themed Web UI dashboard",
   "main": "ui/server.js",
   "bin": {
-    "prime-gate-antigravity": "./bin/index.js",
-    "prime-gate": "./bin/index.js"
+    "prime-gate-antigravity": "bin/index.js",
+    "prime-gate": "bin/index.js"
   },
   "publishConfig": {
     "access": "public"

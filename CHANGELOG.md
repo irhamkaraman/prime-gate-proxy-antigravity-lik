@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.2.10] - 2026-10-27
+## [1.2.11] - 2026-10-27
 
 ### 🛡️ Thought Signature Sanitization & Google Official Skip Validator Bypass
 - **Thought Signature RFC 4648 Base64 Sanitization:** Implemented strict Base64 decoding validation (`is_valid_base64()`) and sanitation pipeline (`sanitize_thought_signature()`). Upstream protobuf errors (`Invalid value at 'request.contents[...].thought_signature' (TYPE_BYTES), Base64 decoding failed`) caused by non-Base64 tokens or corrupted cache entries are now completely eliminated.
@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Eliminated loose cross-tool function name guessing (`get_by_fn`) to prevent token contamination across distinct tool executions.
 - **Production Database Test Isolation:** Fixed test harness in `tests/test_thought_signature_persistence.py` using isolated `tmp_path` SQLite databases, preventing mock tokens (e.g. `ANTHROPIC_CRYPTO_TOKEN_TEST==`) from polluting the live production database (`data/prime_gate.pgdb`).
 - **Complete Test Coverage & Upstream Verification:** All 135 unit and integration tests passing 100% green; multi-turn reasoning tool-use calls verified live against upstream Google Antigravity endpoints.
+- **Clean NPM Executable Packaging:** Standardized `package.json` bin entries to `bin/index.js` for seamless global `npx prime-gate-antigravity` execution across POSIX and Windows.
+
+---
+
+## [1.2.10] - 2026-10-27
 
 ---
 
